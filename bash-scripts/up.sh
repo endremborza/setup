@@ -1,5 +1,5 @@
 sudo apt update
-sudo apt install file git make cmake ninja-build gettext unzip curl build-essential stow python 3.10 -y
+sudo apt install file git make cmake ninja-build gettext unzip curl build-essential stow python3.10 -y
 
 
 git clone --branch v0.9.5 --depth 1 https://github.com/neovim/neovim
