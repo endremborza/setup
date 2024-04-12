@@ -1,5 +1,19 @@
+# assume curl installed
 sudo apt update
-sudo apt install file git make cmake ninja-build gettext unzip curl build-essential stow python3.10 xclip -y
+sudo apt install \
+	file \
+	git \
+	make \
+	cmake \
+	ninja-build \
+	gettext \
+	unzip \
+	build-essential \
+	stow \
+	python3.10 \
+	xclip \
+	ripgrep \
+	-y
 
 
 git clone --branch v0.9.5 --depth 1 https://github.com/neovim/neovim
