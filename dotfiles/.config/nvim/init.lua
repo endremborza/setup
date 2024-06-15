@@ -319,8 +319,8 @@ vim.keymap.set('n', '<leader>gs', ":Git status<enter>", { desc = '[G]it [S]tatus
 vim.keymap.set('n', '<leader>gd', ":Gdiffsplit<enter>", { desc = '[G]it [D]iff' })
 vim.keymap.set('n', '<leader>ga', ":Git add %<enter>", { desc = '[G]it [A]dd' })
 vim.keymap.set('n', '<leader>gc', ":Git commit -m ", { desc = '[G]it [C]ommit' })
-vim.keymap.set('n', '<leader>gp', ":Git push", { desc = '[G]it [P]ush' })
-vim.keymap.set('n', '<leader>gl', ":Git push", { desc = '[G]it Pul[l]' })
+vim.keymap.set('n', '<leader>gp', ":Git push<enter>", { desc = '[G]it [P]ush' })
+vim.keymap.set('n', '<leader>gl', ":Git push<enter>", { desc = '[G]it Pul[l]' })
 vim.keymap.set('n', '<leader>gw', ":Git add %<enter>:Git commit -m ", { desc = '[G]it [W]rite' })
 
 -- [[ Configure Treesitter ]]
