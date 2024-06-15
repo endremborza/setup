@@ -321,7 +321,7 @@ vim.keymap.set('n', '<leader>ga', ":Git add %<enter>", { desc = '[G]it [A]dd' })
 vim.keymap.set('n', '<leader>gc', ":Git commit -m ", { desc = '[G]it [C]ommit' })
 vim.keymap.set('n', '<leader>gp', ":Git push<enter>", { desc = '[G]it [P]ush' })
 vim.keymap.set('n', '<leader>gl', ":Git push<enter>", { desc = '[G]it Pul[l]' })
-vim.keymap.set('n', '<leader>gw', ":Git add %<enter>:Git commit -m ", { desc = '[G]it [W]rite' })
+vim.keymap.set('n', '<leader>gw', ":Git add % | Git commit -m ", { desc = '[G]it [W]rite' })
 
 -- [[ Configure Treesitter ]]
 -- See `:help nvim-treesitter`
