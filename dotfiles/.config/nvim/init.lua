@@ -194,7 +194,6 @@ vim.o.foldlevelstart = 99
 vim.o.foldenable = true
 
 
-
 vim.keymap.set('n', '<leader>pv', vim.cmd.Ex, { desc = 'To file tree' })
 vim.keymap.set('n', 'zR', require('ufo').openAllFolds)
 vim.keymap.set('n', 'zM', require('ufo').closeAllFolds)
@@ -202,11 +201,6 @@ vim.keymap.set('n', 'zM', require('ufo').closeAllFolds)
 vim.cmd.xnoremap('<leader>p', '"_dP')
 
 -- personal autocmds
-
---vim.api.nvim_create_autocmd('BufWritePre', {
---  callback = format_with_fallbacks,
---  pattern = '*',
---})
 
 -- Keymaps for better default experience
 -- See `:help vim.keymap.set()`
@@ -250,7 +244,6 @@ require('telescope').setup {
 pcall(require('telescope').load_extension, 'fzf')
 
 -- Telescope live_grep in git root
--- Function to find the git root directory based on the current buffer's path
 local function find_git_root()
   -- Use the current buffer's path as the starting point for the git search
   local current_file = vim.api.nvim_buf_get_name(0)
@@ -320,6 +313,15 @@ vim.keymap.set('n', '<leader>sg', require('telescope.builtin').live_grep, { desc
 vim.keymap.set('n', '<leader>sG', ':LiveGrepGitRoot<cr>', { desc = '[S]earch by [G]rep on Git Root' })
 vim.keymap.set('n', '<leader>sd', require('telescope.builtin').diagnostics, { desc = '[S]earch [D]iagnostics' })
 vim.keymap.set('n', '<leader>sr', require('telescope.builtin').resume, { desc = '[S]earch [R]esume' })
+
+-- Git keymaps
+vim.keymap.set('n', '<leader>gs', ":Git status<enter>", { desc = '[G]it [S]tatus' })
+vim.keymap.set('n', '<leader>gd', ":Gdiffsplit<enter>", { desc = '[G]it [D]iff' })
+vim.keymap.set('n', '<leader>ga', ":Git add %<enter>", { desc = '[G]it [A]dd' })
+vim.keymap.set('n', '<leader>gc', ":Git commit -m ", { desc = '[G]it [C]ommit' })
+vim.keymap.set('n', '<leader>gp', ":Git push", { desc = '[G]it [P]ush' })
+vim.keymap.set('n', '<leader>gl', ":Git push", { desc = '[G]it Pul[l]' })
+vim.keymap.set('n', '<leader>gw', ":Git add %<enter>:Git commit -m ", { desc = '[G]it [W]rite' })
 
 -- [[ Configure Treesitter ]]
 -- See `:help nvim-treesitter`
