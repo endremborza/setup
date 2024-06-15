@@ -21,7 +21,7 @@ sudo apt install \
 
 
 curl https://sh.rustup.rs -sSf | sh -s -- -y
-source ~/.cargo/env
+. ~/.cargo/env
 
 cargo install ripgrep du-dust nu bat
 # zellij - maybe at some point instead of tmux
