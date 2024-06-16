@@ -45,11 +45,11 @@ rm $PACK.tar.gz
 git clone https://github.com/endremborza/setup && cd setup && stow  --verbose=3 -t ~ dotfiles
 cd ~
 
-# node
-# curl https://raw.githubusercontent.com/creationix/nvm/master/install.sh | bash 
-# export NVM_DIR="$HOME/.nvm"
-# [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-# nvm install node
+# node - needed for the LSPs :(
+curl https://raw.githubusercontent.com/creationix/nvm/master/install.sh | bash 
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+nvm install node
 
 
  git config --global user.email "endremborza@gmail.com"
