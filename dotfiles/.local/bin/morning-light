@@ -1,0 +1,5 @@
+#! /usr/bin/env nu
+light -S 100%
+# let MAIN_SCREEN = "eDP-1"
+xrandr --listmonitors | split column " " | get column7 | each {|screen| xrandr --output $screen --gamma 1:1:1}
+

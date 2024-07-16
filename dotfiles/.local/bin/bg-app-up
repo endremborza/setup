@@ -1,0 +1,118 @@
+#! /usr/bin/python
+
+import json
+from pathlib import Path
+from subprocess import check_call, check_output
+from urllib.parse import urlparse
+from uuid import uuid4
+
+from flask import Flask, request
+
+from kno.constants import COLLECTION_ROOT, SAVED_SITES
+from kno.link_importing import integrate_link
+from kno.util import openai_simple
+
+app = Flask(__name__)
+
+
+class _RunBase:
+    @property
+    def __name__(self):
+        return type(self).__name__
+
+
+class CommRunner(_RunBase):
+    def __call__(self):
+        q = request.args.get("q")
+        if q is None:
+            return ""
+
+        try:
+            cout = check_output(self.get_comm(q)).decode()
+            out = self.parse_resp(cout)
+        except Exception as e:
+            out = f"{type(e).__name__}({e})"
+
+        check_call(["notify-send", "Ran plug", out[:120]])
+        return out
+
+    def get_comm(self, q: str):
+        return ["pwd"]
+
+    def parse_resp(self, r: str):
+        return ""
+
+
+class RawParser(_RunBase):
+    """posted request with data of the form
+    url: url of source
+    body: source_code of page at the time
+    extras: (optional) any other data the js extension loaded for the link integration
+    """
+
+    def __call__(self):
+        js_base = request.data
+        dic: dict = json.loads(js_base)
+        url = dic.get("url")
+        try:
+            title, desc = self.main_parser(url, dic.get("body"), dic.get("extras"))
+        except Exception as e:
+            title = type(e).__name__
+            desc = str(e)
+        check_call(["notify-send", title, desc])
+        return "200"
+
+    def main_parser(self, url, body, extras):
+        (SAVED_SITES / "body.html").write_text(body)
+        return url, "Nothing"
+
+
+class MultiWriter(RawParser):
+    def main_parser(self, url, body, extras):
+        fname: Path = (
+            SAVED_SITES
+            / urlparse(url).netloc
+            / f"{uuid4().hex}.html"
+        )
+        fname.parent.mkdir(exist_ok=True, parents=True)
+        fname.write_text(body)
+        return url, fname.name
+
+
+class LogseqIntegrator(RawParser):
+    def main_parser(self, url, body, extras):
+        return integrate_link(url, body, extras)
+
+
+def add(cls, route, **route_kwargs):
+    app.route(route, **route_kwargs)(cls())
+
+
+add(LogseqIntegrator, "/log-me", methods=["POST"])
+add(RawParser, "/raw-dump", methods=["POST"])
+add(MultiWriter, "/multi-dump", methods=["POST"])
+
+
+@app.route("/ai-prompt")
+def ai_chat():
+    prompt = request.args.get("q", "Nothing")
+    check_call(["notify-send", "AI prompt", prompt[:30]])
+    return openai_simple(prompt)
+
+
+class Grep(CommRunner):
+    root = COLLECTION_ROOT.as_posix()
+    exts = ["md", "py", "ipynb", "sh"]
+
+    def get_comm(self, q: str):
+        incs = [f"--include=*.{e}" for e in self.exts]
+        return ["grep", *incs, "-rnw", self.root, "-e", q]
+
+    def parse_resp(self, r: str):
+        inner = ("\n" + r).replace(f"\n{self.root}", "\n")
+        return f"```{inner}```"
+
+add(Grep, "/grep")
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5793)

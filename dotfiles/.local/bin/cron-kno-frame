@@ -1,0 +1,2 @@
+#! /bin/sh
+kno $1 2>> ~/logs/cron/$1-err-`datefmt` 1>> ~/logs/cron/$1-`datefmt`

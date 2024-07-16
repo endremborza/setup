@@ -1,0 +1,11 @@
+[Unit]
+Description=Background helper python app
+
+[Service]
+ExecStart=%h/.local/bin/bg-app-up
+# Type=notify
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=default.target

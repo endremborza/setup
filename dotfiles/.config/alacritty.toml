@@ -1,0 +1,14 @@
+# https://alacritty.org/config-alacritty.html
+[colors.primary]
+background = "#181828"
+[keyboard]
+bindings = [
+	{ key = "F11", action = "ToggleFullscreen" }
+]
+[font]
+normal = { family = "UbuntuMonoNerdFont" }
+size = 13
+[window]
+opacity=0.9
+startup_mode = "Fullscreen"
+

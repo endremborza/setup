@@ -1,6 +1,33 @@
 # Nushell Environment Config File
-#
 # version = "0.94.2"
+def gbs [] {
+  let branch = (
+    git branch |
+    split row "\n" |
+    str trim |
+    where ($it !~ '\*') |
+    where ($it != '') |
+    str join (char nl) |
+    fzf --no-multi
+  )
+  if $branch != '' {
+    git switch $branch
+  }
+}
+
+def reclist_directories [path: string, depth: int] {
+	if (($depth == 0) or ($"($path)/.git" | path exists)) {
+		return [$path]
+	}
+	let entries = (ls $path --full-paths) |
+		where type == 'dir' |
+		where not ($it.name | str contains ' ') | 
+		each {
+		|entry|
+			(reclist_directories $entry.name ($depth - 1)) |  flatten
+		}
+	return ($entries | flatten)
+}
 
 def create_left_prompt [] {
     let dir = match (do --ignore-shell-errors { $env.PWD | path relative-to $nu.home-path }) {
@@ -34,10 +61,18 @@ def create_right_prompt [] {
     ([$last_exit_code, (char space), $time_segment] | str join)
 }
 
+def check_watch_history [] {
+    ls ~/logs/watches | each {|e| cat $e.name | from csv } | reduce {|l,r| $l | append $r}
+}
+
 # Use nushell functions to define your right and left prompt
 $env.PROMPT_COMMAND = {|| create_left_prompt }
 # FIXME: This default is not implemented in rust code as of 2023-09-08.
 $env.PROMPT_COMMAND_RIGHT = {|| create_right_prompt }
+
+# Autocompletes
+source ("~/setup-repos/nu_scripts/custom-completions/use.nu" | path expand)
+
 
 # The prompt indicators are environmental variables that represent
 # the state of the prompt

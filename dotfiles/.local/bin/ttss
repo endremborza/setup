@@ -1,0 +1,36 @@
+#! /usr/bin/env nu
+source ~/.config/nushell/env.nu
+let selected_name = [hacking, science] | each {|e| reclist_directories $'($env.HOME)/mega/($e)' 3}
+	| flatten
+	| str join (char nl)
+	| fzf
+
+# sets global interpreter, fails for local jupyter
+let venv_dir = $"($selected_name)/.venv"
+let is_venv = ($venv_dir | path exists)
+
+# https://github.com/amtoine/tmux-sessionizer at some point
+
+def activate_venv [] {
+	if $is_venv {
+		tmux send-keys -t $selected_name $"source ($venv_dir)/bin/activate" C-m clear C-m
+	}
+}
+
+let tfound = (tmux has-session -t $selected_name | complete | get exit_code)
+
+if ($tfound == 1) {
+	tmux new-session -ds $selected_name -c $selected_name -n nvim
+	activate_venv
+	tmux new-window -t $selected_name -c "#{pane_current_path}"
+	activate_venv
+	tmux splitw -t $selected_name -h -l 40% -c "#{pane_current_path}"
+	activate_venv
+	tmux send-keys -t $selected_name nu C-m
+	#tmux selectp -t 1
+	#tmux splitw -v -p 75 -c "#{pane_current_path}"
+	tmux selectw -l
+	tmux send-keys -t $selected_name nvim C-m " sf" 
+}
+
+tmux attach -t $selected_name

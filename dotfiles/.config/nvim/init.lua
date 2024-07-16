@@ -146,6 +146,8 @@ require('lazy').setup({
     'nvim-treesitter/nvim-treesitter',
     dependencies = {
       'nvim-treesitter/nvim-treesitter-textobjects',
+      -- NOTE: additional parser
+      "nushell/tree-sitter-nu",
     },
     build = ':TSUpdate',
   },
@@ -194,13 +196,21 @@ vim.o.foldlevelstart = 99
 vim.o.foldenable = true
 
 
+-- personal keymaps
 vim.keymap.set('n', '<leader>pv', vim.cmd.Ex, { desc = 'To file tree' })
 vim.keymap.set('n', 'zR', require('ufo').openAllFolds)
 vim.keymap.set('n', 'zM', require('ufo').closeAllFolds)
 
+vim.keymap.set('n', '<leader>v', '"ayiw/<C-r>a<enter>', { desc = 'Search for word' })
+
 vim.cmd.xnoremap('<leader>p', '"_dP')
 
 -- personal autocmds
+--
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "nu",
+  callback = function(event) vim.bo[event.buf].commentstring = "#! /usr/bin/env %s" end,
+})
 
 -- Keymaps for better default experience
 -- See `:help vim.keymap.set()`
@@ -329,7 +339,7 @@ vim.keymap.set('n', '<leader>gw', ":Git add % | Git commit -m ", { desc = '[G]it
 vim.defer_fn(function()
   require('nvim-treesitter.configs').setup {
     -- Add languages to be installed here that you want installed for treesitter
-    ensure_installed = { 'c', 'cpp', 'go', 'lua', 'python', 'rust', 'tsx', 'javascript', 'typescript', 'vimdoc', 'vim', 'bash', 'html', 'svelte' },
+    ensure_installed = { 'c', 'cpp', 'go', 'lua', 'python', 'rust', 'tsx', 'javascript', 'typescript', 'vimdoc', 'vim', 'bash', 'html', 'svelte', 'nu' },
 
     -- Autoinstall languages that are not installed. Defaults to false (but you can change for yourself!)
     auto_install = false,
@@ -495,7 +505,7 @@ local servers = {
   tsserver = {},
   html = { filetypes = { 'html', 'svelte', 'twig', 'hbs' } },
   svelte = {},
-
+  nushell = {},
   lua_ls = {
     Lua = {
       workspace = { checkThirdParty = false },
@@ -514,7 +524,7 @@ local capabilities = vim.lsp.protocol.make_client_capabilities()
 capabilities = require('cmp_nvim_lsp').default_capabilities(capabilities)
 
 -- Ensure the servers above are installed
-local mason_lspconfig = require 'mason-lspconfig'
+local mason_lspconfig = require('mason-lspconfig')
 
 mason_lspconfig.setup {
   ensure_installed = vim.tbl_keys(servers),

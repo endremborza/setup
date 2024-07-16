@@ -1,0 +1,12 @@
+#! /bin/sh
+
+if [ "$#" -ne 1 ]; then
+    echo "wrong number of parameters"
+    exit 1
+fi
+
+FILEPATH=$SETUP_REPO/dotfiles/.local/bin/$1
+echo "#! /bin/sh" > $FILEPATH
+chmod +x $FILEPATH
+nvim $FILEPATH
+restow

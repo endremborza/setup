@@ -145,7 +145,7 @@ let light_theme = {
 
 # The default config record. This is where much of your global configuration is setup.
 $env.config = {
-    show_banner: true # true or false to enable or disable the welcome banner at startup
+    show_banner: false # true or false to enable or disable the welcome banner at startup
 
     ls: {
         use_ls_colors: true # use the LS_COLORS environment variable to colorize output
@@ -386,6 +386,25 @@ $env.config = {
 
     keybindings: [
         {
+            name: to_clipboard
+            modifier: control
+            keycode: char_y
+            mode: [emacs vi_normal vi_insert]
+            event: [
+                  { edit: MoveToStart }
+                  { 
+                        edit: InsertString
+                        value: "echo \""
+                  }
+                  { edit: MoveToEnd }
+                  { 
+                        edit: InsertString
+                        value: "\" | xxclip"
+                  }
+                  { send: Enter }
+            ]
+        }
+        {
             name: completion_menu
             modifier: none
             keycode: tab
@@ -431,32 +450,6 @@ $env.config = {
             keycode: backtab
             mode: [emacs, vi_normal, vi_insert]
             event: { send: menuprevious }
-        }
-        {
-            name: next_page_menu
-            modifier: control
-            keycode: char_x
-            mode: emacs
-            event: { send: menupagenext }
-        }
-        {
-            name: undo_or_previous_page_menu
-            modifier: control
-            keycode: char_z
-            mode: emacs
-            event: {
-                until: [
-                    { send: menupageprevious }
-                    { edit: undo }
-                ]
-            }
-        }
-        {
-            name: escape
-            modifier: none
-            keycode: escape
-            mode: [emacs, vi_normal, vi_insert]
-            event: { send: esc }    # NOTE: does not appear to work
         }
         {
             name: cancel_command

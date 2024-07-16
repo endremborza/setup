@@ -1,0 +1,2 @@
+#! /bin/sh
+docker run --health-cmd=pg_isready --health-interval=10s --health-retries=5 --health-timeout=5s --health-start-period=15s -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres
