@@ -1,8 +1,7 @@
 # assume curl installed
 # might need to apt install ca-certificates
 # curl -L bit.ly/borza-setup | sh
-# dpkg-reconfigure tzdata
-# set -e
+# sudo apt install tzdata xorg
 sudo apt update
 sudo apt install \
 	file \
@@ -41,6 +40,7 @@ sudo apt install \
 # libegl1-mesa-dev for alacritty for waylang nvidia EGD drivers 
 # dbus-x11
 
+sudo mkdir -p /usr/share/xsessions
 mkdir -p ~/setup-repos
 mkdir -p ~/.local/bin
 mkdir -p ~/.bash_completions
@@ -113,3 +113,4 @@ curl https://raw.githubusercontent.com/creationix/nvm/master/install.sh | bash
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 nvm install node || exit 1
+
