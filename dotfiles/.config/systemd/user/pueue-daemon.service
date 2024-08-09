@@ -1,0 +1,10 @@
+[Unit]
+Description=Pueue Daemon
+
+[Service]
+ExecStart=%h/.cargo/bin/pueued
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=default.target

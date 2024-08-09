@@ -1,4 +1,3 @@
 #! /bin/sh
 
 env DISPLAY=:0 XAUTHORITY=/home/borza/.Xauthority wmctrl -s 3
-#xdotool keydown alt; xdotool keydown ctrl key Left key Left; sleep 1; xdotool keyup alt; xdotool keyup ctrl

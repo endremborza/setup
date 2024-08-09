@@ -1,0 +1,12 @@
+#! /bin/sh
+if [ "$#" -ne 1 ]; then
+    echo "wrong number of parameters" && exit 1
+fi
+
+FILEPATH="$SETUP_REPO/dotfiles/.config/systemd/user/$1.service"
+cp $SETUP_REPO/util/service-template $FILEPATH
+nvim $FILEPATH
+restow
+systemctl enable --user "$1.service"
+systemctl start --user "$1.service"
+systemctl status --user "$1.service"

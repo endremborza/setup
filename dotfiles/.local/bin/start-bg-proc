@@ -1,0 +1,16 @@
+#! /usr/bin/env nu
+
+def main [comm, name = "none", -e: string = ""] {
+	let tname = if $name == "none" { $comm | split row " " | first } else { $name }
+	let tfound = (tmux has-session -t $env.BG_TMUX_SESSION | complete | get exit_code)
+	if ($tfound == 1) {
+		tmux new-session -ds $env.BG_TMUX_SESSION
+	}
+	let tpref = $"($env.BG_TMUX_SESSION):";
+	if $e == "" {
+		tmux new-window -d -n $tname -t $tpref $comm
+	} else {
+		tmux new-window -d -e $e -n $tname -t $tpref  $comm
+	}
+
+}

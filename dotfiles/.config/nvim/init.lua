@@ -202,6 +202,7 @@ vim.keymap.set('n', 'zR', require('ufo').openAllFolds)
 vim.keymap.set('n', 'zM', require('ufo').closeAllFolds)
 
 vim.keymap.set('n', '<leader>v', '"ayiw/<C-r>a<enter>', { desc = 'Search for word' })
+vim.keymap.set('n', '<leader>y', '"ayy:!echo "<C-r>a"<enter>', { desc = 'Use line in command' })
 
 vim.cmd.xnoremap('<leader>p', '"_dP')
 
@@ -330,7 +331,7 @@ vim.keymap.set('n', '<leader>gd', ":Gdiffsplit<enter>", { desc = '[G]it [D]iff' 
 vim.keymap.set('n', '<leader>ga', ":Git add %<enter>", { desc = '[G]it [A]dd' })
 vim.keymap.set('n', '<leader>gc', ":Git commit -m ", { desc = '[G]it [C]ommit' })
 vim.keymap.set('n', '<leader>gp', ":Git push<enter>", { desc = '[G]it [P]ush' })
-vim.keymap.set('n', '<leader>gl', ":Git push<enter>", { desc = '[G]it Pul[l]' })
+vim.keymap.set('n', '<leader>gl', ":Git pull<enter>", { desc = '[G]it Pul[l]' })
 vim.keymap.set('n', '<leader>gw', ":Git add % | Git commit -m ", { desc = '[G]it [W]rite' })
 
 -- [[ Configure Treesitter ]]
@@ -505,7 +506,6 @@ local servers = {
   tsserver = {},
   html = { filetypes = { 'html', 'svelte', 'twig', 'hbs' } },
   svelte = {},
-  nushell = {},
   lua_ls = {
     Lua = {
       workspace = { checkThirdParty = false },

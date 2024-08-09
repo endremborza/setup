@@ -71,7 +71,7 @@ $env.PROMPT_COMMAND = {|| create_left_prompt }
 $env.PROMPT_COMMAND_RIGHT = {|| create_right_prompt }
 
 # Autocompletes
-source ("~/setup-repos/nu_scripts/custom-completions/use.nu" | path expand)
+source ("~/.nu-completions" | path expand)
 
 
 # The prompt indicators are environmental variables that represent

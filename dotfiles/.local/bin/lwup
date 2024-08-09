@@ -1,0 +1,8 @@
+#! /usr/bin/env nu
+let CWS = (leftwm-state --quit | jq '.workspaces[]  | select(any(.tags[]; .mine and .focused)).index')
+[ "xdotool key Super_L+f", "alacritty -e nu", "alacritty -e nu", Logseq, "alacritty -e ttss", "alacritty -e btop" ] | enumerate | each {
+	|e| leftwm-command $"SendWorkspaceToTag ($CWS) ($e.index)";start-bg-proc $e.item; sleep 0.3sec
+}
+tmux attach-session -t $env.BG_TMUX_SESSION
+
+

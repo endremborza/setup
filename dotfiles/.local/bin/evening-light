@@ -1,5 +1,4 @@
 #! /usr/bin/env nu
 light -S 10%
-# let MAIN_SCREEN = "eDP-1"
-xrandr --listmonitors | split row " " | last | each {|screen| xrandr --output $screen --gamma 1:0.8:0.5}
+xrandr --output $env.MAIN_SCREEN --gamma 1:0.8:0.5
 
