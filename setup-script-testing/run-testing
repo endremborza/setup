@@ -1,0 +1,11 @@
+#! /bin/sh
+# docker build . -t up-test
+
+docker run -it --rm --name shtest -v $SETUP_REPO/bash-scripts:/home/borza/bs up-test
+
+# docker container rm shtest
+# --env="DISPLAY" --volume="$HOME/.Xauthority:/root/.Xauthority:rw"
+# curl -L -o up.sh bit.ly/borza-setup 
+# chmod +x up.sh
+# ./up.sh
+#
