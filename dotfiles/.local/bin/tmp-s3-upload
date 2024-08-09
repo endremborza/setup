@@ -1,0 +1,4 @@
+#! /bin/sh
+aws s3 cp $1 "s3://$TMP_S3_BUCKET"
+aws s3api put-object-acl --bucket $TMP_S3_BUCKET --key $1 --acl public-read
+echo "http://$TMP_S3_BUCKET.s3.amazonaws.com/"$1

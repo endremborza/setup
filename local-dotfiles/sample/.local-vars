@@ -1,0 +1,3 @@
+#!/bin/bash
+export SETUP_REPO=$ONSET_PATH/setup
+export BACKUP_SYNC=""

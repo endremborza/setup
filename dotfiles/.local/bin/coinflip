@@ -1,0 +1,5 @@
+#! /usr/bin/python
+import random
+import sys
+print(random.random() < float(sys.argv[1] if len(sys.argv) > 1 else 0.5))
+

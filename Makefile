@@ -3,10 +3,14 @@ PUB_KEY_LOC := /tmp/gpg-pub.asc
 PRI_KEY_LOC := /tmp/gpg-sc.asc
 GPG_USER := endremborza
 
+SETUP_REPO := $(shell pwd)
+
+export SETUP_REPO
+export BACKUP_SYNC
 export GPG_KEY_ID
 
 setup: init-local-dotfiles decrypt-secrets
-	restow
+	dotfiles/.local/bin/restow
 
 build-secrets:
 	# GPGME_PK_ECDH
@@ -22,8 +26,7 @@ init-local-dotfiles:
 	@echo "local dotfile directory built"
 
 sync-local-dotfiles:
-	echo 0 || echo 0 && echo 10
-	@echo syncing
+	rsync -r local-dotfiles/ $(BACKUP_SYNC)/local-dotfiles
 
 export-gpg-keys:
 	export GPG_TTY=$(shell tty)
@@ -33,3 +36,7 @@ export-gpg-keys:
 import-gpg-keys:
 	gpg --import $(PUB_KEY_LOC)
 	gpg --import $(PRI_KEY_LOC)
+
+send-keys-to-container:
+	docker cp $(PUB_KEY_LOC) shtest:/tmp/
+	docker cp $(PRI_KEY_LOC) shtest:/tmp/
