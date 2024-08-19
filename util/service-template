@@ -2,6 +2,9 @@
 Description=Described
 
 [Service]
+; User=borza
+; Group=borza
+; WorkingDirectory=%h/..
 ExecStart=%h/.local/bin/...
 Restart=always
 RestartSec=15

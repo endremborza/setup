@@ -1,12 +1,13 @@
-#! /bin/sh
-if [ "$#" -ne 1 ]; then
-    echo "wrong number of parameters" && exit 1
-fi
+#! /usr/bin/env nu
 
-FILEPATH="$SETUP_REPO/dotfiles/.config/systemd/user/$1.service"
-cp $SETUP_REPO/util/service-template $FILEPATH
-nvim $FILEPATH
-restow
-systemctl enable --user "$1.service"
-systemctl start --user "$1.service"
-systemctl status --user "$1.service"
+def main [f: string --local] {
+    let prefix = if $local {$"local-dotfiles/host-(hostname)"} else {"dotfiles"};
+    let filepath = $"($env.SETUP_REPO)/($prefix)/.config/systemd/user/($f).service"
+    cp $"($env.SETUP_REPO)/util/service-template" $filepath
+    nvim $filepath;
+    restow;
+    systemctl enable --user $"($f).service"
+    systemctl start --user $"($f).service"
+    systemctl status --user $"($f).service"
+}
+
