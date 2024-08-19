@@ -21,6 +21,8 @@ sudo apt install \
 	unzip \
 	gettext \
 	wget \
+	net-tools \
+	nfs-common \
 	git \
 	make \
 	stow \
