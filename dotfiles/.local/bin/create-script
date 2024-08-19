@@ -1,11 +1,12 @@
-#! /bin/sh
+#! /usr/bin/env nu
 
-if [ "$#" -ne 1 ]; then
-    echo "wrong number of parameters" && exit 1
-fi
+def main [f: string --local --nushell] {
+    let prefix = if $local {$"local-dotfiles/host-(hostname)"} else {"dotfiles"};
+    let shebang = if $nushell {"#! /usr/bin/env nu"} else {"#! /bin/sh"};
+    let filepath = $"($env.SETUP_REPO)/($prefix)/.local/bin/($f)"
+    $shebang | save $filepath;
+    chmod +x $filepath;
+    nvim $filepath;
+    restow;
+}
 
-FILEPATH=$SETUP_REPO/dotfiles/.local/bin/$1
-echo "#! /bin/sh" > $FILEPATH
-chmod +x $FILEPATH
-nvim $FILEPATH
-restow
