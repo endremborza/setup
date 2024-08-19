@@ -12,8 +12,10 @@ sudo apt update
 sudo apt install \
 	libxcb-xfixes0-dev \
 	libxkbcommon-dev \
+	libxkbcommon-x11-dev \
 	libfreetype6-dev \
 	libfontconfig1-dev \
+	dbus-x11 \
 	firefox \
 	polybar \
 	dunst \
@@ -42,3 +44,15 @@ echo "source ~/.bash_completions/alacritty" >> ~/.bashrc
 # add nerd fonts
 curl -OL https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/UbuntuMono.zip || exit 1
 unzip UbuntuMono.zip -d ~/.local/share/fonts || exit 1
+
+sudo usermod -aG video $USER
+sudo usermod -aG input $USER
+sudo chown $USER /dev/tty0 /dev/tty7
+
+# set x launchars to anybody
+#
+# /etc/X11/Xwrapper.config
+# allowed_users = anybody
+# 
+# create ~/.xinitrc exec dbus-launch leftwm
+# xinit $(which leftwm)
