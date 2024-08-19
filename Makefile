@@ -27,6 +27,7 @@ init-local-dotfiles:
 
 sync-local-dotfiles:
 	rsync -r local-dotfiles/ $(BACKUP_SYNC)/local-dotfiles
+	rsync -r $(BACKUP_SYNC)/local-dotfiles/ local-dotfiles
 
 export-gpg-keys:
 	export GPG_TTY=$(shell tty)
