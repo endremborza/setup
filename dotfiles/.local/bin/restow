@@ -1,6 +1,6 @@
 #! /bin/sh
 cd $SETUP_REPO
-stow --verbose=1 -t ~ dotfiles
-stow --verbose=1 -t ~ secrets
+stow --no-folding --verbose=1 -t ~ dotfiles
+stow --no-folding --verbose=1 -t ~ secrets
 cd local-dotfiles
-stow --verbose=1 -t ~ host-$(hostname)
+stow --no-folding --verbose=1 -t ~ host-$(hostname)
