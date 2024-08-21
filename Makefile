@@ -26,7 +26,7 @@ init-local-dotfiles:
 	@echo "local dotfile directory built"
 
 sync-local-dotfiles:
-	rsync -r local-dotfiles/ $(BACKUP_SYNC)/local-dotfiles
+	rsync -r $(LOCAL_DOTFILES)/ $(BACKUP_SYNC)/$(LOCAL_DOTFILES)
 	rsync -r $(BACKUP_SYNC)/local-dotfiles/ local-dotfiles
 
 export-gpg-keys:
