@@ -1,13 +1,22 @@
 #! /usr/bin/env nu
 
-def main [f: string --local] {
+def main [f: string --local --socket] {
     let prefix = if $local {$"local-dotfiles/host-(hostname)"} else {"dotfiles"};
-    let filepath = $"($env.SETUP_REPO)/($prefix)/.config/systemd/user/($f).service"
+    let fdir = $"($env.SETUP_REPO)/($prefix)/.config/systemd/user"
+    let filepath = $"($fdir)/($f).service"
     cp $"($env.SETUP_REPO)/util/service-template" $filepath
     nvim $filepath;
+    if $socket {
+        let socket_filepath = $"($fdir)/($f).socket"
+        cp $"($env.SETUP_REPO)/util/socket-template" $socket_filepath
+        nvim $socket_filepath;
+    }
     restow;
     systemctl enable --user $"($f).service"
     systemctl start --user $"($f).service"
     systemctl status --user $"($f).service"
+    if $socket {
+        systemctl enable --user --now $"($f).socket"
+    }
 }
 

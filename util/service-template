@@ -5,6 +5,7 @@ Description=Described
 ; User=borza
 ; Group=borza
 ; WorkingDirectory=%h/..
+; Environment=VAR1=value1 VAR2=value2
 ExecStart=%h/.local/bin/...
 Restart=always
 RestartSec=15
