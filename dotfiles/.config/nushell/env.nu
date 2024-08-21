@@ -29,12 +29,6 @@ def reclist_directories [path: string, depth: int] {
 	return ($entries | flatten)
 }
 
-def hw_volchange [change: int] {
-    let prefix = if ($change >= 0) {'+'} else {'-'};
-    let abs_change = $change | math abs;
-    pacmd list-sinks | grep name: | split row "\n" | parse "\tname: <{name}>" | each {|e| pactl set-sink-volume $e.name $'($prefix)($abs_change)%'};
-}
-
 def create_left_prompt [] {
     let dir = match (do --ignore-shell-errors { $env.PWD | path relative-to $nu.home-path }) {
         null => $env.PWD
