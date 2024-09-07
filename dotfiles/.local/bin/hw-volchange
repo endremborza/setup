@@ -1,0 +1,10 @@
+#! /usr/bin/env nu
+
+# amixer set Master 5%-/+
+def main [change: int] {
+    let prefix = if ($change >= 0) {'+'} else {'-'};
+    let abs_change = $change | math abs;
+    pacmd list-sinks | grep name: | split row "\n" | parse "\tname: <{name}>" | each {|e| pactl set-sink-volume $e.name $'($prefix)($abs_change)%'};
+}
+# pacmd list-sinks | parse -r "\tname: <(?P<name>.*)>.*\tvolume:.* (?P<vol>\\d+?)%/s"
+

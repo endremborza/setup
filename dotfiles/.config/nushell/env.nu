@@ -16,7 +16,7 @@ def gbs [] {
 }
 
 def reclist_directories [path: string, depth: int] {
-	if (($depth == 0) or ($"($path)/.git" | path exists)) {
+	if (($depth == 0) or ([$"($path)/.git" $"($path)/node_modules"] | any {|e| $e | path exists})) {
 		return [$path]
 	}
 	let entries = (ls $path --full-paths) |
@@ -26,7 +26,7 @@ def reclist_directories [path: string, depth: int] {
 		|entry|
 			(reclist_directories $entry.name ($depth - 1))
 		}
-	return ($entries | flatten)
+	return ($entries |  append [[$path]] | flatten)
 }
 
 def create_left_prompt [] {
