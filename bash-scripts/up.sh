@@ -49,7 +49,6 @@ to_profile 'export ONSET_PATH="$HOME/onset-src"'
 . ~/.profile
 mkdir -p ~/.local/bin ~/.bash_completions ~/.local/share/fonts ~/logs/cron $ONSET_PATH
 
-exit 0
 # rust
 curl https://sh.rustup.rs -sSf | sh -s -- -y
 . ~/.cargo/env
