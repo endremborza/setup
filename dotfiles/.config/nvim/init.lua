@@ -240,6 +240,27 @@ vim.api.nvim_create_autocmd('TextYankPost', {
 
 -- [[ Configure Telescope ]]
 -- See `:help telescope` and `:help telescope.setup()`
+
+local ignore_pats = {
+  '.git',
+  '.dvc',
+  '.svelte-kit',
+  'actions-runner',
+  'node_modules',
+  'build',
+  '__pycache__',
+  'target',
+  '*.svg',
+  '*.png',
+  '*.jpg',
+  '*.webp',
+  '*.ipynb',
+  '*.csv',
+  '*.parquet',
+  '*.xlsx',
+  '*.lock',
+}
+
 require('telescope').setup {
   defaults = {
     mappings = {
@@ -248,6 +269,8 @@ require('telescope').setup {
         ['<C-d>'] = false,
       },
     },
+    -- no_ignore = true,
+    file_ignore_patterns = ignore_pats,
   },
 }
 
@@ -278,10 +301,14 @@ local function find_git_root()
 end
 
 -- Custom live_grep function to search in git root
+
+local tele_std = require('telescope.builtin')
+
+
 local function live_grep_git_root()
   local git_root = find_git_root()
   if git_root then
-    require('telescope.builtin').live_grep {
+    tele_std.live_grep {
       search_dirs = { git_root },
     }
   end
@@ -290,40 +317,67 @@ end
 vim.api.nvim_create_user_command('LiveGrepGitRoot', live_grep_git_root, {})
 
 local function find_files_spec()
-  require('telescope.builtin').find_files {
-    find_command = { 'rg', '--files', '--iglob', '!.git', '--hidden' },
-    previewer = false
+  local command = { 'rg',
+    '--files',
+    '--hidden',
+  }
+  for _, v in pairs(ignore_pats) do
+    table.insert(command, "--iglob")
+    table.insert(command, "!" .. v)
+  end
+  tele_std.find_files {
+    find_command = command,
+    previewer = true,
+    no_ignore = true,
   }
 end
-vim.keymap.set('n', '<leader>ff', find_files_spec, { desc = '[F]ind [F]iles' })
 
 -- See `:help telescope.builtin`
-vim.keymap.set('n', '<leader>?', require('telescope.builtin').oldfiles, { desc = '[?] Find recently opened files' })
-vim.keymap.set('n', '<leader><space>', require('telescope.builtin').buffers, { desc = '[ ] Find existing buffers' })
+vim.keymap.set('n', '<leader>?', tele_std.oldfiles, { desc = '[?] Find recently opened files' })
+vim.keymap.set('n', '<leader><space>', tele_std.buffers, { desc = '[ ] Find existing buffers' })
 vim.keymap.set('n', '<leader>/', function()
   -- You can pass additional configuration to telescope to change theme, layout, etc.
-  require('telescope.builtin').current_buffer_fuzzy_find(require('telescope.themes').get_dropdown {
+  tele_std.current_buffer_fuzzy_find(require('telescope.themes').get_dropdown {
     winblend = 10,
     previewer = false,
   })
 end, { desc = '[/] Fuzzily search in current buffer' })
 
 local function telescope_live_grep_open_files()
-  require('telescope.builtin').live_grep {
+  tele_std.live_grep {
     grep_open_files = true,
     prompt_title = 'Live Grep in Open Files',
   }
 end
+
+
+local function telescope_live_grep_clean()
+  local iglobs = {}
+  for _, v in pairs(ignore_pats) do
+    table.insert(iglobs, "!" .. v)
+  end
+  tele_std.live_grep {
+    glob_pattern = iglobs
+  }
+end
+
+
+local function telescope_todo()
+  tele_std.grep_string { search = 'TODO' }
+end
+
+
 vim.keymap.set('n', '<leader>s/', telescope_live_grep_open_files, { desc = '[S]earch [/] in Open Files' })
-vim.keymap.set('n', '<leader>ss', require('telescope.builtin').builtin, { desc = '[S]earch [S]elect Telescope' })
-vim.keymap.set('n', '<leader>gf', require('telescope.builtin').git_files, { desc = 'Search [G]it [F]iles' })
-vim.keymap.set('n', '<leader>sf', require('telescope.builtin').find_files, { desc = '[S]earch [F]iles' })
-vim.keymap.set('n', '<leader>sh', require('telescope.builtin').help_tags, { desc = '[S]earch [H]elp' })
-vim.keymap.set('n', '<leader>sw', require('telescope.builtin').grep_string, { desc = '[S]earch current [W]ord' })
-vim.keymap.set('n', '<leader>sg', require('telescope.builtin').live_grep, { desc = '[S]earch by [G]rep' })
+vim.keymap.set('n', '<leader>ss', tele_std.builtin, { desc = '[S]earch [S]elect Telescope' })
+vim.keymap.set('n', '<leader>gf', tele_std.git_files, { desc = 'Search [G]it [F]iles' })
+vim.keymap.set('n', '<leader>sf', find_files_spec, { desc = '[S]earch [F]iles' })
+vim.keymap.set('n', '<leader>st', telescope_todo, { desc = '[S]earch [T]odo' })
+vim.keymap.set('n', '<leader>sh', tele_std.help_tags, { desc = '[S]earch [H]elp' })
+vim.keymap.set('n', '<leader>sw', tele_std.grep_string, { desc = '[S]earch current [W]ord' })
+vim.keymap.set('n', '<leader>sg', telescope_live_grep_clean, { desc = '[S]earch by [G]rep' })
 vim.keymap.set('n', '<leader>sG', ':LiveGrepGitRoot<cr>', { desc = '[S]earch by [G]rep on Git Root' })
-vim.keymap.set('n', '<leader>sd', require('telescope.builtin').diagnostics, { desc = '[S]earch [D]iagnostics' })
-vim.keymap.set('n', '<leader>sr', require('telescope.builtin').resume, { desc = '[S]earch [R]esume' })
+vim.keymap.set('n', '<leader>sd', tele_std.diagnostics, { desc = '[S]earch [D]iagnostics' })
+vim.keymap.set('n', '<leader>sr', tele_std.resume, { desc = '[S]earch [R]esume' })
 
 -- Git keymaps
 vim.keymap.set('n', '<leader>gs', ":Git status<enter>", { desc = '[G]it [S]tatus' })
@@ -444,12 +498,12 @@ local on_attach = function(_, bufnr)
   nmap('<leader>rn', vim.lsp.buf.rename, '[R]e[n]ame')
   nmap('<leader>ca', vim.lsp.buf.code_action, '[C]ode [A]ction')
 
-  nmap('gd', require('telescope.builtin').lsp_definitions, '[G]oto [D]efinition')
-  nmap('gr', require('telescope.builtin').lsp_references, '[G]oto [R]eferences')
-  nmap('gI', require('telescope.builtin').lsp_implementations, '[G]oto [I]mplementation')
-  nmap('<leader>D', require('telescope.builtin').lsp_type_definitions, 'Type [D]efinition')
-  nmap('<leader>ds', require('telescope.builtin').lsp_document_symbols, '[D]ocument [S]ymbols')
-  nmap('<leader>ws', require('telescope.builtin').lsp_dynamic_workspace_symbols, '[W]orkspace [S]ymbols')
+  nmap('gd', tele_std.lsp_definitions, '[G]oto [D]efinition')
+  nmap('gr', tele_std.lsp_references, '[G]oto [R]eferences')
+  nmap('gI', tele_std.lsp_implementations, '[G]oto [I]mplementation')
+  nmap('<leader>D', tele_std.lsp_type_definitions, 'Type [D]efinition')
+  nmap('<leader>ds', tele_std.lsp_document_symbols, '[D]ocument [S]ymbols')
+  nmap('<leader>ws', tele_std.lsp_dynamic_workspace_symbols, '[W]orkspace [S]ymbols')
 
   -- See `:help K` for why this keymap
   nmap('K', vim.lsp.buf.hover, 'Hover Documentation')
