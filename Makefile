@@ -29,6 +29,12 @@ sync-local-dotfiles:
 	rsync -r $(LOCAL_DOTFILES)/ $(BACKUP_SYNC)/$(LOCAL_DOTFILES)
 	rsync -r $(BACKUP_SYNC)/local-dotfiles/ local-dotfiles
 
+push-local-dotfiles:
+	rsync -r local-dotfiles/ $(BACKUP_SYNC)/local-dotfiles
+
+pull-local-dotfiles:
+	rsync -r $(BACKUP_SYNC)/local-dotfiles/ local-dotfiles
+
 export-gpg-keys:
 	export GPG_TTY=$(shell tty)
 	gpg --export -a $(GPG_KEY_ID) > $(PUB_KEY_LOC)
