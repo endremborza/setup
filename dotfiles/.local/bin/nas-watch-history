@@ -1,2 +1,2 @@
 #! /bin/env nu
-ls ~/logs/watches | each {|e| cat $e.name | from csv } | filter {is-not-empty} | reduce {|r, l| $r | append $l} | filter {|e| $e.title | is-not-empty} | sort-by date l
+ls ~/logs/watches | each {|e| cat $e.name | from csv } | where {is-not-empty} | reduce {|r, l| $r | append $l} | where {|e| $e.title | is-not-empty} | sort-by date l
