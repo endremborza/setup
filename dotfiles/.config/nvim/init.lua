@@ -1,6 +1,10 @@
 vim.g.mapleader = ' '
 vim.g.maplocalleader = ' '
 
+-- Spell
+vim.opt.spelllang = { "en", "en_gb" } -- or en_us
+vim.opt.spellsuggest = "best,9"
+
 local lazypath = vim.fn.stdpath 'data' .. '/lazy/lazy.nvim'
 if not vim.loop.fs_stat(lazypath) then
   vim.fn.system {
@@ -13,6 +17,11 @@ if not vim.loop.fs_stat(lazypath) then
   }
 end
 vim.opt.rtp:prepend(lazypath)
+
+local ts_install_dir = vim.fn.stdpath("data") .. "/site"
+if not vim.tbl_contains(vim.opt.rtp:get(), ts_install_dir) then
+  vim.opt.rtp:append(ts_install_dir)
+end
 
 require('lazy').setup({
   'tpope/vim-fugitive',
@@ -129,7 +138,6 @@ require('lazy').setup({
 
   {
     'nvim-telescope/telescope.nvim',
-    branch = '0.1.x',
     dependencies = {
       'nvim-lua/plenary.nvim',
       {
@@ -143,86 +151,48 @@ require('lazy').setup({
   },
   {
     'nvim-treesitter/nvim-treesitter',
-    -- 1. REMOVE "nushell/tree-sitter-nu" from dependencies.
-    -- It causes path conflicts.
-    dependencies = {
-      'nvim-treesitter/nvim-treesitter-textobjects',
-    },
+    lazy = false,
     build = ':TSUpdate',
-    config = function()
-      require('nvim-treesitter.configs').setup {
-        ensure_installed = { 'c', 'cpp', 'go', 'lua', 'python', 'rust', 'tsx', 'javascript', 'typescript', 'vimdoc', 'vim', 'bash', 'html', 'svelte', 'nu' },
+    opts = {
+      ensure_installed = {
+        'markdown',
+        'markdown_inline',
+        'latex',
+        'bibtex',
+        'xml',
+        'c',
+        'cpp',
+        'go',
+        'lua',
+        'python',
+        'rust',
+        'tsx',
+        'javascript',
+        'typescript',
+        'vimdoc',
+        'vim',
+        'bash',
+        'html',
+        'svelte',
+        'nu'
+      },
+      sync_install = false,
+      auto_install = true,
 
-        sync_install = false,
-        auto_install = true,
+      highlight = { enable = true },
+      indent = { enable = true },
 
-        highlight = { enable = true },
-        indent = { enable = true },
-
-        incremental_selection = {
-          enable = true,
-          keymaps = {
-            init_selection = '<c-space>',
-            node_incremental = '<c-space>',
-            scope_incremental = '<c-s>',
-            node_decremental = '<M-space>',
-          },
+      incremental_selection = {
+        enable = true,
+        keymaps = {
+          init_selection = '<c-space>',
+          node_incremental = '<c-space>',
+          scope_incremental = '<c-s>',
+          node_decremental = '<M-space>',
         },
-
-        textobjects = {
-          select = {
-            enable = true,
-            lookahead = true,
-            keymaps = {
-              ['aa'] = '@parameter.outer',
-              ['ia'] = '@parameter.inner',
-              ['af'] = '@function.outer',
-              ['if'] = '@function.inner',
-              ['ac'] = '@class.outer',
-              ['ic'] = '@class.inner',
-            },
-          },
-          move = {
-            enable = true,
-            set_jumps = true,
-            goto_next_start = {
-              [']m'] = '@function.outer',
-              [']]'] = '@class.outer',
-            },
-            goto_next_end = {
-              [']M'] = '@function.outer',
-              [']['] = '@class.outer',
-            },
-            goto_previous_start = {
-              ['[m'] = '@function.outer',
-              ['[['] = '@class.outer',
-            },
-            goto_previous_end = {
-              ['[M'] = '@function.outer',
-              ['[]'] = '@class.outer',
-            },
-          },
-          swap = {
-            enable = true,
-            swap_next = {
-              ['<leader>a'] = '@parameter.inner',
-            },
-            swap_previous = {
-              ['<leader>A'] = '@parameter.inner',
-            },
-          },
-        },
-      }
-    end,
+      },
+    },
   },
-  'nvim-treesitter/playground',
-  -- {
-  --   'MunifTanjim/eslint.nvim',
-  --   dependencies = {
-  --     'jose-elias-alvarez/null-ls.nvim'
-  --   }
-  -- },
-  'sbdchd/neoformat',
   {
     "catppuccin/nvim",
     name = "catppuccin",
@@ -231,6 +201,11 @@ require('lazy').setup({
   "ray-x/lsp_signature.nvim",
   { 'kevinhwang91/nvim-ufo', dependencies = { 'kevinhwang91/promise-async', } },
   "stevearc/conform.nvim",
+  {
+    "lervag/vimtex",
+    ft = { "tex", "plaintex" },
+  }
+
 }, {})
 
 vim.o.hlsearch = false
@@ -275,6 +250,23 @@ vim.cmd.xnoremap('<leader>p', '"_dP')
 vim.api.nvim_create_autocmd("FileType", {
   pattern = "nu",
   callback = function(event) vim.bo[event.buf].commentstring = "#! /usr/bin/env %s" end,
+})
+
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = { "markdown", "tex", "plaintex", "xml" },
+  callback = function()
+    vim.opt_local.spell = true
+    vim.opt_local.wrap = true
+    vim.opt_local.linebreak = true
+  end,
+})
+
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "markdown",
+  callback = function()
+    vim.opt_local.conceallevel = 2
+    vim.opt_local.concealcursor = "nc"
+  end,
 })
 
 -- Keymaps for better default experience
@@ -470,6 +462,14 @@ vim.keymap.set("n", "<leader>gh", function()
   vim.cmd(cmd)
 end, { desc = "[G]it commit [H]istory (log) for current line" })
 
+-- Spellcheck keymaps
+--
+vim.keymap.set("n", "]s", "]s", { desc = "Next misspelled word" })
+vim.keymap.set("n", "[s", "[s", { desc = "Prev misspelled word" })
+vim.keymap.set("n", "zg", "zg", { desc = "Add word to dictionary" })
+vim.keymap.set("n", "zw", "zw", { desc = "Mark word as wrong" })
+vim.keymap.set("n", "z=", "z=", { desc = "Spelling suggestions" })
+
 -- [[ Configure Treesitter ]]
 -- See `:help nvim-treesitter`
 -- Defer Treesitter setup after first render to improve startup time of 'nvim {filename}'
@@ -536,7 +536,7 @@ local on_attach = function(client, bufnr)
     print(vim.inspect(vim.lsp.buf.list_workspace_folders()))
   end, '[W]orkspace [L]ist Folders')
 end
-vim.lsp.set_log_level("DEBUG")
+vim.lsp.set_log_level("WARN")
 -- And add this autocmd to see when LSP clients start
 vim.api.nvim_create_autocmd("LspAttach", {
   callback = function(args)
@@ -556,6 +556,19 @@ require('lazydev').setup()
 local servers = {
   -- clangd = {},
   -- gopls = {},
+  texlab = {
+    texlab = {
+      build = {
+        executable = "latexmk",
+        args = { "-pdf", "-interaction=nonstopmode", "-synctex=1", "%f" },
+        onSave = true,
+      },
+      forwardSearch = {
+        executable = "zathura",
+        args = { "--synctex-forward", "%l:1:%f", "%p" },
+      },
+    },
+  },
   lemminx = {
     xml = {
       server = {
@@ -672,6 +685,12 @@ cmp.setup {
   },
 }
 
+
+vim.g.vimtex_view_method = "zathura" -- or "skim", "okular", "sioyek"
+vim.g.vimtex_compiler_method = "latexmk"
+vim.g.vimtex_quickfix_mode = 0
+vim.g.vimtex_syntax_enabled = 1
+vim.g.vimtex_fold_enabled = 1
 
 -- The line beneath this is called `modeline`. See `:help modeline`
 -- vim: ts=2 sts=2 sw=2 et
