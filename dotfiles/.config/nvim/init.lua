@@ -257,17 +257,18 @@ function _G.molten_evaluate_cell()
 
   local view = vim.fn.winsaveview()
 
-  -- Directly select the range and trigger Molten
-  vim.api.nvim_win_set_cursor(0, { start, 0 })
-  vim.cmd("normal! V")
-  vim.api.nvim_win_set_cursor(0, { stop, 0 })
+  -- Select the range, enter command mode, clear the auto-range with <C-u>
+  -- Then execute and escape back to normal mode.
+  local exec_keys = vim.api.nvim_replace_termcodes(
+    string.format("%dGV%dG:<C-u>MoltenEvaluateVisual<CR><Esc>", start, stop),
+    true, false, true
+  )
 
-  -- Execute the evaluation
-  vim.cmd("MoltenEvaluateVisual")
+  vim.api.nvim_feedkeys(exec_keys, "nx", false)
 
-  -- Reset to normal mode and restore cursor/view
-  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "nx", false)
-  vim.fn.winrestview(view)
+  vim.schedule(function()
+    vim.fn.winrestview(view)
+  end)
 end
 
 vim.keymap.set("x", "<leader>mc", ":<C-u>lua select_cell()<CR>", { silent = true, desc = "molten cell" })
