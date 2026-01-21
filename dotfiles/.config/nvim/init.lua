@@ -214,48 +214,60 @@ vim.keymap.set('v', '<leader>p', '"_dP', { desc = "Paste without replacing buffe
 
 --molten keymaps and config
 
-
 vim.g.molten_cell_separator = "# %%"
 
-local function cell_range()
+local function get_cell_range()
   local sep = vim.g.molten_cell_separator
-  local cur = vim.fn.line(".")
-  local last = vim.fn.line("$")
+  local last_line = vim.fn.line("$")
+  local curr_line = vim.fn.line(".")
 
-  local start = 1
-  for l = cur, 1, -1 do
-    if vim.fn.getline(l):match("^%s*" .. vim.pesc(sep)) then
-      start = l
+  local start_line = 1
+  for i = curr_line, 1, -1 do
+    if vim.fn.getline(i):match("^%s*" .. vim.pesc(sep)) then
+      start_line = i
       break
     end
   end
 
-  local stop = last
-  for l = cur + 1, last do
-    if vim.fn.getline(l):match("^%s*" .. vim.pesc(sep)) then
-      stop = l - 1
+  local end_line = last_line
+  for i = curr_line + 1, last_line do
+    if vim.fn.getline(i):match("^%s*" .. vim.pesc(sep)) then
+      end_line = i - 1
       break
     end
   end
 
-  return start, stop
+  return start_line, end_line
 end
 
+local function select_cell()
+  local start, stop = get_cell_range()
 
-local function select_inner_cell()
-  local start, stop = cell_range()
-  vim.fn.cursor(start + 1, 1)
+  if vim.fn.getline(start):match("^%s*" .. vim.pesc(vim.g.molten_cell_separator)) then
+    start = start + 1
+  end
+
+  if start > stop then return end
+
+  vim.api.nvim_win_set_cursor(0, { start, 0 })
   vim.cmd("normal! V")
-  vim.fn.cursor(stop, 1)
+  vim.api.nvim_win_set_cursor(0, { stop, 0 })
 end
 
-
-local function select_around_cell()
-  local start, stop = cell_range()
-  vim.fn.cursor(start, 1)
+function select_cell_visual()
+  local start, stop = get_cell_range()
+  if start > stop then return end
+  -- Move cursor to start, enter visual line mode, move to stop
+  vim.api.nvim_win_set_cursor(0, { start, 0 })
   vim.cmd("normal! V")
-  vim.fn.cursor(stop, 1)
+  vim.api.nvim_win_set_cursor(0, { stop, 0 })
 end
+
+vim.keymap.set("x", "<leader>mc", ":<C-u>lua select_cell_visual()<CR>", { silent = true, desc = "Select Molten Cell" })
+vim.keymap.set("o", "<leader>mc", select_cell, { desc = "Select Molten Cell" })
+
+vim.keymap.set("n", "<localleader>mo", ":MoltenEvaluateOperator<CR>",
+  { silent = true, desc = "run operator selection" })
 
 
 local function molten_insert_cell_separator()
@@ -264,8 +276,8 @@ end
 
 vim.keymap.set("n", "<localleader>mi", ":MoltenInit<CR>",
   { silent = true, desc = "Initialize the plugin" })
-vim.keymap.set("n", "<localleader>mo", ":MoltenEvaluateOperator<CR>",
-  { silent = true, desc = "run operator selection" })
+vim.keymap.set("n", "<localleader>mf", ":MoltenInfo<CR>",
+  { silent = true, desc = "Initialize the plugin" })
 vim.keymap.set("n", "<localleader>ml", ":MoltenEvaluateLine<CR>",
   { silent = true, desc = "evaluate line" })
 vim.keymap.set("n", "<localleader>mr", ":MoltenReevaluateCell<CR>",
@@ -278,14 +290,6 @@ vim.keymap.set("n", "<localleader>mh", ":MoltenHideOutput<CR>",
   { silent = true, desc = "hide output" })
 vim.keymap.set("n", "<localleader>ms", ":noautocmd MoltenEnterOutput<CR>",
   { silent = true, desc = "show/enter output" })
-
-vim.keymap.set("n", "<localleader>mm", ":MoltenEvaluateOperator<CR><leader>mc<CR>",
-  { silent = true, desc = "run operator selection" })
-
-vim.keymap.set({ "n", "v" }, "<leader>mc", function()
-  vim.o.operatorfunc = "v:lua.cell_operator"
-  return "g@"
-end, { expr = true, desc = "Cell operator" })
 
 vim.keymap.set("n", "<leader>m-", molten_insert_cell_separator,
   { desc = "Insert Molten cell separator" })
