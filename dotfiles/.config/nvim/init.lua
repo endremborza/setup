@@ -240,31 +240,40 @@ local function get_cell_range()
   return start_line, end_line
 end
 
-local function select_cell()
+
+function select_cell()
   local start, stop = get_cell_range()
-
-  if vim.fn.getline(start):match("^%s*" .. vim.pesc(vim.g.molten_cell_separator)) then
-    start = start + 1
-  end
-
   if start > stop then return end
 
+  -- This works for both 'v' and 'o' modes
   vim.api.nvim_win_set_cursor(0, { start, 0 })
   vim.cmd("normal! V")
   vim.api.nvim_win_set_cursor(0, { stop, 0 })
 end
 
-function select_cell_visual()
+function _G.molten_evaluate_cell()
   local start, stop = get_cell_range()
   if start > stop then return end
-  -- Move cursor to start, enter visual line mode, move to stop
+
+  local view = vim.fn.winsaveview()
+
+  -- Directly select the range and trigger Molten
   vim.api.nvim_win_set_cursor(0, { start, 0 })
   vim.cmd("normal! V")
   vim.api.nvim_win_set_cursor(0, { stop, 0 })
+
+  -- Execute the evaluation
+  vim.cmd("MoltenEvaluateVisual")
+
+  -- Reset to normal mode and restore cursor/view
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "nx", false)
+  vim.fn.winrestview(view)
 end
 
-vim.keymap.set("x", "<leader>mc", ":<C-u>lua select_cell_visual()<CR>", { silent = true, desc = "Select Molten Cell" })
-vim.keymap.set("o", "<leader>mc", select_cell, { desc = "Select Molten Cell" })
+vim.keymap.set("x", "<leader>mc", ":<C-u>lua select_cell()<CR>", { silent = true, desc = "molten cell" })
+vim.keymap.set("o", "<leader>mc", select_cell, { silent = true, desc = "molten cell" })
+vim.keymap.set("n", "<leader>mm", molten_evaluate_cell, { desc = "Evaluate current cell" })
+
 
 vim.keymap.set("n", "<localleader>mo", ":MoltenEvaluateOperator<CR>",
   { silent = true, desc = "run operator selection" })
