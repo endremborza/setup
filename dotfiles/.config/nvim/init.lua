@@ -18,11 +18,6 @@ if not vim.loop.fs_stat(lazypath) then
 end
 vim.opt.rtp:prepend(lazypath)
 
-local ts_install_dir = vim.fn.stdpath("data") .. "/site"
-if not vim.tbl_contains(vim.opt.rtp:get(), ts_install_dir) then
-  vim.opt.rtp:append(ts_install_dir)
-end
-
 require('lazy').setup({
   'tpope/vim-fugitive',
   'tpope/vim-rhubarb',
@@ -153,45 +148,6 @@ require('lazy').setup({
     'nvim-treesitter/nvim-treesitter',
     lazy = false,
     build = ':TSUpdate',
-    opts = {
-      ensure_installed = {
-        'markdown',
-        'markdown_inline',
-        'latex',
-        'bibtex',
-        'xml',
-        'c',
-        'cpp',
-        'go',
-        'lua',
-        'python',
-        'rust',
-        'tsx',
-        'javascript',
-        'typescript',
-        'vimdoc',
-        'vim',
-        'bash',
-        'html',
-        'svelte',
-        'nu'
-      },
-      sync_install = false,
-      auto_install = true,
-
-      highlight = { enable = true },
-      indent = { enable = true },
-
-      incremental_selection = {
-        enable = true,
-        keymaps = {
-          init_selection = '<c-space>',
-          node_incremental = '<c-space>',
-          scope_incremental = '<c-s>',
-          node_decremental = '<M-space>',
-        },
-      },
-    },
   },
   {
     "catppuccin/nvim",
@@ -204,7 +160,18 @@ require('lazy').setup({
   {
     "lervag/vimtex",
     ft = { "tex", "plaintex" },
-  }
+  },
+  {
+    "benlubas/molten-nvim",
+    version = "^1.0.0", -- use version <2.0.0 to avoid breaking changes
+    build = ":UpdateRemotePlugins",
+    init = function()
+      -- these are examples, not defaults. Please see the readme
+      vim.g.molten_image_provider = nil
+      vim.g.molten_output_win_max_height = 20
+      vim.g.molten_auto_open_output = true
+    end,
+  },
 
 }, {})
 
@@ -243,7 +210,85 @@ vim.keymap.set('n', 'zM', require('ufo').closeAllFolds)
 vim.keymap.set('n', '<leader>v', '"ayiw/<C-r>a<enter>', { desc = 'Search for word' })
 vim.keymap.set('n', '<leader>y', '"ayy:!echo "<C-r>a"<enter>', { desc = 'Use line in command' })
 
-vim.cmd.xnoremap('<leader>p', '"_dP')
+vim.keymap.set('v', '<leader>p', '"_dP', { desc = "Paste without replacing buffer" })
+
+--molten keymaps and config
+
+
+vim.g.molten_cell_separator = "# %%"
+
+local function cell_range()
+  local sep = vim.g.molten_cell_separator
+  local cur = vim.fn.line(".")
+  local last = vim.fn.line("$")
+
+  local start = 1
+  for l = cur, 1, -1 do
+    if vim.fn.getline(l):match("^%s*" .. vim.pesc(sep)) then
+      start = l
+      break
+    end
+  end
+
+  local stop = last
+  for l = cur + 1, last do
+    if vim.fn.getline(l):match("^%s*" .. vim.pesc(sep)) then
+      stop = l - 1
+      break
+    end
+  end
+
+  return start, stop
+end
+
+
+local function select_inner_cell()
+  local start, stop = cell_range()
+  vim.fn.cursor(start + 1, 1)
+  vim.cmd("normal! V")
+  vim.fn.cursor(stop, 1)
+end
+
+
+local function select_around_cell()
+  local start, stop = cell_range()
+  vim.fn.cursor(start, 1)
+  vim.cmd("normal! V")
+  vim.fn.cursor(stop, 1)
+end
+
+
+local function molten_insert_cell_separator()
+  vim.fn.append(vim.fn.line("."), vim.g.molten_cell_separator)
+end
+
+vim.keymap.set("n", "<localleader>mi", ":MoltenInit<CR>",
+  { silent = true, desc = "Initialize the plugin" })
+vim.keymap.set("n", "<localleader>mo", ":MoltenEvaluateOperator<CR>",
+  { silent = true, desc = "run operator selection" })
+vim.keymap.set("n", "<localleader>ml", ":MoltenEvaluateLine<CR>",
+  { silent = true, desc = "evaluate line" })
+vim.keymap.set("n", "<localleader>mr", ":MoltenReevaluateCell<CR>",
+  { silent = true, desc = "re-evaluate cell" })
+vim.keymap.set("v", "<localleader>mv", ":<C-u>MoltenEvaluateVisual<CR>gv",
+  { silent = true, desc = "evaluate visual selection" })
+vim.keymap.set("n", "<localleader>md", ":MoltenDelete<CR>",
+  { silent = true, desc = "molten delete cell" })
+vim.keymap.set("n", "<localleader>mh", ":MoltenHideOutput<CR>",
+  { silent = true, desc = "hide output" })
+vim.keymap.set("n", "<localleader>ms", ":noautocmd MoltenEnterOutput<CR>",
+  { silent = true, desc = "show/enter output" })
+
+vim.keymap.set("n", "<localleader>mm", ":MoltenEvaluateOperator<CR><leader>mc<CR>",
+  { silent = true, desc = "run operator selection" })
+
+vim.keymap.set({ "n", "v" }, "<leader>mc", function()
+  vim.o.operatorfunc = "v:lua.cell_operator"
+  return "g@"
+end, { expr = true, desc = "Cell operator" })
+
+vim.keymap.set("n", "<leader>m-", molten_insert_cell_separator,
+  { desc = "Insert Molten cell separator" })
 
 -- personal autocmds
 --
@@ -266,6 +311,17 @@ vim.api.nvim_create_autocmd("FileType", {
   callback = function()
     vim.opt_local.conceallevel = 2
     vim.opt_local.concealcursor = "nc"
+  end,
+})
+
+vim.api.nvim_create_autocmd("FileType", {
+  callback = function(args)
+    local lang = vim.treesitter.language.get_lang(args.match)
+    if not lang then return end
+    local max = 500 * 1024 -- 500 KB
+    local ok, stats = pcall(vim.loop.fs_stat, vim.api.nvim_buf_get_name(args.buf))
+    if ok and stats and stats.size > max then return end
+    pcall(vim.treesitter.start, args.buf, lang)
   end,
 })
 
@@ -474,6 +530,30 @@ vim.keymap.set("n", "z=", "z=", { desc = "Spelling suggestions" })
 -- See `:help nvim-treesitter`
 -- Defer Treesitter setup after first render to improve startup time of 'nvim {filename}'
 
+require('nvim-treesitter').install({
+  'markdown',
+  'markdown_inline',
+  'latex',
+  'bibtex',
+  'xml',
+  'c',
+  'cpp',
+  'go',
+  'lua',
+  'python',
+  'rust',
+  'tsx',
+  'javascript',
+  'typescript',
+  'vimdoc',
+  'vim',
+  'bash',
+  'html',
+  'svelte',
+  'nu'
+
+})
+
 
 require('which-key').add {
   { '<leader>c', group = '[C]ode' },
@@ -483,6 +563,7 @@ require('which-key').add {
   { '<leader>s', group = '[S]earch' },
   { '<leader>w', group = '[W]orkspace' },
   { '<leader>t', group = '[T]oggle' },
+  { '<leader>m', group = '[M]olten' },
   { '<leader>h', group = 'Git [H]unk',      mode = { 'n', 'v' } },
   { "<leader>",  group = "VISUAL <leader>", mode = "v" },
 }
