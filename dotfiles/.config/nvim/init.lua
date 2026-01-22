@@ -355,9 +355,9 @@ vim.api.nvim_create_autocmd('TextYankPost', {
 -- See `:help telescope` and `:help telescope.setup()`
 
 local ignore_pats = {
-  '.git',
-  '.dvc',
-  '.venv',
+  '.git/',
+  '.dvc/',
+  '.venv/',
   '.svelte-kit',
   'actions-runner',
   'node_modules',
@@ -369,6 +369,8 @@ local ignore_pats = {
   'coverage.xml',
   'htmlcov/',
   -- '*.svg',
+  '*.otf',
+  '*.ttf',
   '*.png',
   '*.jpg',
   '*.webp',
