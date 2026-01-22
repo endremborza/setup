@@ -254,9 +254,7 @@ end
 function _G.molten_evaluate_cell()
   local start, stop = get_cell_range()
   if start > stop then return end
-
   local view = vim.fn.winsaveview()
-
   -- Select the range, enter command mode, clear the auto-range with <C-u>
   -- Then execute and escape back to normal mode.
   local exec_keys = vim.api.nvim_replace_termcodes(
@@ -265,7 +263,6 @@ function _G.molten_evaluate_cell()
   )
 
   vim.api.nvim_feedkeys(exec_keys, "nx", false)
-
   vim.schedule(function()
     vim.fn.winrestview(view)
   end)
@@ -273,36 +270,26 @@ end
 
 vim.keymap.set("x", "<leader>mc", ":<C-u>lua select_cell()<CR>", { silent = true, desc = "molten cell" })
 vim.keymap.set("o", "<leader>mc", select_cell, { silent = true, desc = "molten cell" })
-vim.keymap.set("n", "<leader>mm", molten_evaluate_cell, { desc = "Evaluate current cell" })
-
-
-vim.keymap.set("n", "<localleader>mo", ":MoltenEvaluateOperator<CR>",
-  { silent = true, desc = "run operator selection" })
-
+vim.keymap.set("n", "<leader>mm", molten_evaluate_cell, { desc = "evaluate current cell" })
 
 local function molten_insert_cell_separator()
   vim.fn.append(vim.fn.line("."), vim.g.molten_cell_separator)
 end
 
-vim.keymap.set("n", "<localleader>mi", ":MoltenInit<CR>",
-  { silent = true, desc = "Initialize the plugin" })
-vim.keymap.set("n", "<localleader>mf", ":MoltenInfo<CR>",
-  { silent = true, desc = "Initialize the plugin" })
-vim.keymap.set("n", "<localleader>ml", ":MoltenEvaluateLine<CR>",
-  { silent = true, desc = "evaluate line" })
-vim.keymap.set("n", "<localleader>mr", ":MoltenReevaluateCell<CR>",
-  { silent = true, desc = "re-evaluate cell" })
-vim.keymap.set("v", "<localleader>mv", ":<C-u>MoltenEvaluateVisual<CR>gv",
-  { silent = true, desc = "evaluate visual selection" })
-vim.keymap.set("n", "<localleader>md", ":MoltenDelete<CR>",
-  { silent = true, desc = "molten delete cell" })
-vim.keymap.set("n", "<localleader>mh", ":MoltenHideOutput<CR>",
-  { silent = true, desc = "hide output" })
-vim.keymap.set("n", "<localleader>ms", ":noautocmd MoltenEnterOutput<CR>",
-  { silent = true, desc = "show/enter output" })
+vim.keymap.set("n", "<localleader>mi", ":MoltenInit<CR>", { silent = true, desc = "Initialize the plugin" })
+vim.keymap.set("n", "<localleader>mf", ":MoltenInfo<CR>", { silent = true, desc = "Initialize the plugin" })
+vim.keymap.set("n", "<localleader>ml", ":MoltenEvaluateLine<CR>", { silent = true, desc = "evaluate line" })
+vim.keymap.set("n", "<localleader>mr", ":MoltenReevaluateCell<CR>", { silent = true, desc = "re-evaluate cell" })
+vim.keymap.set("n", "<localleader>m0", ":MoltenRestart<CR>", { silent = true, desc = "restart kernel" })
+vim.keymap.set("v", "<localleader>mv", ":<C-u>MoltenEvaluateVisual<CR>gv", { silent = true, desc = "run selection" })
+vim.keymap.set("n", "<localleader>md", ":MoltenDelete<CR>", { silent = true, desc = "molten delete cell" })
+vim.keymap.set("n", "<localleader>mh", ":MoltenHideOutput<CR>", { silent = true, desc = "hide output" })
+vim.keymap.set("n", "<localleader>mo", ":MoltenShowOutput<CR>", { silent = true, desc = "hide output" })
+vim.keymap.set("n", "<localleader>ms", ":noautocmd MoltenEnterOutput<CR>", { silent = true, desc = "show/enter output" })
+vim.keymap.set("n", "<localleader>mn", ":MoltenNext<CR>", { silent = true, desc = "next cell" })
+vim.keymap.set("n", "<localleader>mb", ":MoltenPrev<CR>", { silent = true, desc = "previous cell" })
+vim.keymap.set("n", "<leader>m-", molten_insert_cell_separator, { desc = "insert cell separator" })
 
-vim.keymap.set("n", "<leader>m-", molten_insert_cell_separator,
-  { desc = "Insert Molten cell separator" })
 
 -- personal autocmds
 --
