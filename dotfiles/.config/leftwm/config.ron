@@ -82,7 +82,7 @@
         (command: Execute, value: "firefox", modifier: ["modkey"], key: "f"),
         (command: Execute, value: "hw-volchange 5", key: "XF86AudioRaiseVolume"),
         (command: Execute, value: "hw-volchange -5", key: "XF86AudioLowerVolume"),
-        (command: Execute, value: "amixer set Master 0%", key: "XF86AudioMute"),
+        (command: Execute, value: "hw-volchange 0 --abs", key: "XF86AudioMute"),
         (command: Execute, value: "light -A 5", key: "XF86MonBrightnessUp"),
         (command: Execute, value: "light -U 5", key: "XF86MonBrightnessDown"),
         (command: CloseWindow, value: "", modifier: ["modkey", "Shift"], key: "q"),
