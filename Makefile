@@ -47,3 +47,6 @@ import-gpg-keys:
 send-keys-to-container:
 	docker cp $(PUB_KEY_LOC) shtest:/tmp/
 	docker cp $(PRI_KEY_LOC) shtest:/tmp/
+
+play-around:
+	docker container run -it ubuntu:latest bash
