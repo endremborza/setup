@@ -26,11 +26,11 @@ def reclist_directories [path: string, depth: int] {
 		|entry|
 			(reclist_directories $entry.name ($depth - 1))
 		}
-	return ($entries |  append [[$path]] | flatten)
+	return ($entries |  flatten)
 }
 
 def create_left_prompt [] {
-    let dir = match (do --ignore-shell-errors { $env.PWD | path relative-to $nu.home-path }) {
+    let dir = match (do --ignore-errors { $env.PWD | path relative-to $nu.home-path }) {
         null => $env.PWD
         '' => '~'
         $relative_pwd => ([~ $relative_pwd] | path join)
@@ -63,6 +63,15 @@ def create_right_prompt [] {
 
 def check_watch_history [] {
     ls ~/logs/watches | each {|e| cat $e.name | from csv } | reduce {|l,r| $l | append $r}
+}
+
+def series_list [] { medroy-ls | lines | each {to nuon} }
+def medroy [series: string@series_list] { 
+	~/.local/bin/medroy $series
+}
+
+def clipit [] {
+    $in | str join (char nl) | xclip -sel clipboard
 }
 
 # Use nushell functions to define your right and left prompt
