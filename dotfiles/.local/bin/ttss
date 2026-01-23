@@ -1,10 +1,11 @@
 #! /usr/bin/env nu
 source ~/.config/nushell/env.nu
-let selected_dir = [hacking, science] | each {|e| reclist_directories $'($env.HOME)/mega/($e)' 3}
+let selected_dir = [code, composites, folios] | each {|e| reclist_directories $'($env.HOME)/synced/($e)' 2}
 	| flatten
 	| str join (char nl)
 	| fzf
-let selected_name = $selected_dir | split row "/" | last;
+
+let selected_name = $selected_dir | split row "/" | last | str replace "." "_" --all;
 
 # sets global interpreter, fails for local jupyter
 let venv_dir = $"($selected_dir)/.venv"
@@ -18,7 +19,7 @@ def activate_venv [] {
 	}
 }
 
-let tfound = (tmux has-session -t $selected_name | complete | get exit_code)
+let tfound = (tmux has-session -t =$selected_name | complete | get exit_code)
 
 if ($tfound == 1) {
 	let sid = $"($selected_name):"
