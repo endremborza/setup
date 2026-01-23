@@ -1,5 +1,5 @@
 #! /bin/sh
 DSTR=`date -Iseconds`
-IFILE=/home/borza/Pictures/Screenshots/$DSTR.png
+IFILE=/home/borza/synced/media/images/personal/screenshots/$DSTR.png
 import $IFILE
 xclip -in -selection clipboard -target image/png $IFILE
