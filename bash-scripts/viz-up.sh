@@ -16,6 +16,9 @@ sudo apt install \
 	libxkbcommon-x11-dev \
 	libfreetype6-dev \
 	libfontconfig1-dev \
+	alsa-utils \
+	pulseaudio \
+	pulseaudio-utils \
 	wmctrl \
 	dbus-x11 \
 	firefox \
@@ -56,7 +59,9 @@ unzip UbuntuMono.zip -d ~/.local/share/fonts || exit 1
 
 sudo usermod -aG video $USER
 sudo usermod -aG input $USER
-sudo chown $USER /dev/tty0 /dev/tty7
+sudo usermod -aG audio $USER
+sudo usermod -aG tty $USER
+sudo chown $USER /dev/tty0 /dev/tty2
 
 # set x launchars to anybody
 #
@@ -64,4 +69,5 @@ sudo chown $USER /dev/tty0 /dev/tty7
 # allowed_users = anybody
 # 
 # create ~/.xinitrc exec dbus-launch leftwm
+# export DISPLAY=:0
 # xinit $(which leftwm)
