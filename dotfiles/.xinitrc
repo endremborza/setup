@@ -4,3 +4,6 @@ setterm -blank 0 -powerdown 0
 
 # turn off black Screensaver
 xset s off
+
+# bt blocker off
+rfkill unblock all
