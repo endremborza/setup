@@ -298,6 +298,15 @@ vim.api.nvim_create_autocmd("FileType", {
   callback = function(event) vim.bo[event.buf].commentstring = "#! /usr/bin/env %s" end,
 })
 
+vim.api.nvim_create_autocmd("BufWritePre", {
+  pattern = "*.xml",
+  callback = function()
+    local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+    vim.cmd([[silent %!xmllint --format -]])
+    vim.api.nvim_win_set_cursor(0, { row, col })
+  end,
+})
+
 vim.api.nvim_create_autocmd("FileType", {
   pattern = { "markdown", "tex", "plaintex", "xml" },
   callback = function()
@@ -653,13 +662,7 @@ local servers = {
       },
     },
   },
-  lemminx = {
-    xml = {
-      server = {
-        workDir = "~/.cache/lemminx", -- location for cache
-      }
-    }
-  },
+  lemminx = {},
   pyright = {},
   rust_analyzer = {},
   ts_ls = {},
