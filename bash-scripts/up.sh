@@ -29,6 +29,7 @@ sudo apt install \
 	stow \
 	xclip \
 	btop \
+	libclang-dev \
 	-y || exit 1
 
 # postfix for cron email sending
@@ -49,11 +50,17 @@ to_profile 'export ONSET_PATH="$HOME/onset-src"'
 . ~/.profile
 mkdir -p ~/.local/bin ~/.bash_completions ~/.local/share/fonts ~/logs/cron $ONSET_PATH
 
+#rclone
+sudo -v ; curl https://rclone.org/install.sh | sudo bash
+
+#python - uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
 # rust
 curl https://sh.rustup.rs -sSf | sh -s -- -y
 . ~/.cargo/env
 
-cargo install ripgrep du-dust fd-find nu bat pueue || exit 1
+cargo install ripgrep du-dust fd-find nu bat pueue tree-sitter-cli || exit 1
 # zellij - maybe at some point instead of tmux
 
 src_gh endremborza setup main
