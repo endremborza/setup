@@ -19,9 +19,9 @@ def activate_venv [] {
 	}
 }
 
-let tfound = (tmux has-session -t =$selected_name | complete | get exit_code)
+let tfound = (tmux has-session -t $'=($selected_name)' | complete | get exit_code)
 
-if ($tfound == 1) {
+if ($tfound != 0) {
 	let sid = $"($selected_name):"
 	tmux new-session -ds $selected_name -c $selected_dir -n nvim
 	activate_venv
