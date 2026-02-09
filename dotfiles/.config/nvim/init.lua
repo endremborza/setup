@@ -276,8 +276,8 @@ local function molten_insert_cell_separator()
   vim.fn.append(vim.fn.line("."), vim.g.molten_cell_separator)
 end
 
-vim.keymap.set("n", "<localleader>mi", ":MoltenInit<CR>", { silent = true, desc = "Initialize the plugin" })
-vim.keymap.set("n", "<localleader>mf", ":MoltenInfo<CR>", { silent = true, desc = "Initialize the plugin" })
+vim.keymap.set("n", "<localleader>mi", ":MoltenInit<CR>", { silent = true, desc = "initialize the plugin" })
+vim.keymap.set("n", "<localleader>mf", ":MoltenInfo<CR>", { silent = true, desc = "plugin info" })
 vim.keymap.set("n", "<localleader>ml", ":MoltenEvaluateLine<CR>", { silent = true, desc = "evaluate line" })
 vim.keymap.set("n", "<localleader>mr", ":MoltenReevaluateCell<CR>", { silent = true, desc = "re-evaluate cell" })
 vim.keymap.set("n", "<localleader>m0", ":MoltenRestart<CR>", { silent = true, desc = "restart kernel" })
@@ -302,7 +302,16 @@ vim.api.nvim_create_autocmd("BufWritePre", {
   pattern = "*.xml",
   callback = function()
     local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-    vim.cmd([[silent %!xmllint --format -]])
+    local buf = 0
+    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local input = table.concat(lines, "\n")
+
+    vim.fn.system("xmllint --noout --nonet -", input)
+    if vim.v.shell_error == 0 then
+      return
+    end
+
+    vim.cmd("silent %!xmllint --format -")
     vim.api.nvim_win_set_cursor(0, { row, col })
   end,
 })
