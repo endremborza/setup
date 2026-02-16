@@ -376,6 +376,7 @@ local ignore_pats = {
   '.git/',
   '.dvc/',
   '.venv/',
+  '.ipynb_checkpoints/',
   '.svelte-kit',
   'actions-runner',
   'node_modules',
