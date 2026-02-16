@@ -394,6 +394,7 @@ local ignore_pats = {
   '*.webp',
   '*.ipynb',
   '*.csv',
+  '*.pickle',
   '*.parquet',
   '*.xlsx',
   '*.lock',
