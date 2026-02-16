@@ -1,0 +1,15 @@
+_dienpy_complete() {
+    local cur
+    cur="${COMP_WORDS[COMP_CWORD]}"
+
+    local mods
+    mods=$(python - <<'EOF'
+import pkgutil, dienpy
+print(" ".join(m.name for m in pkgutil.iter_modules(dienpy.__path__)))
+EOF
+)
+
+    COMPREPLY=($(compgen -W "$mods" -- "$cur"))
+}
+
+complete -F _dienpy_complete dienpy
