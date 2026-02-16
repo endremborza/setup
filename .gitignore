@@ -1,0 +1,13 @@
+__pycache__/
+target/
+
+.ipynb_checkpoints
+.venv
+venv/
+
+*.parquet
+snip-data
+secrets
+local-dotfiles/host-*
+history.txt
+bak
