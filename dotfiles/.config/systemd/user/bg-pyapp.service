@@ -2,8 +2,7 @@
 Description=Background helper python app
 
 [Service]
-ExecStart=%h/.local/bin/bg-app-up
-# Type=notify
+ExecStart=%h/.local/bin/dienpy app
 Restart=always
 RestartSec=15
 
