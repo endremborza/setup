@@ -20,35 +20,33 @@ def get_latest_lua():
     with urllib.request.urlopen(url) as response:
         content = response.read().decode()
         versions = re.findall(r'lua-([0-9.]+)\.tar\.gz', content)
-        return max(versions, key=lambda v: [int(x) for x in v.split('.')])
+        # Filter for standard x.y.z versions
+        stable = [v for v in versions if len(v.split('.')) <= 3]
+        return max(stable, key=lambda v: [int(x) for x in v.split('.')])
 
 def main():
     up_sh = Path(__file__).parent.parent.parent / "bash-scripts" / "up.sh"
     content = up_sh.read_text()
     
-    current = {
-        "lua": re.search(r'lua-([0-9.]+)', content).group(1),
-        "luarocks": re.search(r'luarocks-([0-9.]+)', content).group(1),
-        "jq": re.search(r'jq jq-([0-9.]+)', content).group(1),
-        "neovim": re.search(r'neovim neovim (v[0-9.]+)', content).group(1),
-        "fzf": re.search(r'fzf (v[0-9.]+)', content).group(1),
-        "tmux": re.search(r'tmux tmux ([0-9.]+)', content).group(1),
+    apps = {
+        "lua": (r'lua-([0-9.]+)', "lua"),
+        "luarocks": (r'luarocks-([0-9.]+)', "luarocks/luarocks"),
+        "jq": (r'jq jq-([0-9.]+)', "jqlang/jq"),
+        "neovim": (r'neovim neovim (v[0-9.]+)', "neovim/neovim"),
+        "fzf": (r'fzf (v[0-9.]+)', "junegunn/fzf"),
+        "tmux": (r'tmux tmux ([0-9.]+)', "tmux/tmux"),
     }
 
-    latest = {
-        "lua": get_latest_lua(),
-        "luarocks": get_latest_gh("luarocks/luarocks"),
-        "jq": get_latest_gh("jqlang/jq"),
-        "neovim": get_latest_gh("neovim/neovim"),
-        "fzf": get_latest_gh("junegunn/fzf"),
-        "tmux": get_latest_gh("tmux/tmux"),
-    }
-
-    print(f"{'App':<10} {'Current':<12} {'Latest':<12}")
-    for app in current:
-        c, l = current[app], latest[app]
-        star = "*" if c != l.lstrip('v') and c.lstrip('v') != l.lstrip('v') else " "
-        print(f"{app:<10} {c:<12} {l:<12} {star}")
+    for name, (pat, src) in apps.items():
+        curr = re.search(pat, content).group(1)
+        lat = get_latest_lua() if src == "lua" else get_latest_gh(src)
+        
+        # Normalize for comparison
+        c_norm = curr.lstrip('v').split('-')[-1]
+        l_norm = lat.lstrip('v').split('-')[-1]
+        star = "*" if c_norm != l_norm else " "
+        
+        print(f"{name:10} {curr:10} -> {lat:12} {star}")
 
 if __name__ == "__main__":
     main()
