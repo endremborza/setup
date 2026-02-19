@@ -30,6 +30,7 @@ sudo apt install \
 	xclip \
 	btop \
 	libclang-dev \
+	openssh-server \
 	-y || exit 1
 
 # postfix for cron email sending
@@ -48,7 +49,7 @@ src_tgz () {
 to_profile 'export ONSET_PATH="$HOME/onset-src"'
 
 . ~/.profile
-mkdir -p ~/.local/bin ~/.bash_completions ~/.local/share/fonts ~/logs/cron $ONSET_PATH
+mkdir -p ~/.local/bin ~/.bash_completions ~/.local/share/fonts $ONSET_PATH
 
 #rclone
 sudo -v ; curl https://rclone.org/install.sh | sudo bash
@@ -60,7 +61,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 curl https://sh.rustup.rs -sSf | sh -s -- -y
 . ~/.cargo/env
 
-cargo install ripgrep du-dust fd-find nu bat pueue tree-sitter-cli || exit 1
+cargo install ripgrep du-dust fd-find bat pueue tree-sitter-cli || exit 1
+cargo install nu --locked || exit 1
 # zellij - maybe at some point instead of tmux
 
 src_gh endremborza setup main
@@ -70,15 +72,16 @@ to_profile '. "$HOME/.vars"'
 to_profile '. "$HOME/.secret-vars"'
 to_profile '. "$HOME/.local-vars"'
 
-src_gh jqlang jq jq-1.7.1
-git submodule update --init
-(autoreconf -i && ./configure --with-oniguruma=builtin && make clean && make -j8 && make check && sudo make install) || exit 1
-
+# stuff with versions - track the updates on these
 src_tgz http://www.lua.org/ftp lua-5.4.7
 make linux test && sudo make install
 
 src_tgz http://luarocks.github.io/luarocks/releases luarocks-3.11.1
 ./configure --with-lua-include=/usr/local/include && make && sudo make install
+
+src_gh jqlang jq jq-1.7.1
+git submodule update --init
+(autoreconf -i && ./configure --with-oniguruma=builtin && make clean && make -j8 && make check && sudo make install) || exit 1
 
 src_gh neovim neovim v0.10.1
 make CMAKE_BUILD_TYPE=RelWithDebInfo && sudo make install || exit 1
