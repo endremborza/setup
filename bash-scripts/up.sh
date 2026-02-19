@@ -74,23 +74,23 @@ to_profile '. "$HOME/.secret-vars"'
 to_profile '. "$HOME/.local-vars"'
 
 # stuff with versions - track the updates on these
-src_tgz http://www.lua.org/ftp lua-5.4.7
+src_tgz http://www.lua.org/ftp lua-5.5.0
 make linux test && sudo make install
 
-src_tgz http://luarocks.github.io/luarocks/releases luarocks-3.11.1
+src_tgz http://luarocks.github.io/luarocks/releases luarocks-3.13.0
 ./configure --with-lua-include=/usr/local/include && make && sudo make install
 
-src_gh jqlang jq jq-1.7.1
+src_gh jqlang jq jq-1.8.1
 git submodule update --init
 (autoreconf -i && ./configure --with-oniguruma=builtin && make clean && make -j8 && make check && sudo make install) || exit 1
 
-src_gh neovim neovim v0.10.1
+src_gh neovim neovim v0.11.6
 make CMAKE_BUILD_TYPE=RelWithDebInfo && sudo make install || exit 1
 
-src_gh junegunn fzf v0.54.0
+src_gh junegunn fzf v0.67.0
 ./install --all --key-bindings --completion --update-rc && stow --verbose=3 -t ~/.local/bin/ bin || exit 1
 
-src_gh tmux tmux 3.4
+src_gh tmux tmux 3.6a
 sh autogen.sh && ./configure && sudo make install || exit 1
 
 src_gh nushell nu_scripts main
