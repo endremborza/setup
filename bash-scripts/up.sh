@@ -39,6 +39,7 @@ to_profile () {
 }
 
 src_gh () {
+	rm -rf $ONSET_PATH/$2
 	cd $ONSET_PATH && git clone --branch $3 --depth 1 "https://github.com/$1/$2" && cd $2
 }
 
