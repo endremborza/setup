@@ -241,7 +241,7 @@ local function get_cell_range()
 end
 
 
-function select_cell()
+local function select_cell()
   local start, stop = get_cell_range()
   if start > stop then return end
 
@@ -338,7 +338,7 @@ vim.api.nvim_create_autocmd("FileType", {
     local lang = vim.treesitter.language.get_lang(args.match)
     if not lang then return end
     local max = 500 * 1024 -- 500 KB
-    local ok, stats = pcall(vim.loop.fs_stat, vim.api.nvim_buf_get_name(args.buf))
+    local ok, stats = pcall(vim.uv.fs_stat, vim.api.nvim_buf_get_name(args.buf))
     if ok and stats and stats.size > max then return end
     pcall(vim.treesitter.start, args.buf, lang)
   end,
@@ -674,7 +674,14 @@ local servers = {
     },
   },
   lemminx = {},
-  pyright = {},
+  ruff = {},
+  pyright = {
+    python = {
+      analysis = {
+        exclude = { ".venv", "**/.venv", "**/node_modules" },
+      },
+    },
+  },
   rust_analyzer = {},
   ts_ls = {},
   html = { filetypes = { 'html', 'twig', 'hbs' } },
@@ -691,6 +698,10 @@ local servers = {
 -- nvim-cmp supports additional completion capabilities, so broadcast that to servers
 local capabilities = vim.lsp.protocol.make_client_capabilities()
 capabilities = require('cmp_nvim_lsp').default_capabilities(capabilities)
+-- Prevent LSP servers from registering inotify file watchers (avoids ENOSPC on large projects)
+capabilities = vim.tbl_deep_extend("force", capabilities, {
+  workspace = { didChangeWatchedFiles = { dynamicRegistration = false } },
+})
 require('mason-lspconfig').setup {
   ensure_installed = vim.tbl_keys(servers),
   handlers = {
@@ -718,7 +729,7 @@ require('ufo').setup({
 require("conform").setup({
   formatters_by_ft = {
     lua = { "stylua" },
-    python = { "isort", "black" },
+    python = { "ruff_fix", "ruff_format" },
     javascript = { "prettierd", "prettier" },
     css = { "prettierd", "prettier" },
   },
