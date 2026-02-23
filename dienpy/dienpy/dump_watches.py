@@ -2,21 +2,118 @@ import datetime as dt
 import json
 import os
 import re
+import socket
 from pathlib import Path
 from subprocess import check_output
 
 import pandas as pd
+import requests
+from lxml import etree
 
 # sudo vim /etc/systemd/system/tv-tcpdump.service
 # sudo tcpdump -i eth1 'src host 192.168.1.236 and tcp[13] & 8 != 0 and tcp[13] & 16 != 0' -U  -w /var/services/homes/borza/tv-capture.pcap
 
-scp = f"{os.environ['SETUP_REPO']}/bash-scripts/upnpd.sh"
-ifile = "/volume2/homes/borza/tv-capture.pcap"
+
 NAS_ADDR = "home-nas-alpha"
+NAS_IP = socket.gethostbyname(NAS_ADDR)
+CONTENT_URL = f"http://{NAS_IP}:50001/ContentDirectory/control"
+
+NS = {
+    "s": "http://schemas.xmlsoap.org/soap/envelope/",
+    "u": "urn:schemas-upnp-org:service:ContentDirectory:1",
+    "didl": "urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/",
+    "dc": "http://purl.org/dc/elements/1.1/",
+    "upnp": "urn:schemas-upnp-org:metadata-1-0/upnp/",
+}
+
+SOAP_TEMPLATE = """<?xml version="1.0"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"
+            s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+  <s:Body>
+    <u:Browse xmlns:u="urn:schemas-upnp-org:service:ContentDirectory:1">
+      <ObjectID>{oid}</ObjectID>
+      <BrowseFlag>BrowseChildren</BrowseFlag>
+      <Filter>*</Filter>
+      <StartingIndex>0</StartingIndex>
+      <RequestedCount>5000</RequestedCount>
+      <SortCriteria></SortCriteria>
+    </u:Browse>
+  </s:Body>
+</s:Envelope>
+"""
+
+
+ifile = "/volume2/homes/borza/tv-capture.pcap"
+
+
+session = requests.Session()
+session.headers.update(
+    {
+        "Connection": "close",
+    }
+)
 
 
 def getd(oid):
-    return json.loads(check_output([scp, oid]))["DIDL-Lite"]
+    soap_body = SOAP_TEMPLATE.format(oid=oid)
+
+    resp = session.post(
+        CONTENT_URL,
+        headers={
+            "Content-Type": "text/xml; charset=utf-8",
+            "SOAPAction": '"urn:schemas-upnp-org:service:ContentDirectory:1#Browse"',
+        },
+        data=soap_body.encode("utf-8"),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    root = etree.fromstring(resp.content)
+
+    result_nodes = root.xpath(
+        '//*[local-name()="BrowseResponse"]/*[local-name()="Result"]/text()'
+    )
+
+    if not result_nodes:
+        return {"container": [], "item": []}
+
+    didl_root = etree.fromstring(result_nodes[0].encode())
+
+    containers = []
+    items = []
+
+    # Extract containers
+    for c in didl_root.xpath('//*[local-name()="container"]'):
+        containers.append(
+            {
+                "@id": c.get("id"),
+                "dc:title": (
+                    c.xpath('*[local-name()="title"]/text()')[0]
+                    if c.xpath('*[local-name()="title"]/text()')
+                    else ""
+                ),
+                "upnp:class": (
+                    c.xpath('*[local-name()="class"]/text()')[0]
+                    if c.xpath('*[local-name()="class"]/text()')
+                    else ""
+                ),
+            }
+        )
+
+    # Extract items
+    for i in didl_root.xpath('//*[local-name()="item"]'):
+        title = i.xpath('*[local-name()="title"]/text()')
+        res = i.xpath('*[local-name()="res"]/text()')
+        items.append(
+            {
+                "dc:title": title[0] if title else "",
+                "res": {"#text": res[0] if res else ""},
+            }
+        )
+
+    return {
+        "container": containers,
+        "item": items,
+    }
 
 
 def tol(ml):
@@ -43,8 +140,8 @@ def build_upnp_tree():
     def rec(oid):
         try:
             d = getd(oid)
-        except:
-            return
+        except Exception as e:
+            raise e
         for c in tol(d.get("container", [])):
             if c.get("upnp:class") == "object.container.storageFolder":
                 dirs.append(c)
@@ -94,5 +191,5 @@ def get_watch_history(use_cache=False):
 
 
 if __name__ == "__main__":
-    show_watches()
-    # dump_watches()
+    # show_watches()
+    dump_watches()
