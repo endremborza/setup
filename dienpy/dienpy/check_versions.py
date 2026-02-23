@@ -27,6 +27,7 @@ def get_latest_lua():
 def main():
     up_sh = Path(__file__).parent.parent.parent / "bash-scripts" / "up.sh"
     content = up_sh.read_text()
+    new_content = content
     
     apps = {
         "lua": (r'lua-([0-9.]+)', "lua"),
@@ -37,16 +38,38 @@ def main():
         "tmux": (r'tmux tmux ([0-9.]+)', "tmux/tmux"),
     }
 
+    print(f"{'App':<10} {'Current':<12} {'Latest':<12} {'Status'}")
     for name, (pat, src) in apps.items():
-        curr = re.search(pat, content).group(1)
+        match = re.search(pat, content)
+        if not match:
+            continue
+            
+        curr = match.group(1)
         lat = get_latest_lua() if src == "lua" else get_latest_gh(src)
         
-        # Normalize for comparison
-        c_norm = curr.lstrip('v').split('-')[-1]
-        l_norm = lat.lstrip('v').split('-')[-1]
-        star = "*" if c_norm != l_norm else " "
+        # Strip prefixes for normalization and selection
+        # We want to keep the format already present in up.sh
+        if name == "luarocks":
+            lat = lat.lstrip('v')
+        elif name == "jq":
+            lat = lat.replace("jq-", "")
+            
+        c_norm = curr.lstrip('v')
+        l_norm = lat.lstrip('v')
         
-        print(f"{name:10} {curr:10} -> {lat:12} {star}")
+        if c_norm != l_norm:
+            old_str = match.group(0)
+            new_str = old_str.replace(curr, lat)
+            new_content = new_content.replace(old_str, new_str)
+            status = f"UPDATING ({curr} -> {lat})"
+        else:
+            status = "OK"
+            
+        print(f"{name:<10} {curr:<12} {lat:<12} {status}")
+
+    if new_content != content:
+        up_sh.write_text(new_content)
+        print("\nChanges saved to up.sh")
 
 if __name__ == "__main__":
     main()
