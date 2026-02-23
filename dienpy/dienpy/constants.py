@@ -14,6 +14,9 @@ SYNCED_SHARE_DIR = f"{SYNC_ROOT}/share"
 REMOTE_NAME = "gdrive"
 REMOTE_ROOT = "rcloned"
 
+PDF_STORE = Path(SYNCED_FOLIOS_DIR) / "pile"
+REPO_STORE = Path(SYNCED_ASSETS_DIR) / "repos"
+
 
 if __name__ == "__main__":
     for k, v in list(locals().items()):
