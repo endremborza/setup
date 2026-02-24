@@ -1,6 +1,5 @@
 import datetime as dt
 import json
-import os
 import re
 import socket
 from pathlib import Path
@@ -126,7 +125,7 @@ def dump_watches():
         f"~/logs/watches/{idf}.csv", index=False
     )
     check_output(["ssh", "home-nas-alpha", f"rm {ifile}"])
-    check_output(["ssh", "home-nas-alpha", f"sudo systemctl restart tv-tcpdump"])
+    check_output(["ssh", "home-nas-alpha", "sudo systemctl restart tv-tcpdump"])
 
 
 def show_watches(use_cache: bool = False):
