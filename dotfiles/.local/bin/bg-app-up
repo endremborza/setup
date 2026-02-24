@@ -1,5 +1,0 @@
-#! /usr/bin/python
-from kno import parser_app
-
-if __name__ == "__main__":
-    parser_app.run(debug=True, port=5793)
