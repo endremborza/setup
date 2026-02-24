@@ -70,6 +70,21 @@ def medroy [series: string@series_list] {
 	~/.local/bin/medroy $series
 }
 
+
+def "nu-complete dienpy-mods" [] {
+    ^python -c 'import pkgutil, dienpy; print("\n".join(m.name for m in pkgutil.iter_modules(dienpy.__path__)))' 
+    | lines
+}
+
+def "nu-complete dienpy-paths" [] {
+    ls | get name
+}
+
+export extern "dienpy" [
+    module?: string@"nu-complete dienpy-mods"
+    path?: string@"nu-complete dienpy-paths"
+]
+
 def clipit [] {
     $in | str join (char nl) | xclip -sel clipboard
 }
