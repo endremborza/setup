@@ -1,0 +1,16 @@
+.git/
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+node_modules/
+.svelte-kit/
+htmlcov/
+.pytest_cache/
+
+target/
+build/
+_build/
+
+*.pyc
+*.tmp
+
