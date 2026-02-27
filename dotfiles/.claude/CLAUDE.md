@@ -10,7 +10,7 @@
 # Language Standards
 ## Python
 - Type hints required, pyright works on my nvim setup
-- Tools: ruff does my formatting on my nvim
+- Tools: ruff does my formatting on my nvim, uv manages environments in .venv
 - Prefer dataclasses for structured data
 - Prefer functional design with minimal mutations for data heavy workloads
 
