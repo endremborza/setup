@@ -392,7 +392,9 @@ local ignore_pats = {
   '*.ttf',
   '*.png',
   '*.jpg',
+  '*.gif',
   '*.webp',
+  '*.pdf',
   '*.ipynb',
   '*.csv',
   '*.pickle',
@@ -462,6 +464,7 @@ local function find_files_spec()
   local command = { 'rg',
     '--files',
     '--hidden',
+    "--no-ignore-vcs",
   }
   for _, v in pairs(ignore_pats) do
     table.insert(command, "--iglob")
@@ -470,7 +473,7 @@ local function find_files_spec()
   tele_std.find_files {
     find_command = command,
     previewer = true,
-    no_ignore = true,
+    -- no_ignore = true,
   }
 end
 
@@ -499,7 +502,10 @@ local function telescope_live_grep_clean()
     table.insert(iglobs, "!" .. v)
   end
   tele_std.live_grep {
-    glob_pattern = iglobs
+    glob_pattern = iglobs,
+    additional_args = function()
+      return { "--no-ignore-vcs" }
+    end,
   }
 end
 
