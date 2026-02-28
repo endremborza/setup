@@ -57,6 +57,9 @@ sudo -v ; curl https://rclone.org/install.sh | sudo bash
 
 #python - uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
+# tectonic
+curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.fullyjustified.net | sh
+mv tectonic ~/.local/bin/
 
 # rust
 curl https://sh.rustup.rs -sSf | sh -s -- -y
