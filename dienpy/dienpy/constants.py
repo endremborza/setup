@@ -16,6 +16,7 @@ REMOTE_ROOT = "rcloned"
 
 PDF_STORE = Path(SYNCED_FOLIOS_DIR) / "pile"
 REPO_STORE = Path(SYNCED_ASSETS_DIR) / "repos"
+STANDALONE_ANALYSIS_BASES = Path(SYNCED_DATA_DIR) / "standalone"
 
 
 if __name__ == "__main__":
