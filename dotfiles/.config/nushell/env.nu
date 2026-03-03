@@ -29,6 +29,15 @@ def reclist_directories [path: string, depth: int] {
 	return ($entries |  flatten)
 }
 
+
+def select_wdir [] {
+    return ([code, composites, folios] | each {|e| reclist_directories $'($env.HOME)/synced/($e)' 2}
+	| flatten
+	| str join (char nl)
+	| fzf
+	)
+}
+
 def create_left_prompt [] {
     let dir = match (do --ignore-errors { $env.PWD | path relative-to $nu.home-path }) {
         null => $env.PWD

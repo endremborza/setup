@@ -1,17 +1,11 @@
 #! /usr/bin/env nu
 source ~/.config/nushell/env.nu
-let selected_dir = [code, composites, folios] | each {|e| reclist_directories $'($env.HOME)/synced/($e)' 2}
-	| flatten
-	| str join (char nl)
-	| fzf
+let selected_dir = select_wdir;
 
 let selected_name = $selected_dir | split row "/" | last | str replace "." "_" --all;
 
-# sets global interpreter, fails for local jupyter
 let venv_dir = $"($selected_dir)/.venv"
 let is_venv = ($venv_dir | path exists)
-
-# https://github.com/amtoine/tmux-sessionizer at some point
 
 def activate_venv [] {
 	if $is_venv {
