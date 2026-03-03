@@ -1,2 +1,17 @@
 #! /bin/sh
-docker run --health-cmd=pg_isready --health-interval=10s --health-retries=5 --health-timeout=5s --health-start-period=15s -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres
+docker run --name postgresql-container \
+    --health-cmd=pg_isready \
+    --health-interval=10s \
+    --health-retries=5 \
+    --health-timeout=5s \
+    --health-start-period=15s \
+    -e POSTGRES_USER=$USER \
+    -e POSTGRES_PASSWORD=postgres \
+    -e PGDATA=/var/lib/postgresql/data \
+    -p 5432:5432 \
+    --mount type=volume,source=my-postgres-data,target=/var/lib/postgresql/data \
+    --rm \
+    borza-postgres
+
+# docker volume rm my-postgres-data
+# if mount needed -v /local/path/test-data:/var/lib/postgresql/data:Z \
