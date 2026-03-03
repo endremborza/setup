@@ -371,40 +371,19 @@ vim.api.nvim_create_autocmd('TextYankPost', {
 
 -- [[ Configure Telescope ]]
 -- See `:help telescope` and `:help telescope.setup()`
+local ignore_file = vim.fn.expand("~/.config/ignore_patterns")
 
-local ignore_pats = {
-  '.git/',
-  '.dvc/',
-  '.venv/',
-  '.ipynb_checkpoints/',
-  '.svelte-kit',
-  'actions-runner',
-  'node_modules',
-  'build/',
-  '__pycache__',
-  'target',
-  '.pytest_cache',
-  '.coverage',
-  'coverage.xml',
-  'htmlcov/',
-  -- '*.svg',
-  '*.otf',
-  '*.ttf',
-  '*.png',
-  '*.jpg',
-  '*.gif',
-  '*.webp',
-  '*.pdf',
-  '*.ipynb',
-  '*.csv',
-  '*.pickle',
-  '*.parquet',
-  '*.xlsx',
-  '*.lock',
-  '*.gz',
-  '*.zip',
-  '*.whl',
+local search_flags = {
+  "--no-ignore-vcs",
+  "--ignore-file", ignore_file,
 }
+
+local function extend(tbl1, tbl2)
+  local result = {}
+  for _, v in ipairs(tbl1) do table.insert(result, v) end
+  for _, v in ipairs(tbl2) do table.insert(result, v) end
+  return result
+end
 
 require('telescope').setup {
   defaults = {
@@ -414,8 +393,26 @@ require('telescope').setup {
         ['<C-d>'] = false,
       },
     },
-    -- no_ignore = true,
-    file_ignore_patterns = ignore_pats,
+    vimgrep_arguments = extend({
+      "rg",
+      "--color=never",
+      "--no-heading",
+      "--with-filename",
+      "--line-number",
+      "--column",
+      "--smart-case",
+      '--hidden',
+    }, search_flags),
+  },
+  pickers = {
+    find_files = {
+      find_command = extend({
+        "fd",
+        "--type",
+        "f",
+        '--hidden',
+      }, search_flags),
+    },
   },
 }
 
@@ -460,23 +457,6 @@ end
 
 vim.api.nvim_create_user_command('LiveGrepGitRoot', live_grep_git_root, {})
 
-local function find_files_spec()
-  local command = { 'rg',
-    '--files',
-    '--hidden',
-    "--no-ignore-vcs",
-  }
-  for _, v in pairs(ignore_pats) do
-    table.insert(command, "--iglob")
-    table.insert(command, "!" .. v)
-  end
-  tele_std.find_files {
-    find_command = command,
-    previewer = true,
-    -- no_ignore = true,
-  }
-end
-
 -- See `:help telescope.builtin`
 vim.keymap.set('n', '<leader>?', tele_std.oldfiles, { desc = '[?] Find recently opened files' })
 vim.keymap.set('n', '<leader><space>', tele_std.buffers, { desc = '[ ] Find existing buffers' })
@@ -496,20 +476,6 @@ local function telescope_live_grep_open_files()
 end
 
 
-local function telescope_live_grep_clean()
-  local iglobs = {}
-  for _, v in pairs(ignore_pats) do
-    table.insert(iglobs, "!" .. v)
-  end
-  tele_std.live_grep {
-    glob_pattern = iglobs,
-    additional_args = function()
-      return { "--no-ignore-vcs" }
-    end,
-  }
-end
-
-
 local function telescope_todo()
   tele_std.grep_string { search = 'TODO' }
 end
@@ -518,11 +484,11 @@ end
 vim.keymap.set('n', '<leader>s/', telescope_live_grep_open_files, { desc = '[S]earch [/] in Open Files' })
 vim.keymap.set('n', '<leader>ss', tele_std.builtin, { desc = '[S]earch [S]elect Telescope' })
 vim.keymap.set('n', '<leader>gf', tele_std.git_files, { desc = 'Search [G]it [F]iles' })
-vim.keymap.set('n', '<leader>sf', find_files_spec, { desc = '[S]earch [F]iles' })
+vim.keymap.set('n', '<leader>sf', tele_std.find_files, { desc = '[S]earch [F]iles' })
 vim.keymap.set('n', '<leader>st', telescope_todo, { desc = '[S]earch [T]odo' })
 vim.keymap.set('n', '<leader>sh', tele_std.help_tags, { desc = '[S]earch [H]elp' })
 vim.keymap.set('n', '<leader>sw', tele_std.grep_string, { desc = '[S]earch current [W]ord' })
-vim.keymap.set('n', '<leader>sg', telescope_live_grep_clean, { desc = '[S]earch by [G]rep' })
+vim.keymap.set('n', '<leader>sg', tele_std.live_grep, { desc = '[S]earch by [G]rep' })
 vim.keymap.set('n', '<leader>sG', ':LiveGrepGitRoot<cr>', { desc = '[S]earch by [G]rep on Git Root' })
 vim.keymap.set('n', '<leader>sd', tele_std.diagnostics, { desc = '[S]earch [D]iagnostics' })
 vim.keymap.set('n', '<leader>sr', tele_std.resume, { desc = '[S]earch [R]esume' })
