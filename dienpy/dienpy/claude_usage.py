@@ -47,8 +47,6 @@ def main():
     parser.add_argument("--interval", type=int, default=5)
     args = parser.parse_args()
 
-    token = find_token()
-
     progress = Progress(
         TextColumn("[bold]{task.fields[label]}"),
         TextColumn("{task.percentage:>5.1f}%"),
@@ -61,13 +59,15 @@ def main():
     seven_usage_task = progress.add_task("", total=100, label="7-Day Usage")
     seven_time_task = progress.add_task("", total=100, label="7-Day Time")
 
+    five_resets_at = [""]
+
     def render():
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return Group(
             Rule("[bold]Claude Code Usage[/bold]"),
             progress,
             "",
-            f"[dim]Last updated: {timestamp}[/dim]",
+            f"[dim]Last updated: {timestamp}  |  5h resets: {five_resets_at[0]}[/dim]",
         )
 
     def update_values():
@@ -80,6 +80,12 @@ def main():
 
         five_time = percent_time_elapsed(five["resets_at"], 5 * 3600)
         seven_time = percent_time_elapsed(seven["resets_at"], 7 * 24 * 3600)
+
+        five_resets_at[0] = (
+            datetime.datetime.fromisoformat(five["resets_at"])
+            .astimezone()
+            .strftime("%H:%M")
+        )
 
         progress.update(five_usage_task, completed=five_usage)
         progress.update(seven_usage_task, completed=seven_usage)
