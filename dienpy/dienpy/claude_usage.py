@@ -60,6 +60,7 @@ def main():
     seven_time_task = progress.add_task("", total=100, label="7-Day Time")
 
     five_resets_at = [""]
+    week_resets_at = [""]
 
     def render():
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -67,7 +68,7 @@ def main():
             Rule("[bold]Claude Code Usage[/bold]"),
             progress,
             "",
-            f"[dim]Last updated: {timestamp}  |  5h resets: {five_resets_at[0]}[/dim]",
+            f"[dim]Last updated: {timestamp}  |  5h resets: {five_resets_at[0]} | 1w resets: {week_resets_at[0]}[/dim]",
         )
 
     def update_values():
@@ -85,6 +86,12 @@ def main():
             datetime.datetime.fromisoformat(five["resets_at"])
             .astimezone()
             .strftime("%H:%M")
+        )
+
+        week_resets_at[0] = (
+            datetime.datetime.fromisoformat(seven["resets_at"])
+            .astimezone()
+            .strftime("%a, %H")
         )
 
         progress.update(five_usage_task, completed=five_usage)
