@@ -28,6 +28,7 @@ sudo apt install \
 	make \
 	stow \
 	xclip \
+	tree \
 	btop \
 	libclang-dev \
 	openssh-server \
