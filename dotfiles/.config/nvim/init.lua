@@ -221,6 +221,12 @@ vim.api.nvim_create_autocmd("User", {
   end,
 })
 
+vim.api.nvim_create_autocmd("FocusGained", {
+  callback = function()
+    pcall(require('gitsigns').refresh)
+  end,
+})
+
 --molten keymaps and config
 
 vim.g.molten_cell_separator = "# %%"
