@@ -122,7 +122,7 @@ def tol(ml):
 def dump_watches():
     idf = dt.date.today().isoformat()
     get_watch_history().assign(date=idf).to_csv(
-        f"~/logs/watches/{idf}.csv", index=False
+        f"/mnt/data/logs/watches/{idf}.csv", index=False
     )
     check_output(["ssh", "home-nas-alpha", f"rm {ifile}"])
     check_output(["ssh", "home-nas-alpha", "sudo systemctl restart tv-tcpdump"])
