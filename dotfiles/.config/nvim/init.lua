@@ -212,6 +212,15 @@ vim.keymap.set('n', '<leader>y', '"ayy:!echo "<C-r>a"<enter>', { desc = 'Use lin
 
 vim.keymap.set('v', '<leader>p', '"_dP', { desc = "Paste without replacing buffer" })
 
+-- Refresh gitsigns when fugitive makes changes (commit, stage, etc.)
+vim.api.nvim_create_autocmd("User", {
+  pattern = "FugitiveChanged",
+  callback = function()
+    -- We wrap this in a pcall just in case gitsigns isn't loaded yet
+    pcall(require('gitsigns').refresh)
+  end,
+})
+
 --molten keymaps and config
 
 vim.g.molten_cell_separator = "# %%"
