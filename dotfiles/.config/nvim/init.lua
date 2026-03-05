@@ -585,6 +585,7 @@ vim.cmd.colorscheme "catppuccin"
 
 -- [[ Configure LSP ]]
 -- Add this near the top of your config
+--
 local on_attach = function(client, bufnr)
   local nmap = function(keys, func, desc)
     if desc then
@@ -667,6 +668,12 @@ local servers = {
     },
   },
 }
+
+
+local mason_servers = vim.tbl_filter(function(server)
+  return server ~= "ruff"
+end, vim.tbl_keys(servers))
+
 -- nvim-cmp supports additional completion capabilities, so broadcast that to servers
 local capabilities = vim.lsp.protocol.make_client_capabilities()
 capabilities = require('cmp_nvim_lsp').default_capabilities(capabilities)
@@ -675,7 +682,7 @@ capabilities = vim.tbl_deep_extend("force", capabilities, {
   workspace = { didChangeWatchedFiles = { dynamicRegistration = false } },
 })
 require('mason-lspconfig').setup {
-  ensure_installed = vim.tbl_keys(servers),
+  ensure_installed = mason_servers,
   handlers = {
     function(server_name)
       local server_config = {
@@ -686,6 +693,9 @@ require('mason-lspconfig').setup {
       if server_name == "rust_analyzer" then
         local ra_path = vim.fn.trim(vim.fn.system("rustup which rust-analyzer"))
         server_config.cmd = { ra_path }
+      end
+      if server_name == "ruff" then
+        server_config.cmd = { "ruff", "server" }
       end
       require('lspconfig')[server_name].setup(server_config)
     end,
