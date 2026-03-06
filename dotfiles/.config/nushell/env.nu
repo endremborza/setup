@@ -71,7 +71,7 @@ def create_right_prompt [] {
 }
 
 def check_watch_history [] {
-    ls ~/logs/watches | each {|e| cat $e.name | from csv } | reduce {|l,r| $l | append $r}
+    ls /mnt/data/logs/watches | each {|e| cat $e.name | from csv } | reduce {|l,r| $l | append $r}
 }
 
 def series_list [] { medroy-ls | lines | each {to nuon} }
