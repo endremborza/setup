@@ -10,5 +10,4 @@ normal = { family = "UbuntuMonoNerdFont" }
 size = 13
 [window]
 opacity=0.9
-startup_mode = "Fullscreen"
 
