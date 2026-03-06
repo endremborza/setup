@@ -11,7 +11,6 @@ fi
 ln -s $SCRIPTPATH/down /tmp/leftwm-theme-down
 
 dunst >> /tmp/dunst.log &
-
 leftwm-command "LoadTheme $SCRIPTPATH/theme.ron"
 
 if [ -x "$(command -v polybar)" ]; then
