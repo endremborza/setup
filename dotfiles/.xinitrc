@@ -1,9 +1,10 @@
-# turn off Display Power Management Service (DPMS)
-xset -dpms
-setterm -blank 0 -powerdown 0
+xrdb -merge ~/.Xresources
+setxkbmap us
 
-# turn off black Screensaver
 xset s off
+xset s noblank
+xset -dpms
 
-# bt blocker off
 rfkill unblock all
+
+exec dbus-launch leftwm
