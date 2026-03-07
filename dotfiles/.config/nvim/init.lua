@@ -6,7 +6,7 @@ vim.opt.spelllang = { "en", "en_gb" } -- or en_us
 vim.opt.spellsuggest = "best,9"
 
 local lazypath = vim.fn.stdpath 'data' .. '/lazy/lazy.nvim'
-if not vim.loop.fs_stat(lazypath) then
+if not vim.uv.fs_stat(lazypath) then
   vim.fn.system {
     'git',
     'clone',
@@ -129,7 +129,6 @@ require('lazy').setup({
     main = 'ibl',
     opts = {},
   },
-  { 'numToStr/Comment.nvim', opts = {} },
 
   {
     'nvim-telescope/telescope.nvim',
@@ -189,6 +188,7 @@ vim.o.smartcase = true
 
 vim.wo.signcolumn = 'yes'
 
+vim.o.autoread = true
 vim.o.updatetime = 250
 vim.o.timeoutlen = 300
 
@@ -221,8 +221,9 @@ vim.api.nvim_create_autocmd("User", {
   end,
 })
 
-vim.api.nvim_create_autocmd("FocusGained", {
+vim.api.nvim_create_autocmd({ "FocusGained", "BufEnter" }, {
   callback = function()
+    vim.cmd('checktime')
     pcall(require('gitsigns').refresh)
   end,
 })
@@ -266,7 +267,7 @@ local function select_cell()
   vim.api.nvim_win_set_cursor(0, { stop, 0 })
 end
 
-function _G.molten_evaluate_cell()
+local function molten_evaluate_cell()
   local start, stop = get_cell_range()
   if start > stop then return end
   local view = vim.fn.winsaveview()
@@ -528,13 +529,13 @@ vim.keymap.set("n", "<leader>gh", function()
   vim.cmd(cmd)
 end, { desc = "[G]it commit [H]istory (log) for current line" })
 
--- Spellcheck keymaps
---
-vim.keymap.set("n", "]s", "]s", { desc = "Next misspelled word" })
-vim.keymap.set("n", "[s", "[s", { desc = "Prev misspelled word" })
-vim.keymap.set("n", "zg", "zg", { desc = "Add word to dictionary" })
-vim.keymap.set("n", "zw", "zw", { desc = "Mark word as wrong" })
-vim.keymap.set("n", "z=", "z=", { desc = "Spelling suggestions" })
+require('which-key').add {
+  { "]s", desc = "Next misspelled word" },
+  { "[s", desc = "Prev misspelled word" },
+  { "zg", desc = "Add word to dictionary" },
+  { "zw", desc = "Mark word as wrong" },
+  { "z=", desc = "Spelling suggestions" },
+}
 
 -- [[ Configure Treesitter ]]
 -- See `:help nvim-treesitter`
@@ -580,23 +581,6 @@ require('which-key').add {
 require('catppuccin').setup({ flavour = "mocha", transparent_background = true })
 vim.cmd.colorscheme "catppuccin"
 
--- require("eslint").setup({
---   bin = 'eslint', -- or `eslint_d`
---   code_actions = {
---     enable = false,
---     apply_on_save = {
---       enable = false,
---       types = { "directive", "problem", "suggestion", "layout" },
---     },
---   },
---   diagnostics = {
---     enable = true,
---     report_unused_disable_directives = false,
---     run_on = "type", -- or `save`
---   },
--- })
-
-
 
 -- [[ Configure LSP ]]
 -- Add this near the top of your config
@@ -639,7 +623,6 @@ vim.api.nvim_create_autocmd("LspAttach", {
   end,
 })
 
-require('Comment').setup()
 require('lsp_signature').setup()
 -- mason-lspconfig requires that these setup functions are called in this order
 -- before setting up the servers.
