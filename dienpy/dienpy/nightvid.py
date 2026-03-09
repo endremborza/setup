@@ -288,6 +288,26 @@ def _pid_exists(pid: int) -> bool:
         return False
 
 
+SUBCOMMANDS = ["start", "stop", "status", "ls", "reset", "set"]
+
+
+def get_completions(args: list[str]) -> list[str]:
+    if len(args) <= 1:
+        return SUBCOMMANDS
+    cmd = args[0]
+    if cmd in ("start", "reset", "set") and len(args) == 2:
+        try:
+            series = list_series()
+        except (FileNotFoundError, PermissionError):
+            series = []
+        if cmd == "start":
+            return series + ["--sleep"]
+        return series
+    if cmd == "start" and len(args) == 3 and args[1] == "--sleep":
+        return []
+    return []
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="nightvid")
     sub = p.add_subparsers(dest="cmd", required=True)
