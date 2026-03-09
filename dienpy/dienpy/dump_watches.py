@@ -3,7 +3,7 @@ import json
 import re
 import socket
 from pathlib import Path
-from subprocess import check_output
+from subprocess import check_output, Popen, PIPE
 
 import pandas as pd
 import requests
@@ -43,6 +43,7 @@ SOAP_TEMPLATE = """<?xml version="1.0"?>
 
 
 ifile = "/volume2/homes/borza/tv-capture.pcap"
+ifile = "/var/services/homes/borza/tv-capture.pcap"
 
 
 session = requests.Session()
@@ -169,10 +170,17 @@ def get_watch_history(use_cache=False):
     file_recs = [d["res"] | {"title": d["dc:title"]} for d in nondirs]
     file_map = {d["#text"].split("/v/")[-1]: d["title"] for d in file_recs}
 
-    ofile = "/tmp/tvtcp-dumpfile"
-    check_output(["scp", f"home-nas-alpha:{ifile}", ofile])
-    ostr = check_output(["tcpdump", "-r", ofile, "-A"]).decode()
-    Path(ofile).unlink()
+    ssh = Popen(
+        ["ssh", "-C", "home-nas-alpha", f"cat {ifile}"],
+        stdout=PIPE,
+    )
+
+    ostr = check_output(
+        ["tcpdump", "-r", "-", "-A"],
+        stdin=ssh.stdout,
+    ).decode()
+
+    ssh.wait()
 
     sub_base = set(re.findall(r"(NDLNA/\d+\.[a-z|0-9|A-Z]+)", ostr))
     sub_map = {k: file_map.get(k, "") for k in sub_base}
@@ -189,6 +197,6 @@ def get_watch_history(use_cache=False):
     return pd.DataFrame(runs).drop_duplicates(subset=["title"])
 
 
-if __name__ == "__main__":
-    # show_watches()
+def main():
+    # show_watches(True)
     dump_watches()
