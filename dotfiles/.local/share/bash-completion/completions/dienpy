@@ -1,24 +1,19 @@
 _dienpy_complete() {
-    local cur prev
-    cur="${COMP_WORDS[COMP_CWORD]}"
-    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    local mod="${COMP_WORDS[1]}"
+    local args=("${COMP_WORDS[@]:2}")
 
-    # First argument → python module completion
     if [[ $COMP_CWORD -eq 1 ]]; then
-        local mods
-        mods=$(python - <<'EOF'
-import pkgutil, dienpy
-print(" ".join(m.name for m in pkgutil.iter_modules(dienpy.__path__)))
-EOF
-)
-        COMPREPLY=($(compgen -W "$mods" -- "$cur"))
+        COMPREPLY=($(compgen -W "$(dienpy --complete 2>/dev/null)" -- "$cur"))
         return 0
     fi
 
-    # Second argument → file path completion
-    if [[ $COMP_CWORD -eq 2 ]]; then
+    local out IFS=$'\n'
+    out=$(dienpy --complete "$mod" "${args[@]}" 2>/dev/null)
+    if [[ -n "$out" ]]; then
+        COMPREPLY=($(compgen -W "$out" -- "$cur"))
+    else
         COMPREPLY=($(compgen -f -- "$cur"))
-        return 0
     fi
 }
 
