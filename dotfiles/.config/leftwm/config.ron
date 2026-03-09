@@ -71,6 +71,8 @@
     disable_cursor_reposition_on_resize: false,
     keybind: [
         (command: Execute, value: "dmenu_run", modifier: ["modkey"], key: "p"),
+        (command: Execute, value: "tmuxwrap git", modifier: ["modkey"], key: "g"),
+        (command: Execute, value: "tmuxwrap clean", modifier: ["modkey"], key: "o"),
         (command: Execute, value: "alacritty", modifier: ["modkey", "Shift"], key: "Return"),
         (command: Execute, value: "screenshot",  key: "Print"),
         (command: Execute, value: "firefox", modifier: ["modkey"], key: "f"),
