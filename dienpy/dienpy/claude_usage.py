@@ -44,7 +44,7 @@ def percent_time_elapsed(resets_at, total_seconds):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--w", "--watch", action="store_true", dest="watch")
-    parser.add_argument("--interval", type=int, default=5)
+    parser.add_argument("--interval", type=int, default=30)
     args = parser.parse_args()
 
     progress = Progress(
@@ -79,8 +79,12 @@ def main():
         five_usage = five["utilization"]
         seven_usage = seven["utilization"]
 
-        five_time = percent_time_elapsed(five["resets_at"], 5 * 3600)
-        seven_time = percent_time_elapsed(seven["resets_at"], 7 * 24 * 3600)
+        try:
+            five_time = percent_time_elapsed(five["resets_at"], 5 * 3600)
+            seven_time = percent_time_elapsed(seven["resets_at"], 7 * 24 * 3600)
+        except Exception as e:
+            print(usage)
+            raise e
 
         five_resets_at[0] = (
             datetime.datetime.fromisoformat(five["resets_at"])
@@ -115,6 +119,10 @@ def main():
     else:
         update_values()
         console.print(render())
+
+
+def get_completions(args: list[str]) -> list[str]:
+    return ["--watch", "--interval"]
 
 
 if __name__ == "__main__":
