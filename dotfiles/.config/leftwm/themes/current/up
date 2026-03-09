@@ -3,6 +3,8 @@ export SCRIPTPATH="$( cd "$(dirname "$0")" ; pwd -P )"
 
 . $HOME/.profile
 
+systemctl --user set-environment DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" DISPLAY="$DISPLAY" XAUTHORITY="$XAUTHORITY"
+
 if [ -f "/tmp/leftwm-theme-down" ]; then
     /tmp/leftwm-theme-down
     rm /tmp/leftwm-theme-down
