@@ -156,7 +156,7 @@ def cmd_start(series: Optional[str], sleep_mins: Optional[float]) -> None:
         raise SystemExit(f"Series '{name}' is finished. Use: nightvid reset {name!r}")
 
     uris = ["file://" + fp.as_posix() for fp in files[i:]]
-    proc = subprocess.Popen(["vlc", *uris])
+    proc = subprocess.Popen(["vlc", "--extraintf", "http", "--http-password", "pw", *uris])
 
     # seek to offset within first file
     if offset > 1:
