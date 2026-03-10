@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import os
 import re
 import subprocess
@@ -10,6 +11,17 @@ from subprocess import check_output
 from typing import Optional
 
 ROOT_DIR = Path("/mnt/alpha-video/archive/night-time/")
+LOG_FILE = Path("/mnt/data/logs/nightvid.log")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_FILE),
+        logging.StreamHandler(),
+    ],
+)
+log = logging.getLogger(__name__)
 CONFIG_FILE = Path.home() / ".config" / "nightvid.json"
 SERIES_STATE_FNAME = "night-vid.json"
 STATE_FILE = ROOT_DIR / SERIES_STATE_FNAME
@@ -192,6 +204,7 @@ def cmd_start(series: Optional[str], sleep_mins: Optional[float]) -> None:
         print(f"Sleep timer set for {sleep_mins:.0f} minutes (pueue task {timer_id})")
 
     save_global(GlobalState(d=name, vlc_pid=proc.pid, timer_task_id=timer_id))
+    log.info("start series=%s pos=%s pid=%d", name, fmt_ep(files, i, offset), proc.pid)
     print(f"Playing '{name}' from {fmt_ep(files, i, offset)}")
     if cfg.current_series != name:
         cfg.current_series = name
@@ -217,6 +230,7 @@ def cmd_stop() -> None:
     cancel_timer(gstate.timer_task_id)
     if gstate.d:
         _save_stop_position(gstate)
+        log.info("stop series=%s", gstate.d)
         print(f"Stopped '{gstate.d}', position saved.")
     save_global(GlobalState())
 
@@ -280,6 +294,21 @@ def cmd_set(series: str) -> None:
     print(f"Current series set to '{series}'.")
 
 
+def cmd_rewind(minutes: float, series: Optional[str]) -> None:
+    cfg = load_config()
+    name = series or cfg.current_series
+    if not name:
+        raise SystemExit("No series specified and no current series set.")
+    sstate = load_series(name)
+    seconds = minutes * 60
+    sstate.offset = max(sstate.offset - seconds, 0)
+    sstate.started_at = 0
+    save_series(name, sstate)
+    files, i, offset = resolve_position(name, sstate)
+    log.info("rewind series=%s by=%.1fmin new_pos=%s", name, minutes, fmt_ep(files, i, offset))
+    print(f"Rewound '{name}' by {minutes:.1f} min → {fmt_ep(files, i, offset)}")
+
+
 def _pid_exists(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -288,7 +317,7 @@ def _pid_exists(pid: int) -> bool:
         return False
 
 
-SUBCOMMANDS = ["start", "stop", "status", "ls", "reset", "set"]
+SUBCOMMANDS = ["start", "stop", "status", "ls", "reset", "set", "rewind"]
 
 
 def get_completions(args: list[str]) -> list[str]:
@@ -326,6 +355,10 @@ def main() -> None:
     setp = sub.add_parser("set", help="Set current series")
     setp.add_argument("series")
 
+    rwp = sub.add_parser("rewind", help="Rewind current series by N minutes")
+    rwp.add_argument("minutes", type=float, metavar="MINS")
+    rwp.add_argument("series", nargs="?")
+
     args = p.parse_args()
 
     match args.cmd:
@@ -341,3 +374,5 @@ def main() -> None:
             cmd_reset(args.series)
         case "set":
             cmd_set(args.series)
+        case "rewind":
+            cmd_rewind(args.minutes, args.series)
