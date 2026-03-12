@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import signal
 import subprocess
 import time
 from dataclasses import asdict, dataclass, field
@@ -37,7 +38,7 @@ class Config:
 class GlobalState:
     d: str = ""
     vlc_pid: int = 0
-    timer_task_id: int = 0
+    timer_pid: int = 0
 
 
 @dataclass
@@ -51,7 +52,7 @@ class SeriesState:
 def _load(cls, fp: Path):
     try:
         return cls(**json.loads(fp.read_text()))
-    except (FileNotFoundError, json.JSONDecodeError):
+    except (FileNotFoundError, json.JSONDecodeError, TypeError):
         return cls()
 
 
@@ -134,10 +135,14 @@ def fmt_ep(files: list[Path], i: int, offset: float) -> str:
     return f"{ep} @ {round(offset / 60, 1)}min"
 
 
-def cancel_timer(task_id: int) -> None:
-    if task_id:
-        subprocess.run(["pueue", "kill", str(task_id)], capture_output=True)
-        subprocess.run(["pueue", "remove", str(task_id)], capture_output=True)
+def cancel_timer(pid: int) -> None:
+    if pid:
+        try:
+            pgid = os.getpgid(pid)
+            if pgid != os.getpgrp():
+                os.killpg(pgid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            pass
 
 
 def stop_vlc(state: GlobalState) -> None:
@@ -158,7 +163,7 @@ def cmd_start(series: Optional[str], sleep_mins: Optional[float]) -> None:
 
     gstate = load_global()
     stop_vlc(gstate)
-    cancel_timer(gstate.timer_task_id)
+    cancel_timer(gstate.timer_pid)
     if gstate.d:
         _save_stop_position(gstate)
 
@@ -168,7 +173,9 @@ def cmd_start(series: Optional[str], sleep_mins: Optional[float]) -> None:
         raise SystemExit(f"Series '{name}' is finished. Use: nightvid reset {name!r}")
 
     uris = ["file://" + fp.as_posix() for fp in files[i:]]
-    proc = subprocess.Popen(["vlc", "--extraintf", "http", "--http-password", "pw", *uris])
+    proc = subprocess.Popen(
+        ["vlc", "--extraintf", "http", "--http-password", "pw", *uris]
+    )
 
     # seek to offset within first file
     if offset > 1:
@@ -186,25 +193,25 @@ def cmd_start(series: Optional[str], sleep_mins: Optional[float]) -> None:
     sstate.started_at = time.time()
     save_series(name, sstate)
 
-    timer_id = 0
+    timer_pid = 0
     if sleep_mins:
         seconds = int(sleep_mins * 60)
-        out = check_output(
-            [
-                "pueue",
-                "add",
-                "--print-task-id",
-                "--",
-                "sh",
-                "-c",
-                f"sleep {seconds} && dienpy nightvid stop",
-            ]
+        timer_proc = subprocess.Popen(
+            f"sleep {seconds} && ~/.local/bin/dienpy nightvid stop",
+            shell=True,
+            start_new_session=True,
         )
-        timer_id = int(out.decode().strip())
-        print(f"Sleep timer set for {sleep_mins:.0f} minutes (pueue task {timer_id})")
+        timer_pid = timer_proc.pid
+        print(f"Sleep timer set for {sleep_mins:.0f} minutes")
 
-    save_global(GlobalState(d=name, vlc_pid=proc.pid, timer_task_id=timer_id))
-    log.info("start series=%s pos=%s pid=%d", name, fmt_ep(files, i, offset), proc.pid)
+    save_global(GlobalState(d=name, vlc_pid=proc.pid, timer_pid=timer_pid))
+    log.info(
+        "start series=%s pos=%s pid=%d%s",
+        name,
+        fmt_ep(files, i, offset),
+        proc.pid,
+        f" sleep={sleep_mins:.0f}min" if sleep_mins else "",
+    )
     print(f"Playing '{name}' from {fmt_ep(files, i, offset)}")
     if cfg.current_series != name:
         cfg.current_series = name
@@ -227,7 +234,7 @@ def cmd_stop() -> None:
         print("Nothing playing.")
         return
     stop_vlc(gstate)
-    cancel_timer(gstate.timer_task_id)
+    cancel_timer(gstate.timer_pid)
     if gstate.d:
         _save_stop_position(gstate)
         log.info("stop series=%s", gstate.d)
@@ -249,8 +256,8 @@ def cmd_status() -> None:
     pid_alive = gstate.vlc_pid and _pid_exists(gstate.vlc_pid)
     status = "playing" if pid_alive else "paused/stopped"
     print(f"{gstate.d} [{status}]: {fmt_ep(files, i, offset)}")
-    if gstate.timer_task_id:
-        print(f"Sleep timer: pueue task {gstate.timer_task_id}")
+    if gstate.timer_pid:
+        print(f"Sleep timer active (pid {gstate.timer_pid})")
 
 
 def cmd_ls() -> None:
@@ -305,8 +312,33 @@ def cmd_rewind(minutes: float, series: Optional[str]) -> None:
     sstate.started_at = 0
     save_series(name, sstate)
     files, i, offset = resolve_position(name, sstate)
-    log.info("rewind series=%s by=%.1fmin new_pos=%s", name, minutes, fmt_ep(files, i, offset))
+    log.info(
+        "rewind series=%s by=%.1fmin new_pos=%s",
+        name,
+        minutes,
+        fmt_ep(files, i, offset),
+    )
     print(f"Rewound '{name}' by {minutes:.1f} min → {fmt_ep(files, i, offset)}")
+
+
+def cmd_fwd(minutes: float, series: Optional[str]) -> None:
+    cfg = load_config()
+    name = series or cfg.current_series
+    if not name:
+        raise SystemExit("No series specified and no current series set.")
+    sstate = load_series(name)
+    seconds = minutes * 60
+    sstate.offset += seconds
+    sstate.started_at = 0
+    save_series(name, sstate)
+    files, i, offset = resolve_position(name, sstate)
+    log.info(
+        "fwd series=%s by=%.1fmin new_pos=%s",
+        name,
+        minutes,
+        fmt_ep(files, i, offset),
+    )
+    print(f"Fast-forwarded '{name}' by {minutes:.1f} min → {fmt_ep(files, i, offset)}")
 
 
 def _pid_exists(pid: int) -> bool:
@@ -317,7 +349,7 @@ def _pid_exists(pid: int) -> bool:
         return False
 
 
-SUBCOMMANDS = ["start", "stop", "status", "ls", "reset", "set", "rewind"]
+SUBCOMMANDS = ["start", "stop", "status", "ls", "reset", "set", "rewind", "fwd"]
 
 
 def get_completions(args: list[str]) -> list[str]:
@@ -359,6 +391,10 @@ def main() -> None:
     rwp.add_argument("minutes", type=float, metavar="MINS")
     rwp.add_argument("series", nargs="?")
 
+    fwp = sub.add_parser("fwd", help="Fast-forward current series by N minutes")
+    fwp.add_argument("minutes", type=float, metavar="MINS")
+    fwp.add_argument("series", nargs="?")
+
     args = p.parse_args()
 
     match args.cmd:
@@ -376,3 +412,5 @@ def main() -> None:
             cmd_set(args.series)
         case "rewind":
             cmd_rewind(args.minutes, args.series)
+        case "fwd":
+            cmd_fwd(args.minutes, args.series)
