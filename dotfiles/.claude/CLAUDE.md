@@ -11,8 +11,10 @@
 ## Python
 - Type hints required, pyright works on my nvim setup
 - Tools: ruff does my formatting on my nvim, uv manages environments in .venv
+  - never use pip, always use uv, for scripts /mnt/data/pytools is a globally used environment that can be used
 - Prefer dataclasses for structured data
 - Prefer functional design with minimal mutations for data heavy workloads
+
 
 ## Svelte
 - Always typescript
@@ -44,6 +46,10 @@
 	- functions
 	- modules
 		- same structure within module
+
+## Latex
+- use tectonic to render
+- never copy tables, figures or data directly into the main, narrative .tex file, always generate them programmatically from the raw source 
   
 
 # Workflow
