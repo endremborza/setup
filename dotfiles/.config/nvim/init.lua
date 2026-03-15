@@ -126,7 +126,7 @@ require('lazy').setup({
     opts = {
       options = {
         icons_enabled = false,
-        theme = 'onedark',
+        theme = 'catppuccin',
         component_separators = '|',
         section_separators = '',
       },
@@ -443,31 +443,6 @@ require('telescope').setup {
 -- Enable telescope fzf native, if installed
 pcall(require('telescope').load_extension, 'fzf')
 
--- Telescope live_grep in git root
-local function find_git_root()
-  -- Use the current buffer's path as the starting point for the git search
-  local current_file = vim.api.nvim_buf_get_name(0)
-  local current_dir
-  local cwd = vim.fn.getcwd()
-  -- If the buffer is not associated with a file, return nil
-  if current_file == '' then
-    current_dir = cwd
-  else
-    -- Extract the directory from the current file's path
-    current_dir = vim.fn.fnamemodify(current_file, ':h')
-  end
-
-  -- Find the Git root directory from the current file's path
-  local git_root = vim.fn.systemlist('git -C ' .. vim.fn.escape(current_dir, ' ') .. ' rev-parse --show-toplevel')[1]
-  if vim.v.shell_error ~= 0 then
-    print 'Not a git repository. Searching on current working directory'
-    return cwd
-  end
-  return git_root
-end
-
--- Custom live_grep function to search in git root
-
 local tele_std = require('telescope.builtin')
 
 --- review setup
@@ -756,8 +731,6 @@ vim.api.nvim_create_autocmd("LspAttach", {
   end,
 })
 
-require('lsp_signature').setup()
-
 local capabilities = vim.lsp.protocol.make_client_capabilities()
 capabilities = require('cmp_nvim_lsp').default_capabilities(capabilities)
 -- Prevent LSP servers from registering inotify file watchers (avoids ENOSPC on large projects)
@@ -794,7 +767,9 @@ vim.lsp.config('pyright', {
 })
 
 vim.lsp.config('rust_analyzer', {
-  cmd = { vim.fn.trim(vim.fn.system("rustup which rust-analyzer")) },
+  before_init = function(_, config)
+    config.cmd = { vim.fn.trim(vim.fn.system("rustup which rust-analyzer")) }
+  end,
 })
 
 vim.lsp.config('html', { filetypes = { 'html', 'twig', 'hbs' } })
@@ -828,7 +803,7 @@ require('ufo').setup({
 require("conform").setup({
   formatters_by_ft = {
     lua = { "stylua" },
-    python = { "ruff_fix", "ruff_format" },
+    python = { "ruff_format" },
     javascript = { "prettierd", "prettier" },
     css = { "prettierd", "prettier" },
   },
@@ -836,7 +811,7 @@ require("conform").setup({
     local ft = vim.bo[bufnr].filetype
     return {
       timeout_ms = 500,
-      lsp_fallback = true,
+      lsp_format = "fallback",
       stop_after_first = (ft == "css" or ft == "javascript"),
     }
   end,
