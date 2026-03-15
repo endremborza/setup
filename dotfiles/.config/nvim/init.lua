@@ -28,7 +28,15 @@ require('lazy').setup({
       'williamboman/mason.nvim',
       'williamboman/mason-lspconfig.nvim',
       { 'j-hui/fidget.nvim', opts = {} },
-      'folke/lazydev.nvim',
+      {
+        'folke/lazydev.nvim',
+        ft = 'lua',
+        opts = {
+          library = {
+            { path = '${3rd}/luv/library', words = { 'vim%.uv' } },
+          },
+        },
+      },
     },
   },
   {
@@ -462,16 +470,18 @@ end
 
 local tele_std = require('telescope.builtin')
 
+--- review setup
+
 local review_left = nil
 local review_right = nil
 local review_base = "HEAD"
 
 local function in_review_mode()
-  return (review_left and review_right)
+  return review_left and review_right
 end
 
 local function set_rl_windows()
-  vim.cmd("Gdiffsplit " .. review_base)
+  vim.cmd("Gvdiffsplit " .. review_base)
   review_left = vim.api.nvim_get_current_win()
   vim.cmd("wincmd l")
   review_right = vim.api.nvim_get_current_win()
@@ -480,10 +490,11 @@ end
 local function toggle_review()
   if in_review_mode() then
     vim.cmd("only")
-    review_right = nil
     review_left = nil
+    review_right = nil
     return
   end
+
   vim.cmd("botright Git")
   vim.cmd("resize 15")
   vim.cmd("normal! G")
@@ -502,22 +513,42 @@ local function review_file(file)
   set_rl_windows()
 end
 
+local function open_file(file)
+  if not in_review_mode() then
+    vim.cmd("edit " .. file)
+    return
+  end
+  review_file(file)
+end
+
 local function review_changed_file()
-  tele_std.git_status({
+  local picker
+
+  if review_base == "HEAD" then
+    picker = function(opts)
+      tele_std.git_status(opts)
+    end
+  else
+    picker = function(opts)
+      tele_std.git_files(vim.tbl_extend("force", opts or {}, {
+        git_command = { "git", "diff", "--name-only", review_base }
+      }))
+    end
+  end
+
+  picker({
     attach_mappings = function(prompt_bufnr, map)
       local actions = require("telescope.actions")
       local action_state = require("telescope.actions.state")
-      local function open_file()
+
+      local function select()
         local entry = action_state.get_selected_entry()
         actions.close(prompt_bufnr)
-        if not in_review_mode() then
-          return
-        end
-        review_file(entry.value)
+        open_file(entry.value)
       end
 
-      map("i", "<CR>", open_file)
-      map("n", "<CR>", open_file)
+      map("i", "<CR>", select)
+      map("n", "<CR>", select)
       return true
     end,
   })
@@ -699,14 +730,18 @@ vim.api.nvim_create_autocmd("LspAttach", {
 })
 
 require('lsp_signature').setup()
--- mason-lspconfig requires that these setup functions are called in this order
--- before setting up the servers.
-require('mason').setup()
-require('lazydev').setup()
-local servers = {
-  -- clangd = {},
-  -- gopls = {},
-  texlab = {
+
+local capabilities = vim.lsp.protocol.make_client_capabilities()
+capabilities = require('cmp_nvim_lsp').default_capabilities(capabilities)
+-- Prevent LSP servers from registering inotify file watchers (avoids ENOSPC on large projects)
+capabilities = vim.tbl_deep_extend("force", capabilities, {
+  workspace = { didChangeWatchedFiles = { dynamicRegistration = false } },
+})
+
+vim.lsp.config('*', { capabilities = capabilities })
+
+vim.lsp.config('texlab', {
+  settings = {
     texlab = {
       build = {
         executable = "latexmk",
@@ -719,61 +754,43 @@ local servers = {
       },
     },
   },
-  lemminx = {},
-  ruff = {},
-  pyright = {
+})
+
+vim.lsp.config('pyright', {
+  settings = {
     python = {
       analysis = {
         exclude = { ".venv", "**/.venv", "**/node_modules" },
       },
     },
   },
-  rust_analyzer = {},
-  ts_ls = {},
-  html = { filetypes = { 'html', 'twig', 'hbs' } },
-  svelte = { filetypes = { 'svelte' } },
-  lua_ls = {
+})
+
+vim.lsp.config('rust_analyzer', {
+  cmd = { vim.fn.trim(vim.fn.system("rustup which rust-analyzer")) },
+})
+
+vim.lsp.config('html', { filetypes = { 'html', 'twig', 'hbs' } })
+vim.lsp.config('svelte', { filetypes = { 'svelte' } })
+
+vim.lsp.config('lua_ls', {
+  settings = {
     Lua = {
       workspace = { checkThirdParty = false },
       telemetry = { enable = false },
-      -- NOTE: toggle below to ignore Lua_LS's noisy `missing-fields` warnings
       diagnostics = { disable = { 'missing-fields' }, globals = { 'vim' } },
     },
   },
-}
-
-
-local mason_servers = vim.tbl_filter(function(server)
-  return server ~= "ruff"
-end, vim.tbl_keys(servers))
-
--- nvim-cmp supports additional completion capabilities, so broadcast that to servers
-local capabilities = vim.lsp.protocol.make_client_capabilities()
-capabilities = require('cmp_nvim_lsp').default_capabilities(capabilities)
--- Prevent LSP servers from registering inotify file watchers (avoids ENOSPC on large projects)
-capabilities = vim.tbl_deep_extend("force", capabilities, {
-  workspace = { didChangeWatchedFiles = { dynamicRegistration = false } },
 })
+
+vim.lsp.config('ruff', { cmd = { "ruff", "server" } })
+
+require('mason').setup()
 require('mason-lspconfig').setup {
-  ensure_installed = mason_servers,
-  handlers = {
-    function(server_name)
-      local server_config = {
-        capabilities = capabilities,
-        settings = servers[server_name],
-        filetypes = (servers[server_name] or {}).filetypes,
-      }
-      if server_name == "rust_analyzer" then
-        local ra_path = vim.fn.trim(vim.fn.system("rustup which rust-analyzer"))
-        server_config.cmd = { ra_path }
-      end
-      if server_name == "ruff" then
-        server_config.cmd = { "ruff", "server" }
-      end
-      require('lspconfig')[server_name].setup(server_config)
-    end,
-  }
+  ensure_installed = { 'texlab', 'lemminx', 'pyright', 'rust_analyzer', 'ts_ls', 'html', 'svelte', 'lua_ls' },
+  automatic_enable = true,
 }
+vim.lsp.enable('ruff')
 
 require('ufo').setup({
   provider_selector = function(bufnr, filetype, buftype)
