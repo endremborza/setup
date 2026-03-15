@@ -462,16 +462,90 @@ end
 
 local tele_std = require('telescope.builtin')
 
-local function live_grep_git_root()
-  local git_root = find_git_root()
-  if git_root then
-    tele_std.live_grep {
-      search_dirs = { git_root },
-    }
-  end
+local review_left = nil
+local review_right = nil
+local review_base = "HEAD"
+
+local function in_review_mode()
+  return (review_left and review_right)
 end
 
-vim.api.nvim_create_user_command('LiveGrepGitRoot', live_grep_git_root, {})
+local function set_rl_windows()
+  vim.cmd("Gdiffsplit " .. review_base)
+  review_left = vim.api.nvim_get_current_win()
+  vim.cmd("wincmd l")
+  review_right = vim.api.nvim_get_current_win()
+end
+
+local function toggle_review()
+  if in_review_mode() then
+    vim.cmd("only")
+    review_right = nil
+    review_left = nil
+    return
+  end
+  vim.cmd("botright Git")
+  vim.cmd("resize 15")
+  vim.cmd("normal! G")
+
+  vim.cmd("wincmd k")
+  set_rl_windows()
+end
+
+local function review_file(file)
+  if vim.api.nvim_win_is_valid(review_right) then
+    vim.api.nvim_win_close(review_right, false)
+  end
+
+  vim.api.nvim_set_current_win(review_left)
+  vim.cmd("edit " .. file)
+  set_rl_windows()
+end
+
+local function review_changed_file()
+  tele_std.git_status({
+    attach_mappings = function(prompt_bufnr, map)
+      local actions = require("telescope.actions")
+      local action_state = require("telescope.actions.state")
+      local function open_file()
+        local entry = action_state.get_selected_entry()
+        actions.close(prompt_bufnr)
+        if not in_review_mode() then
+          return
+        end
+        review_file(entry.value)
+      end
+
+      map("i", "<CR>", open_file)
+      map("n", "<CR>", open_file)
+      return true
+    end,
+  })
+end
+
+local function pick_review_branch()
+  tele_std.git_branches({
+    attach_mappings = function(prompt_bufnr, map)
+      local actions = require("telescope.actions")
+      local action_state = require("telescope.actions.state")
+
+      local function select_branch()
+        local entry = action_state.get_selected_entry()
+        actions.close(prompt_bufnr)
+        review_base = entry.value
+      end
+
+      map("i", "<CR>", select_branch)
+      map("n", "<CR>", select_branch)
+      return true
+    end,
+  })
+end
+
+
+vim.keymap.set("n", "<leader>gf", review_changed_file, { desc = "Review changed file" })
+vim.keymap.set("n", "<leader>gr", toggle_review, { desc = "Toggle Git review mode" })
+vim.keymap.set("n", "<leader>gb", pick_review_branch, { desc = "Review basis branch" })
 
 -- See `:help telescope.builtin`
 vim.keymap.set('n', '<leader>?', tele_std.oldfiles, { desc = '[?] Find recently opened files' })
@@ -499,17 +573,18 @@ end
 
 vim.keymap.set('n', '<leader>s/', telescope_live_grep_open_files, { desc = '[S]earch [/] in Open Files' })
 vim.keymap.set('n', '<leader>ss', tele_std.builtin, { desc = '[S]earch [S]elect Telescope' })
-vim.keymap.set('n', '<leader>gf', tele_std.git_files, { desc = 'Search [G]it [F]iles' })
 vim.keymap.set('n', '<leader>sf', tele_std.find_files, { desc = '[S]earch [F]iles' })
 vim.keymap.set('n', '<leader>st', telescope_todo, { desc = '[S]earch [T]odo' })
 vim.keymap.set('n', '<leader>sh', tele_std.help_tags, { desc = '[S]earch [H]elp' })
 vim.keymap.set('n', '<leader>sw', tele_std.grep_string, { desc = '[S]earch current [W]ord' })
 vim.keymap.set('n', '<leader>sg', tele_std.live_grep, { desc = '[S]earch by [G]rep' })
-vim.keymap.set('n', '<leader>sG', ':LiveGrepGitRoot<cr>', { desc = '[S]earch by [G]rep on Git Root' })
 vim.keymap.set('n', '<leader>sd', tele_std.diagnostics, { desc = '[S]earch [D]iagnostics' })
 vim.keymap.set('n', '<leader>sr', tele_std.resume, { desc = '[S]earch [R]esume' })
 
 -- Git keymaps
+
+
+
 vim.keymap.set('n', '<leader>gs', ":Git status<enter>", { desc = '[G]it [S]tatus' })
 vim.keymap.set('n', '<leader>gd', ":Gdiffsplit<enter>", { desc = '[G]it [D]iff' })
 vim.keymap.set('n', '<leader>ga', ":Git add %<enter>", { desc = '[G]it [A]dd' })
