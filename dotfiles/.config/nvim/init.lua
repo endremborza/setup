@@ -523,7 +523,6 @@ end
 
 local function review_changed_file()
   local picker
-
   if review_base == "HEAD" then
     picker = function(opts)
       tele_std.git_status(opts)
@@ -535,7 +534,6 @@ local function review_changed_file()
       }))
     end
   end
-
   picker({
     attach_mappings = function(prompt_bufnr, map)
       local actions = require("telescope.actions")
@@ -566,6 +564,34 @@ local function pick_review_branch()
         review_base = entry.value
       end
 
+      local function select_head()
+        actions.close(prompt_bufnr)
+        review_base = "HEAD"
+      end
+
+      map("i", "<CR>", select_branch)
+      map("n", "<CR>", select_branch)
+
+      map("i", "<C-h>", select_head)
+      map("n", "<C-h>", select_head)
+
+      return true
+    end,
+  })
+end
+
+
+local function checkout_branch()
+  tele_std.git_branches({
+    attach_mappings = function(prompt_bufnr, map)
+      local actions = require("telescope.actions")
+      local action_state = require("telescope.actions.state")
+
+      local function select_branch()
+        local entry = action_state.get_selected_entry()
+        actions.close(prompt_bufnr)
+        vim.cmd("Git checkout " .. entry.value)
+      end
       map("i", "<CR>", select_branch)
       map("n", "<CR>", select_branch)
       return true
@@ -574,9 +600,10 @@ local function pick_review_branch()
 end
 
 
-vim.keymap.set("n", "<leader>gf", review_changed_file, { desc = "Review changed file" })
-vim.keymap.set("n", "<leader>gr", toggle_review, { desc = "Toggle Git review mode" })
-vim.keymap.set("n", "<leader>gb", pick_review_branch, { desc = "Review basis branch" })
+vim.keymap.set("n", "<leader>gf", review_changed_file, { desc = "Review changed [F]ile" })
+vim.keymap.set("n", "<leader>gr", toggle_review, { desc = "Toggle Git [R]eview mode" })
+vim.keymap.set("n", "<leader>gb", pick_review_branch, { desc = "Review [B]asis branch" })
+vim.keymap.set("n", "<leader>go", checkout_branch, { desc = "Check[O]out Branch" })
 
 -- See `:help telescope.builtin`
 vim.keymap.set('n', '<leader>?', tele_std.oldfiles, { desc = '[?] Find recently opened files' })
