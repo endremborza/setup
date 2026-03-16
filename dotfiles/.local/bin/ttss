@@ -1,4 +1,5 @@
 #! /usr/bin/env nu
+# TODO: replace with tmuxwrap and project specific opening strats
 source ~/.config/nushell/env.nu
 let selected_dir = select_wdir;
 

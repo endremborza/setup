@@ -31,7 +31,7 @@ def reclist_directories [path: string, depth: int] {
 
 
 def select_wdir [] {
-    return ([code, composites, folios] | each {|e| reclist_directories $'($env.HOME)/synced/($e)' 2}
+    return ([code, composites, folios] | each {|e| reclist_directories $'/mnt/data/synced/($e)' 2}
 	| flatten
 	| str join (char nl)
 	| fzf
