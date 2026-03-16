@@ -44,7 +44,7 @@ def percent_time_elapsed(resets_at, total_seconds):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--w", "--watch", action="store_true", dest="watch")
-    parser.add_argument("--interval", type=int, default=30)
+    parser.add_argument("--interval", type=int, default=300)
     args = parser.parse_args()
 
     progress = Progress(
