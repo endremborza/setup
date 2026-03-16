@@ -1,6 +1,6 @@
 from pathlib import Path
 
-SYNC_ROOT = f"{Path.home()}/synced"
+SYNC_ROOT = "/mnt/data/synced"
 
 SYNCED_ASSETS_DIR = f"{SYNC_ROOT}/assets"
 SYNCED_CODE_DIR = f"{SYNC_ROOT}/code"
