@@ -1,6 +1,8 @@
 #! /bin/sh
 cd $SETUP_REPO
-stow --no-folding --verbose=1 -t ~ dotfiles
+stow --no-folding --verbose=1 --ignore=.claude -t ~ dotfiles
 stow --no-folding --verbose=1 -t ~ secrets
-cd local-dotfiles
+cd dotfiles
+stow --no-folding --verbose=1 -t /mnt/data/share/.claude .claude
+cd ../local-dotfiles
 stow --no-folding --verbose=1 -t ~ host-$(hostname)
