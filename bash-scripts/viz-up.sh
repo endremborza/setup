@@ -19,6 +19,9 @@ sudo apt install \
 	alsa-utils \
 	pulseaudio \
 	pulseaudio-utils \
+	pulseaudio-module-bluetooth \
+	xbindkeys \
+        libnotify-bin \
 	wmctrl \
 	dbus-x11 \
 	firefox \
@@ -26,7 +29,15 @@ sudo apt install \
 	dunst \
 	light \
 	xorg \
+	vlc-bin \
+	vlc \
+        imagemagick \
+	bluez \
 	-y || exit 1
+
+
+# sudo apt install libwoff1 libharfbuzz-icu0 libenchant-2-2 libhyphen0 libmanette-0.2-0  
+# playwright
 
 # x11-xserver-utils for xrandr
 # dbus-x11
@@ -43,8 +54,12 @@ src_gh () {
 src_zip https://github.com/logseq/logseq/releases/download/0.10.9 Logseq-linux-x64-0.10.9
 ln -sf "$(pwd)/Logseq-linux-x64/Logseq" "$HOME/.local/bin"
 
-cargo install leftwm || exit 1
+# https://github.com/logseq/logseq/releases/download/0.10.15/Logseq-linux-x64-0.10.15.AppImage
+# due to apparmor issue - but should in time ditch Logeq for nvim
+
+cargo install leftwm --locked || exit 1
 # either leftwm/ i3 + X11 or sway + wayland
+# move to gh build from source
 
 src_gh alacritty alacritty v0.13.2
 cargo build --release --no-default-features --features=x11 || exit 1
@@ -61,9 +76,10 @@ sudo usermod -aG video $USER
 sudo usermod -aG input $USER
 sudo usermod -aG audio $USER
 sudo usermod -aG tty $USER
-sudo chown $USER /dev/tty0 /dev/tty2
-
+# this should move to .xinitrc for good
+# sudo chown $USER /dev/tty0 /dev/tty2
 # set x launchars to anybody
+#
 #
 # /etc/X11/Xwrapper.config
 # allowed_users = anybody
