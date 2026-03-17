@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "LogSave",
+  "version": "1.0",
+  "description": "Send current page HTML to localhost",
+  "permissions": ["tabs", "activeTab", "scripting"],
+  "background": { "service_worker": "background.js" },
+  "browser_specific_settings": {
+    "gecko": { "id": "logsave@borza.cc" }
+  },
+  "commands": {
+    "log-me": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+L"
+      },
+      "description": "Send page HTML to localhost"
+    }
+  }
+}
