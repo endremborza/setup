@@ -6,8 +6,8 @@ target/
 venv/
 
 *.parquet
+*.xpi
 snip-data
 secrets
 local-dotfiles/host-*
 history.txt
-bak
