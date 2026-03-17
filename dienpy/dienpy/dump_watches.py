@@ -4,6 +4,7 @@ import re
 import socket
 from pathlib import Path
 from subprocess import check_output, Popen, PIPE
+from sys import argv
 
 import pandas as pd
 import requests
@@ -198,5 +199,7 @@ def get_watch_history(use_cache=False):
 
 
 def main():
-    # show_watches(True)
-    dump_watches()
+    if len(argv) > 2 and argv[2] == "--show":
+        show_watches(True)
+    else:
+        dump_watches()
