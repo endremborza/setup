@@ -29,9 +29,9 @@ do
 end
 
 require('lazy').setup({
-  { 'tpope/vim-fugitive',  event = "VeryLazy" },
-  { 'tpope/vim-rhubarb',   event = "VeryLazy" },
-  { 'tpope/vim-sleuth',    event = "BufReadPre" },
+  { 'tpope/vim-fugitive', event = "VeryLazy" },
+  { 'tpope/vim-rhubarb',  event = "VeryLazy" },
+  { 'tpope/vim-sleuth',   event = "BufReadPre" },
   {
     'neovim/nvim-lspconfig',
     event = { "BufReadPre", "BufNewFile" },
@@ -229,21 +229,21 @@ require('lazy').setup({
     config = function()
       require('which-key').setup {}
       require('which-key').add {
-        { "]s",          desc = "Next misspelled word" },
-        { "[s",          desc = "Prev misspelled word" },
-        { "zg",          desc = "Add word to dictionary" },
-        { "zw",          desc = "Mark word as wrong" },
-        { "z=",          desc = "Spelling suggestions" },
-        { '<leader>c',   group = '[C]ode' },
-        { '<leader>d',   group = '[D]ocument' },
-        { '<leader>g',   group = '[G]it' },
-        { '<leader>r',   group = '[R]ename' },
-        { '<leader>s',   group = '[S]earch' },
-        { '<leader>w',   group = '[W]orkspace' },
-        { '<leader>t',   group = '[T]oggle' },
-        { '<leader>m',   group = '[M]olten' },
-        { '<leader>h',   group = 'Git [H]unk',      mode = { 'n', 'v' } },
-        { "<leader>",    group = "VISUAL <leader>",  mode = "v" },
+        { "]s",        desc = "Next misspelled word" },
+        { "[s",        desc = "Prev misspelled word" },
+        { "zg",        desc = "Add word to dictionary" },
+        { "zw",        desc = "Mark word as wrong" },
+        { "z=",        desc = "Spelling suggestions" },
+        { '<leader>c', group = '[C]ode' },
+        { '<leader>d', group = '[D]ocument' },
+        { '<leader>g', group = '[G]it' },
+        { '<leader>r', group = '[R]ename' },
+        { '<leader>s', group = '[S]earch' },
+        { '<leader>w', group = '[W]orkspace' },
+        { '<leader>t', group = '[T]oggle' },
+        { '<leader>m', group = '[M]olten' },
+        { '<leader>h', group = 'Git [H]unk',           mode = { 'n', 'v' } },
+        { "<leader>",  group = "VISUAL <leader>",      mode = "v" },
       }
     end,
   },
@@ -341,6 +341,7 @@ require('lazy').setup({
       local search_flags = {
         "--no-ignore-vcs",
         "--ignore-file", ignore_file,
+        '--hidden',
       }
 
       local function extend(tbl1, tbl2)
@@ -366,7 +367,6 @@ require('lazy').setup({
             "--line-number",
             "--column",
             "--smart-case",
-            '--hidden',
           }, search_flags),
         },
         pickers = {
@@ -375,7 +375,6 @@ require('lazy').setup({
               "fd",
               "--type",
               "f",
-              '--hidden',
             }, search_flags),
           },
         },
