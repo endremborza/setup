@@ -11,8 +11,10 @@ from pathlib import Path
 from subprocess import check_output
 from typing import Optional
 
+from .constants import LOGS_DIR
+
 ROOT_DIR = Path("/mnt/alpha-video/archive/night-time/")
-LOG_FILE = Path("/mnt/data/logs/nightvid.log")
+LOG_FILE = LOGS_DIR / "nightvid.log"
 
 logging.basicConfig(
     level=logging.INFO,
