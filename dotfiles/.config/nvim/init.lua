@@ -390,13 +390,21 @@ require('lazy').setup({
 
       local function in_review_mode()
         return review_left and review_right
+          and vim.api.nvim_win_is_valid(review_left)
+          and vim.api.nvim_win_is_valid(review_right)
       end
 
       local function set_rl_windows()
+        local before = {}
+        for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do before[w] = true end
+        local file_win = vim.api.nvim_get_current_win()
         vim.cmd("Gvdiffsplit " .. review_base)
-        review_left = vim.api.nvim_get_current_win()
-        vim.cmd("wincmd l")
-        review_right = vim.api.nvim_get_current_win()
+        local new_win
+        for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+          if not before[w] then new_win = w; break end
+        end
+        review_left = new_win or vim.api.nvim_get_current_win()
+        review_right = file_win
       end
 
       local function toggle_review()
@@ -416,11 +424,12 @@ require('lazy').setup({
       end
 
       local function review_file(file)
-        if vim.api.nvim_win_is_valid(review_right) then
-          vim.api.nvim_win_close(review_right, false)
+        if vim.api.nvim_win_is_valid(review_left) then
+          vim.api.nvim_win_close(review_left, false)
         end
 
-        vim.api.nvim_set_current_win(review_left)
+        vim.api.nvim_set_current_win(review_right)
+        vim.cmd("diffoff")
         vim.cmd("edit " .. file)
         set_rl_windows()
       end
@@ -732,7 +741,9 @@ vim.api.nvim_create_autocmd('TextYankPost', {
 vim.api.nvim_create_autocmd("User", {
   pattern = "FugitiveChanged",
   callback = function()
-    pcall(require('gitsigns').refresh)
+    vim.schedule(function()
+      pcall(require('gitsigns').refresh)
+    end)
   end,
 })
 
