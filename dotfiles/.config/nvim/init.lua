@@ -48,13 +48,10 @@ require('lazy').setup({
           },
         },
       },
-      'ray-x/lsp_signature.nvim',
       'nvim-telescope/telescope.nvim',
       'hrsh7th/cmp-nvim-lsp',
     },
     config = function()
-      require('lsp_signature').setup {}
-
       local capabilities = vim.lsp.protocol.make_client_capabilities()
       capabilities = require('cmp_nvim_lsp').default_capabilities(capabilities)
       capabilities = vim.tbl_deep_extend("force", capabilities, {
@@ -109,7 +106,6 @@ require('lazy').setup({
       })
 
       vim.lsp.config('html', { filetypes = { 'html', 'twig', 'hbs' } })
-      vim.lsp.config('svelte', { filetypes = { 'svelte' } })
 
       vim.lsp.config('lua_ls', {
         settings = {
@@ -120,8 +116,6 @@ require('lazy').setup({
           },
         },
       })
-
-      vim.lsp.config('ruff', { cmd = { "ruff", "server" } })
 
       require('mason').setup()
       require('mason-lspconfig').setup {
@@ -149,11 +143,6 @@ require('lazy').setup({
         nmap('K', vim.lsp.buf.hover, 'Hover Documentation')
         nmap('<C-k>', vim.lsp.buf.signature_help, 'Signature Documentation')
         nmap('gD', vim.lsp.buf.declaration, '[G]oto [D]eclaration')
-        nmap('<leader>wa', vim.lsp.buf.add_workspace_folder, '[W]orkspace [A]dd Folder')
-        nmap('<leader>wr', vim.lsp.buf.remove_workspace_folder, '[W]orkspace [R]emove Folder')
-        nmap('<leader>wl', function()
-          print(vim.inspect(vim.lsp.buf.list_workspace_folders()))
-        end, '[W]orkspace [L]ist Folders')
       end
 
       vim.api.nvim_create_autocmd("LspAttach", {
@@ -344,13 +333,6 @@ require('lazy').setup({
         '--hidden',
       }
 
-      local function extend(tbl1, tbl2)
-        local result = {}
-        for _, v in ipairs(tbl1) do table.insert(result, v) end
-        for _, v in ipairs(tbl2) do table.insert(result, v) end
-        return result
-      end
-
       require('telescope').setup {
         defaults = {
           mappings = {
@@ -359,23 +341,15 @@ require('lazy').setup({
               ['<C-d>'] = false,
             },
           },
-          vimgrep_arguments = extend({
-            "rg",
-            "--color=never",
-            "--no-heading",
-            "--with-filename",
-            "--line-number",
-            "--column",
-            "--smart-case",
-          }, search_flags),
+          vimgrep_arguments = {
+            "rg", "--color=never", "--no-heading", "--with-filename",
+            "--line-number", "--column", "--smart-case",
+            unpack(search_flags),
+          },
         },
         pickers = {
           find_files = {
-            find_command = extend({
-              "fd",
-              "--type",
-              "f",
-            }, search_flags),
+            find_command = { "fd", "--type", "f", unpack(search_flags) },
           },
         },
       }
@@ -390,8 +364,8 @@ require('lazy').setup({
 
       local function in_review_mode()
         return review_left and review_right
-          and vim.api.nvim_win_is_valid(review_left)
-          and vim.api.nvim_win_is_valid(review_right)
+            and vim.api.nvim_win_is_valid(review_left)
+            and vim.api.nvim_win_is_valid(review_right)
       end
 
       local function set_rl_windows()
@@ -401,10 +375,13 @@ require('lazy').setup({
         vim.cmd("Gvdiffsplit " .. review_base)
         local new_win
         for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-          if not before[w] then new_win = w; break end
+          if not before[w] then
+            new_win = w; break
+          end
         end
         review_left = new_win or vim.api.nvim_get_current_win()
         review_right = file_win
+        vim.api.nvim_set_current_win(review_right)
       end
 
       local function toggle_review()
@@ -532,21 +509,14 @@ require('lazy').setup({
         })
       end, { desc = '[/] Fuzzily search in current buffer' })
 
-      local function telescope_live_grep_open_files()
-        tele_std.live_grep {
-          grep_open_files = true,
-          prompt_title = 'Live Grep in Open Files',
-        }
-      end
-
-      local function telescope_todo()
-        tele_std.grep_string { search = 'TODO' }
-      end
-
-      vim.keymap.set('n', '<leader>s/', telescope_live_grep_open_files, { desc = '[S]earch [/] in Open Files' })
+      vim.keymap.set('n', '<leader>s/', function()
+        tele_std.live_grep { grep_open_files = true, prompt_title = 'Live Grep in Open Files' }
+      end, { desc = '[S]earch [/] in Open Files' })
       vim.keymap.set('n', '<leader>ss', tele_std.builtin, { desc = '[S]earch [S]elect Telescope' })
       vim.keymap.set('n', '<leader>sf', tele_std.find_files, { desc = '[S]earch [F]iles' })
-      vim.keymap.set('n', '<leader>st', telescope_todo, { desc = '[S]earch [T]odo' })
+      vim.keymap.set('n', '<leader>st', function()
+        tele_std.grep_string { search = 'TODO' }
+      end, { desc = '[S]earch [T]odo' })
       vim.keymap.set('n', '<leader>sh', tele_std.help_tags, { desc = '[S]earch [H]elp' })
       vim.keymap.set('n', '<leader>sw', tele_std.grep_string, { desc = '[S]earch current [W]ord' })
       vim.keymap.set('n', '<leader>sg', tele_std.live_grep, { desc = '[S]earch by [G]rep' })
@@ -695,9 +665,6 @@ vim.o.foldenable = true
 vim.keymap.set('n', '<leader>pv', vim.cmd.Ex, { desc = 'To file tree' })
 vim.keymap.set('n', 'zR', function() require('ufo').openAllFolds() end)
 vim.keymap.set('n', 'zM', function() require('ufo').closeAllFolds() end)
-
-vim.keymap.set('n', '<leader>v', '"ayiw/<C-r>a<enter>', { desc = 'Search for word' })
-vim.keymap.set('n', '<leader>y', '"ayy:!echo "<C-r>a"<enter>', { desc = 'Use line in command' })
 
 vim.keymap.set('v', '<leader>p', '"_dP', { desc = "Paste without replacing buffer" })
 
