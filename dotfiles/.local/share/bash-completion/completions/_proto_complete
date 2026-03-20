@@ -1,0 +1,14 @@
+# Protocol-based completion for tools supporting --complete.
+# Tool contract: `<tool> --complete [args...]` outputs newline-separated candidates.
+# Usage: source this file, then: complete -F _proto_complete <tool>
+
+_proto_complete() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    local args=("${COMP_WORDS[@]:1:$((COMP_CWORD-1))}")
+    local out
+    out=$("$1" --complete "${args[@]}" 2>/dev/null) || return
+    [[ -z "$out" ]] && return
+    local IFS=$'\n'
+    mapfile -t COMPREPLY < <(compgen -W "$out" -- "$cur")
+    [[ ${#COMPREPLY[@]} -gt 0 ]] && compopt -o filenames
+}

@@ -1,20 +1,2 @@
-_dienpy_complete() {
-    local cur="${COMP_WORDS[COMP_CWORD]}"
-    local mod="${COMP_WORDS[1]}"
-    local args=("${COMP_WORDS[@]:2}")
-
-    if [[ $COMP_CWORD -eq 1 ]]; then
-        COMPREPLY=($(compgen -W "$(dienpy --complete 2>/dev/null)" -- "$cur"))
-        return 0
-    fi
-
-    local out IFS=$'\n'
-    out=$(dienpy --complete "$mod" "${args[@]}" 2>/dev/null)
-    if [[ -n "$out" ]]; then
-        COMPREPLY=($(compgen -W "$out" -- "$cur"))
-    else
-        COMPREPLY=($(compgen -f -- "$cur"))
-    fi
-}
-
-complete -F _dienpy_complete dienpy
+source "${BASH_SOURCE%/*}/_proto_complete"
+complete -F _proto_complete dienpy
