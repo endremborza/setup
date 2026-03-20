@@ -31,7 +31,7 @@ def reclist_directories [path: string, depth: int] {
 
 
 def select_wdir [] {
-    return ([code, composites, folios] | each {|e| reclist_directories $'/mnt/data/synced/($e)' 2}
+    return ([code, composites, folios] | each {|e| reclist_directories $'($env.SYNC_ROOT)/($e)' 2}
 	| flatten
 	| str join (char nl)
 	| fzf
@@ -71,7 +71,7 @@ def create_right_prompt [] {
 }
 
 def check_watch_history [] {
-    ls /mnt/data/logs/watches | each {|e| cat $e.name | from csv } | reduce {|l,r| $l | append $r}
+    ls $'($env.LOGS_DIR)/watches' | each {|e| cat $e.name | from csv } | reduce {|l,r| $l | append $r}
 }
 
 def series_list [] { medroy-ls | lines | each {to nuon} }
