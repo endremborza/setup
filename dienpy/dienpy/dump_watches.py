@@ -10,6 +10,8 @@ import pandas as pd
 import requests
 from lxml import etree
 
+from .constants import LOGS_DIR
+
 # sudo vim /etc/systemd/system/tv-tcpdump.service
 # sudo tcpdump -i eth1 'src host 192.168.1.236 and tcp[13] & 8 != 0 and tcp[13] & 16 != 0' -U  -w /var/services/homes/borza/tv-capture.pcap
 
@@ -48,11 +50,7 @@ ifile = "/var/services/homes/borza/tv-capture.pcap"
 
 
 session = requests.Session()
-session.headers.update(
-    {
-        "Connection": "close",
-    }
-)
+session.headers.update({"Connection": "close"})
 
 
 def getd(oid):
@@ -78,7 +76,6 @@ def getd(oid):
         return {"container": [], "item": []}
 
     didl_root = etree.fromstring(result_nodes[0].encode())
-
     containers = []
     items = []
 
@@ -111,10 +108,7 @@ def getd(oid):
             }
         )
 
-    return {
-        "container": containers,
-        "item": items,
-    }
+    return {"container": containers, "item": items}
 
 
 def tol(ml):
@@ -124,7 +118,7 @@ def tol(ml):
 def dump_watches():
     idf = dt.date.today().isoformat()
     get_watch_history().assign(date=idf).to_csv(
-        f"/mnt/data/logs/watches/{idf}.csv", index=False
+        str(LOGS_DIR / "watches" / f"{idf}.csv"), index=False
     )
     check_output(["ssh", "home-nas-alpha", f"rm {ifile}"])
     check_output(["ssh", "home-nas-alpha", "sudo systemctl restart tv-tcpdump"])
