@@ -670,7 +670,13 @@ vim.o.completeopt = 'menuone,noselect'
 
 vim.o.termguicolors = true
 
-vim.o.diffopt = 'internal,filler,closeoff,algorithm:patience,linematch:20'
+vim.o.diffopt = table.concat({
+  "internal",
+  "filler",
+  "closeoff",
+  "algorithm:histogram",
+  "linematch:20",
+}, ",")
 
 vim.o.foldcolumn = '1'
 vim.o.foldlevel = 99
@@ -691,8 +697,13 @@ vim.keymap.set({ 'n', 'v' }, '<Space>', '<Nop>', { silent = true })
 vim.keymap.set('n', 'k', "v:count == 0 ? 'gk' : 'k'", { expr = true, silent = true })
 vim.keymap.set('n', 'j', "v:count == 0 ? 'gj' : 'j'", { expr = true, silent = true })
 
-vim.keymap.set('n', '[d', vim.diagnostic.goto_prev, { desc = 'Go to previous diagnostic message' })
-vim.keymap.set('n', ']d', vim.diagnostic.goto_next, { desc = 'Go to next diagnostic message' })
+vim.keymap.set('n', '[d', function()
+  vim.diagnostic.jump({ count = -1 })
+end, { desc = 'Go to previous diagnostic message' })
+
+vim.keymap.set('n', ']d', function()
+  vim.diagnostic.jump({ count = 1 })
+end, { desc = 'Go to next diagnostic message' })
 vim.keymap.set('n', '<leader>e', vim.diagnostic.open_float, { desc = 'Open floating diagnostic message' })
 vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostics list' })
 
@@ -722,6 +733,27 @@ vim.api.nvim_create_autocmd("User", {
   pattern = "FugitiveChanged",
   callback = function()
     pcall(require('gitsigns').refresh)
+  end,
+})
+
+vim.api.nvim_create_autocmd("OptionSet", {
+  pattern = "diff",
+  callback = function()
+    if vim.wo.diff then
+      vim.opt_local.wrap = true
+      vim.opt_local.linebreak = true
+    end
+  end,
+})
+
+vim.api.nvim_create_autocmd("User", {
+  pattern = "TelescopePreviewerLoaded",
+  callback = function(args)
+    local win = vim.fn.bufwinid(args.buf)
+    if win ~= -1 then
+      vim.wo[win].wrap = true
+      vim.wo[win].linebreak = true
+    end
   end,
 })
 
