@@ -1,0 +1,2 @@
+# Public aliases (diencephalon)
+
