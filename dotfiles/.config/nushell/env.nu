@@ -105,6 +105,8 @@ $env.PROMPT_COMMAND_RIGHT = {|| create_right_prompt }
 
 # Autocompletes
 source ("~/.nu-completions" | path expand)
+source ("~/.config/nushell/aliases.nu" | path expand)
+source ("~/.config/nushell/local-aliases.nu" | path expand)
 
 
 # The prompt indicators are environmental variables that represent
