@@ -1,6 +1,5 @@
 #! /bin/sh
 
-MEDIA_DIR=/mnt/data/synced/media
 DSTR=$(date -Iseconds)
 IFILE="$MEDIA_DIR/images/personal/screenshots/$DSTR.png"
 import "$IFILE"
