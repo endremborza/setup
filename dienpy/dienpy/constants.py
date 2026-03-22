@@ -1,25 +1,26 @@
+import os
 from pathlib import Path
 
-SYNC_ROOT = "/mnt/data/synced"
 
-SYNCED_ASSETS_DIR = f"{SYNC_ROOT}/assets"
-SYNCED_CODE_DIR = f"{SYNC_ROOT}/code"
-SYNCED_COMPOSITES_DIR = f"{SYNC_ROOT}/composites"
-SYNCED_DATA_DIR = f"{SYNC_ROOT}/data"
-SYNCED_FOLIOS_DIR = f"{SYNC_ROOT}/folios"
-SYNCED_MEDIA_DIR = f"{SYNC_ROOT}/media"
-SYNCED_SHARE_DIR = f"{SYNC_ROOT}/share"
+def _env_path(key: str, fallback: str) -> Path:
+    return Path(os.environ.get(key, fallback))
 
+
+SYNC_ROOT = _env_path("SYNC_ROOT", "/mnt/data/synced")
+
+CODE_DIR = _env_path("CODE_DIR", str(SYNC_ROOT / "code"))
+COMPOSITES_DIR = _env_path("COMPOSITES_DIR", str(SYNC_ROOT / "composites"))
+FOLIOS_DIR = _env_path("FOLIOS_DIR", str(SYNC_ROOT / "folios"))
+DATA_DIR = _env_path("DATA_DIR", str(SYNC_ROOT / "data"))
+ASSETS_DIR = _env_path("ASSETS_DIR", str(SYNC_ROOT / "assets"))
+MEDIA_DIR = _env_path("MEDIA_DIR", str(SYNC_ROOT / "media"))
+SHARE_DIR = _env_path("SHARE_DIR", str(SYNC_ROOT / "share"))
+
+PDF_STORE = FOLIOS_DIR / "pile"
+REPO_STORE = ASSETS_DIR / "repos"
+STANDALONE_ANALYSIS_BASES = DATA_DIR / "standalone"
+
+LOGS_DIR = _env_path("LOGS_DIR", "/mnt/data/logs")
 
 REMOTE_NAME = "gdrive"
 REMOTE_ROOT = "rcloned"
-
-PDF_STORE = Path(SYNCED_FOLIOS_DIR) / "pile"
-REPO_STORE = Path(SYNCED_ASSETS_DIR) / "repos"
-STANDALONE_ANALYSIS_BASES = Path(SYNCED_DATA_DIR) / "standalone"
-
-
-if __name__ == "__main__":
-    for k, v in list(locals().items()):
-        if isinstance(v, str) and k == k.upper():
-            print(f"export {k} = {v}")

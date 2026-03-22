@@ -8,11 +8,15 @@ xset -dpms
 
 rfkill unblock all
 
-# propagate environment to systemd user services
-systemctl --user import-environment DISPLAY XAUTHORITY
+. "$HOME/.vars"
+[ -f "$HOME/.secret-vars" ] && . "$HOME/.secret-vars"
+[ -f "$HOME/.local-vars" ] && . "$HOME/.local-vars"
 
-# also propagate DBus once it exists
+systemctl --user import-environment
 dbus-update-activation-environment --systemd DISPLAY XAUTHORITY
 
-# start window manager inside a proper dbus session
-exec dbus-run-session leftwm
+systemctl --user start graphical-session-pre.target graphical-session.target
+
+dbus-run-session leftwm
+
+systemctl --user stop graphical-session.target

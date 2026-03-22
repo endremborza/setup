@@ -1,8 +1,42 @@
-#! /bin/sh
-cd $SETUP_REPO
+#!/bin/bash
+DIEN_ROOT=${DIEN_ROOT:-/mnt/data/synced/composites/pkm/diencephalon}
+HYPO_ROOT=${HYPO_ROOT:-/mnt/data/synced/composites/pkm/hypothalamus}
+SHARE_DIR=${SHARE_DIR:-/mnt/data/synced/share}
+
+cd "$DIEN_ROOT"
 stow --no-folding --verbose=1 --ignore=.claude -t ~ dotfiles
+
+cd "$HYPO_ROOT"
+stow --no-folding --verbose=1 -t ~ dotfiles
 stow --no-folding --verbose=1 -t ~ secrets
-cd dotfiles
-stow --no-folding --verbose=1 -t /mnt/data/share/.claude .claude
-cd ../local-dotfiles
-stow --no-folding --verbose=1 -t ~ host-$(hostname)
+
+cd "$HYPO_ROOT/local-dotfiles"
+stow --no-folding --verbose=1 -t ~ "host-$(hostname)"
+
+cd "$DIEN_ROOT/dotfiles"
+stow --no-folding --verbose=1 -t "$SHARE_DIR/.claude" .claude
+
+# Generate environment.d for systemd user services
+# Sources each file in bash to expand variable references, then outputs KEY=VALUE
+gen_envd() {
+    local src="$1" dst="$2"
+    local keys
+    keys=$(grep -oP '(?<=^export )\w+' "$src")
+    [ -z "$keys" ] && return
+    (
+        . "$src"
+        for k in $keys; do
+            printf '%s=%s\n' "$k" "${!k}"
+        done
+    ) > "$dst"
+}
+
+mkdir -p ~/.config/environment.d
+gen_envd ~/.vars ~/.config/environment.d/10-vars.conf
+[ -f ~/.secret-vars ] && gen_envd ~/.secret-vars ~/.config/environment.d/20-secret-vars.conf
+[ -f ~/.local-vars ] && gen_envd ~/.local-vars ~/.config/environment.d/30-local-vars.conf
+systemctl --user daemon-reload 2>/dev/null || true
+
+# Ensure local alias files exist (sourced unconditionally by shell configs)
+[ -f ~/.local-aliases ] || touch ~/.local-aliases
+[ -f ~/.config/nushell/local-aliases.nu ] || touch ~/.config/nushell/local-aliases.nu
