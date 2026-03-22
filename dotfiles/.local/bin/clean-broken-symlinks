@@ -1,0 +1,25 @@
+#! /bin/sh
+# Find broken symlinks in $HOME (non-recursive into non-symlink dirs by default)
+# Usage: clean-broken-symlinks [-d|--delete]
+
+DELETE=0
+for arg in "$@"; do
+    case "$arg" in
+        -d|--delete) DELETE=1 ;;
+        *) echo "Usage: clean-broken-symlinks [-d|--delete]" >&2; exit 1 ;;
+    esac
+done
+
+broken=$(find "$HOME" -maxdepth 5 -xtype l 2>/dev/null)
+
+if [ -z "$broken" ]; then
+    echo "No broken symlinks found."
+    exit 0
+fi
+
+echo "$broken"
+
+if [ "$DELETE" -eq 1 ]; then
+    echo "$broken" | xargs rm --
+    echo "Deleted $(echo "$broken" | wc -l) broken symlink(s)."
+fi
