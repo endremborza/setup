@@ -611,6 +611,21 @@ require('lazy').setup({
     end,
   },
   {
+    'Julian/lean.nvim',
+    event = { 'BufReadPre *.lean', 'BufNewFile *.lean' },
+
+    dependencies = {
+      'nvim-lua/plenary.nvim',
+      -- optional dependencies:
+      -- a completion engine
+      --    hrsh7th/nvim-cmp or Saghen/blink.cmp are popular choices
+    },
+    ---@type lean.Config
+    opts = {
+      mappings = true,
+    }
+  },
+  {
     "benlubas/molten-nvim",
     version = "^1.0.0",
     build = ":UpdateRemotePlugins",
@@ -708,9 +723,9 @@ vim.api.nvim_create_autocmd('TextYankPost', {
 vim.api.nvim_create_autocmd("User", {
   pattern = "FugitiveChanged",
   callback = function()
-    vim.schedule(function()
-      pcall(require('gitsigns').refresh)
-    end)
+    local refresh = function() pcall(require('gitsigns').refresh) end
+    vim.schedule(refresh)
+    vim.defer_fn(refresh, 300)
   end,
 })
 
