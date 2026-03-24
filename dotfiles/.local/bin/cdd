@@ -1,4 +1,0 @@
-#! /usr/bin/env nu
-source ~/.config/nushell/env.nu
-let selected_dir = select_wdir;
-tmux send-keys $"cd ($selected_dir)" C-m
