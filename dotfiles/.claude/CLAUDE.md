@@ -56,6 +56,10 @@
 - Run tests after changes
 - I will do the committing myself
 
+# Planning Flow
+- write out plans to md files relevant in the repository
+- when part of a plan is completed, completely remove it from the planning .md, you can add it to a different file if that is necessary, but we follow changes through git, not having crossed out todo points in a md
+
 # Performance Mindset
 - Consider algorithmic complexity.
 - Mention time/space complexity when non-trivial.
