@@ -15,28 +15,6 @@ def gbs [] {
   }
 }
 
-def reclist_directories [path: string, depth: int] {
-	if (($depth == 0) or ([$"($path)/.git" $"($path)/node_modules"] | any {|e| $e | path exists})) {
-		return [$path]
-	}
-	let entries = (ls $path --full-paths) |
-		where type == 'dir' |
-		where not ($it.name | str contains ' ') | 
-		each {
-		|entry|
-			(reclist_directories $entry.name ($depth - 1))
-		}
-	return ($entries |  flatten)
-}
-
-
-def select_wdir [] {
-    return ([code, composites, folios] | each {|e| reclist_directories $'($env.SYNC_ROOT)/($e)' 2}
-	| flatten
-	| str join (char nl)
-	| fzf
-	)
-}
 
 def create_left_prompt [] {
     let dir = match (do --ignore-errors { $env.PWD | path relative-to $nu.home-path }) {
