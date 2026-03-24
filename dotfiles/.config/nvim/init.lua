@@ -737,6 +737,9 @@ vim.api.nvim_create_autocmd("OptionSet", {
     if vim.wo.diff then
       vim.opt_local.wrap = true
       vim.opt_local.linebreak = true
+      vim.opt_local.foldlevel = 0
+    else
+      vim.opt_local.foldlevel = 99
     end
   end,
 })
@@ -755,7 +758,7 @@ vim.api.nvim_create_autocmd("User", {
 vim.api.nvim_create_autocmd({ "FocusGained", "BufEnter" }, {
   callback = function()
     vim.cmd('checktime')
-    pcall(require('gitsigns').refresh)
+    vim.schedule(function() pcall(require('gitsigns').refresh) end)
   end,
 })
 
