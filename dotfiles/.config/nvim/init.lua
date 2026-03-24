@@ -257,16 +257,20 @@ require('lazy').setup({
         end
 
         map({ 'n', 'v' }, ']c', function()
-          if vim.wo.diff then return ']c' end
-          vim.schedule(function() gs.next_hunk() end)
-          return '<Ignore>'
-        end, { expr = true, desc = 'Jump to next hunk' })
+          if vim.wo.diff then
+            vim.cmd.normal({ ']c', bang = true })
+          else
+            gs.nav_hunk('next')
+          end
+        end, { desc = 'Jump to next hunk' })
 
         map({ 'n', 'v' }, '[c', function()
-          if vim.wo.diff then return '[c' end
-          vim.schedule(function() gs.prev_hunk() end)
-          return '<Ignore>'
-        end, { expr = true, desc = 'Jump to previous hunk' })
+          if vim.wo.diff then
+            vim.cmd.normal({ '[c', bang = true })
+          else
+            gs.nav_hunk('prev')
+          end
+        end, { desc = 'Jump to previous hunk' })
 
         map('v', '<leader>hs', function()
           gs.stage_hunk { vim.fn.line '.', vim.fn.line 'v' }
@@ -382,6 +386,7 @@ require('lazy').setup({
         review_left = new_win or vim.api.nvim_get_current_win()
         review_right = file_win
         vim.api.nvim_set_current_win(review_right)
+        vim.schedule(function() vim.cmd("diffupdate") end)
       end
 
       local function toggle_review()
@@ -404,16 +409,15 @@ require('lazy').setup({
         if vim.api.nvim_win_is_valid(review_left) then
           vim.api.nvim_win_close(review_left, false)
         end
-
         vim.api.nvim_set_current_win(review_right)
-        vim.cmd("diffoff")
-        vim.cmd("edit " .. file)
+        vim.cmd("diffoff!")
+        vim.cmd("edit " .. vim.fn.fnameescape(file))
         set_rl_windows()
       end
 
       local function open_file(file)
         if not in_review_mode() then
-          vim.cmd("edit " .. file)
+          vim.cmd("edit " .. vim.fn.fnameescape(file))
           return
         end
         review_file(file)
@@ -723,9 +727,7 @@ vim.api.nvim_create_autocmd('TextYankPost', {
 vim.api.nvim_create_autocmd("User", {
   pattern = "FugitiveChanged",
   callback = function()
-    local refresh = function() pcall(require('gitsigns').refresh) end
-    vim.schedule(refresh)
-    vim.defer_fn(refresh, 300)
+    vim.schedule(function() pcall(require('gitsigns').refresh) end)
   end,
 })
 
