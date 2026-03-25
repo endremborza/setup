@@ -386,12 +386,14 @@ require('lazy').setup({
         review_left = new_win or vim.api.nvim_get_current_win()
         review_right = file_win
         vim.api.nvim_set_current_win(review_right)
-        vim.schedule(function() vim.cmd("diffupdate") end)
+        vim.schedule(function() vim.cmd("diffupdate!") end)
       end
 
       local function toggle_review()
         if in_review_mode() then
+          vim.api.nvim_set_current_win(review_right)
           vim.cmd("only")
+          vim.cmd("diffoff")
           review_left = nil
           review_right = nil
           return
@@ -410,7 +412,7 @@ require('lazy').setup({
           vim.api.nvim_win_close(review_left, false)
         end
         vim.api.nvim_set_current_win(review_right)
-        vim.cmd("diffoff!")
+        vim.cmd("diffoff")
         vim.cmd("edit " .. vim.fn.fnameescape(file))
         set_rl_windows()
       end
@@ -702,13 +704,24 @@ end, { desc = 'Go to next diagnostic message' })
 vim.keymap.set('n', '<leader>e', vim.diagnostic.open_float, { desc = 'Open floating diagnostic message' })
 vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostics list' })
 
+local function force_refresh_gitsigns()
+  local gs = package.loaded.gitsigns
+  if gs then pcall(gs.reset_base, true) end
+end
+
 vim.keymap.set('n', '<leader>gs', ":Git status<enter>", { desc = '[G]it [S]tatus' })
 vim.keymap.set('n', '<leader>gd', ":Gdiffsplit<enter>", { desc = '[G]it [D]iff' })
 vim.keymap.set('n', '<leader>ga', ":Git add %<enter>", { desc = '[G]it [A]dd' })
 vim.keymap.set('n', '<leader>gc', ":Git commit -m \"\"<Left>", { desc = '[G]it [C]ommit' })
 vim.keymap.set('n', '<leader>gp', ":Git push<enter>", { desc = '[G]it [P]ush' })
 vim.keymap.set('n', '<leader>gl', ":Git pull<enter>", { desc = '[G]it Pul[l]' })
-vim.keymap.set('n', '<leader>gw', ":Git add % | Git commit -m \"\"<Left>", { desc = '[G]it [W]rite' })
+vim.keymap.set('n', '<leader>gw', function()
+  local msg = vim.fn.input('Commit: ')
+  if msg == '' then return end
+  vim.cmd('Git add %')
+  vim.cmd('Git commit -m ' .. vim.fn.shellescape(msg))
+  force_refresh_gitsigns()
+end, { desc = '[G]it [W]rite' })
 vim.keymap.set("n", "<leader>gh", function()
   local file = vim.fn.expand("%")
   local line = vim.fn.line(".")
@@ -726,9 +739,7 @@ vim.api.nvim_create_autocmd('TextYankPost', {
 
 vim.api.nvim_create_autocmd("User", {
   pattern = "FugitiveChanged",
-  callback = function()
-    vim.schedule(function() pcall(require('gitsigns').refresh) end)
-  end,
+  callback = function() force_refresh_gitsigns() end,
 })
 
 vim.api.nvim_create_autocmd("OptionSet", {
@@ -740,6 +751,15 @@ vim.api.nvim_create_autocmd("OptionSet", {
       vim.opt_local.foldlevel = 0
     else
       vim.opt_local.foldlevel = 99
+    end
+  end,
+})
+
+vim.api.nvim_create_autocmd("OptionSet", {
+  pattern = "foldmethod",
+  callback = function()
+    if vim.wo.diff and vim.v.option_new ~= 'diff' then
+      vim.wo.foldmethod = 'diff'
     end
   end,
 })
@@ -758,7 +778,8 @@ vim.api.nvim_create_autocmd("User", {
 vim.api.nvim_create_autocmd({ "FocusGained", "BufEnter" }, {
   callback = function()
     vim.cmd('checktime')
-    vim.schedule(function() pcall(require('gitsigns').refresh) end)
+    local gs = package.loaded.gitsigns
+    if gs then pcall(gs.reset_base) end
   end,
 })
 
