@@ -1,8 +1,61 @@
-#! /usr/bin/env nu
-let CWS = (leftwm-state --quit | jq '.workspaces[]  | select(any(.tags[]; .mine and .focused)).index')
-[ "xdotool key Super_L+f", "alacritty -e nu", "alacritty -e nu", logseq, "alacritty -e ttss", "alacritty -e nu", "~/.xinitrc" ] | enumerate | each {
-	|e| leftwm-command $"SendWorkspaceToTag ($CWS) ($e.index)";start-bg-proc $e.item; sleep 0.3sec
-}
-tmux attach-session -t $env.BG_TMUX_SESSION
+#!/usr/bin/env python3
+import json
+import os
+import subprocess
+import sys
+import time
+
+AB = "alacritty -e ttss"
+APPS = ["firefox", AB, AB, "logseq", AB, AB, "~/.xinitrc"]
 
 
+def run_cmd(cmd: list[str]) -> str:
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    return result.stdout.strip()
+
+
+def get_focused_workspace() -> int:
+    output = run_cmd(["leftwm-state", "--quit"])
+    workspaces = json.loads(output)["workspaces"]
+    for ws in workspaces:
+        if any(tag.get("mine") and tag.get("focused") for tag in ws.get("tags", [])):
+            return ws["index"]
+    raise RuntimeError("No focused workspace found")
+
+
+def ensure_tmux_session(session_name: str) -> None:
+    result = subprocess.run(
+        ["tmux", "has-session", "-t", session_name], capture_output=True
+    )
+    if result.returncode != 0:
+        run_cmd(["tmux", "new-session", "-ds", session_name])
+
+
+def launch_in_tmux(
+    command: str,
+    window_name: str,
+    session_name: str,
+) -> None:
+    ensure_tmux_session(session_name)
+    target = f"{session_name}:"
+    run_cmd(["tmux", "new-window", "-d", "-n", window_name, "-t", target, command])
+
+
+def main() -> None:
+    session_name = os.environ.get("BG_TMUX_SESSION", "bg")
+    try:
+        cws = get_focused_workspace()
+    except (subprocess.CalledProcessError, json.JSONDecodeError, RuntimeError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    for idx, app in enumerate(APPS):
+        run_cmd(["leftwm-command", f"SendWorkspaceToTag {cws} {idx}"])
+        window_name = app.split()[0]
+        launch_in_tmux(app, window_name, session_name)
+        time.sleep(0.3)
+    run_cmd(["tmux", "attach-session", "-t", session_name])
+
+
+if __name__ == "__main__":
+    main()
