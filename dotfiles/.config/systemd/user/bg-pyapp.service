@@ -1,6 +1,5 @@
 [Unit]
 Description=Background helper python app
-After=graphical-session-pre.target
 
 [Service]
 ExecStart=%h/.local/bin/dienpy app
@@ -8,4 +7,4 @@ Restart=always
 RestartSec=15
 
 [Install]
-WantedBy=graphical-session.target
+WantedBy=default.target
