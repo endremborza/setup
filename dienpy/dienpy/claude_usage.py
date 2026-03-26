@@ -3,6 +3,7 @@ import requests
 import datetime
 import argparse
 import time
+import os
 
 from pathlib import Path
 
@@ -46,6 +47,8 @@ def main():
     parser.add_argument("--w", "--watch", action="store_true", dest="watch")
     parser.add_argument("--interval", type=int, default=300)
     args = parser.parse_args()
+
+    os.system("clear")
 
     progress = Progress(
         TextColumn("[bold]{task.fields[label]}"),
