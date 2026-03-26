@@ -709,7 +709,7 @@ local function force_refresh_gitsigns()
   if gs then pcall(gs.reset_base, true) end
 end
 
-vim.keymap.set('n', '<leader>gs', ":Git status<enter>", { desc = '[G]it [S]tatus' })
+vim.keymap.set('n', '<leader>gs', ":Git<enter>", { desc = '[G]it [S]tatus' })
 vim.keymap.set('n', '<leader>gd', ":Gdiffsplit<enter>", { desc = '[G]it [D]iff' })
 vim.keymap.set('n', '<leader>ga', ":Git add %<enter>", { desc = '[G]it [A]dd' })
 vim.keymap.set('n', '<leader>gc', ":Git commit -m \"\"<Left>", { desc = '[G]it [C]ommit' })
