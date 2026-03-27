@@ -212,7 +212,13 @@ class _PerfResult:
 def _load_verify_config() -> _ProjectConfig:
     if _VERIFY_CONFIG_FILE.exists():
         data = json.loads(_VERIFY_CONFIG_FILE.read_text())
-        return _ProjectConfig(**{k: v for k, v in data.items() if k in _ProjectConfig.__dataclass_fields__})
+        return _ProjectConfig(
+            **{
+                k: v
+                for k, v in data.items()
+                if k in _ProjectConfig.__dataclass_fields__
+            }
+        )
     return _ProjectConfig()
 
 
@@ -240,7 +246,9 @@ def _pick_test_files(project_path: str, ext: str, count: int = 2) -> list[Path]:
     return found
 
 
-def _run_headless_verify(target_file: Path, env_extra: dict[str, str] | None = None) -> _VerifyResult:
+def _run_headless_verify(
+    target_file: Path, env_extra: dict[str, str] | None = None
+) -> _VerifyResult:
     with tempfile.NamedTemporaryFile(suffix=".lua", mode="w", delete=False) as tmp:
         tmp.write(_LUA_VERIFY)
         lua_path = tmp.name
@@ -253,11 +261,17 @@ def _run_headless_verify(target_file: Path, env_extra: dict[str, str] | None = N
     try:
         result = subprocess.run(
             [
-                "nvim", "--headless",
-                "--cmd", f"let g:verify_target_file = '{target_file}'",
-                "-c", f"luafile {lua_path}",
+                "nvim",
+                "--headless",
+                "--cmd",
+                f"let g:verify_target_file = '{target_file}'",
+                "-c",
+                f"luafile {lua_path}",
             ],
-            capture_output=True, text=True, timeout=25, env=env,
+            capture_output=True,
+            text=True,
+            timeout=25,
+            env=env,
         )
         wall_ms = int((time.monotonic() - wall_start) * 1000)
         output = result.stdout + result.stderr
@@ -275,8 +289,15 @@ def _run_headless_verify(target_file: Path, env_extra: dict[str, str] | None = N
                     raw=data,
                 )
             if line.startswith("TIMEOUT:"):
-                return _VerifyResult(file=str(target_file), timed_out=True, wall_ms=wall_ms)
-        return _VerifyResult(file=str(target_file), errors=1, wall_ms=wall_ms, raw={"stderr": result.stderr[:500]})
+                return _VerifyResult(
+                    file=str(target_file), timed_out=True, wall_ms=wall_ms
+                )
+        return _VerifyResult(
+            file=str(target_file),
+            errors=1,
+            wall_ms=wall_ms,
+            raw={"stderr": result.stderr[:500]},
+        )
     except subprocess.TimeoutExpired:
         wall_ms = int((time.monotonic() - wall_start) * 1000)
         return _VerifyResult(file=str(target_file), timed_out=True, wall_ms=wall_ms)
@@ -293,11 +314,16 @@ def _run_headless_perf(file1: Path, file2: Path, has_git: bool) -> _PerfResult:
     try:
         result = subprocess.run(
             [
-                "nvim", "--headless",
-                "--cmd", f"let g:perf_file1 = '{file1}' | let g:perf_file2 = '{file2}' | let g:perf_has_fugitive = {'1' if has_git else '0'}",
-                "-c", f"luafile {lua_path}",
+                "nvim",
+                "--headless",
+                "--cmd",
+                f"let g:perf_file1 = '{file1}' | let g:perf_file2 = '{file2}' | let g:perf_has_fugitive = {'1' if has_git else '0'}",
+                "-c",
+                f"luafile {lua_path}",
             ],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         wall_ms = int((time.monotonic() - wall_start) * 1000)
         output = result.stdout + result.stderr
@@ -339,7 +365,9 @@ def _print_verify_result(label: str, result: _VerifyResult, perf: bool) -> bool:
     print(f"  [{label}] {status}")
     print(f"    file:    {result.file}")
     print(f"    clients: {clients_str}")
-    print(f"    attach:  {result.attach_ms}ms  total: {result.total_ms}ms  wall: {result.wall_ms}ms")
+    print(
+        f"    attach:  {result.attach_ms}ms  total: {result.total_ms}ms  wall: {result.wall_ms}ms"
+    )
     if result.warns:
         print(f"    warns:   {result.warns}")
     if result.raw.get("stderr"):
@@ -350,7 +378,9 @@ def _print_verify_result(label: str, result: _VerifyResult, perf: bool) -> bool:
     if perf:
         threshold = _PERF_THRESHOLDS.get(label, 8000)
         if result.wall_ms > threshold:
-            print(f"    ⚠ SLOW: wall time {result.wall_ms}ms exceeds {threshold}ms threshold")
+            print(
+                f"    ⚠ SLOW: wall time {result.wall_ms}ms exceeds {threshold}ms threshold"
+            )
             ok = False
     return ok
 
@@ -377,9 +407,12 @@ def _print_perf_result(label: str, perf: _PerfResult) -> bool:
 
 def _verify_main(args: argparse.Namespace) -> None:
     cfg = _load_verify_config()
-    if args.rust:   cfg.rust   = args.rust
-    if args.svelte: cfg.svelte = args.svelte
-    if args.python: cfg.python = args.python
+    if args.rust:
+        cfg.rust = args.rust
+    if args.svelte:
+        cfg.svelte = args.svelte
+    if args.python:
+        cfg.python = args.python
 
     if args.show_config:
         print(json.dumps(asdict(cfg), indent=2))
@@ -390,7 +423,7 @@ def _verify_main(args: argparse.Namespace) -> None:
         print(f"Saved config to {_VERIFY_CONFIG_FILE}")
 
     targets: list[tuple[str, str, str]] = [
-        ("rust",   cfg.rust,   "rs"),
+        ("rust", cfg.rust, "rs"),
         ("svelte", cfg.svelte, "svelte"),
         ("python", cfg.python, "py"),
     ]
@@ -425,22 +458,133 @@ def _verify_main(args: argparse.Namespace) -> None:
 
         if args.perf and len(test_files) >= 2:
             has_git = (Path(project_path) / ".git").is_dir()
-            print(f"  [{label}] perf test ({test_files[0].name} → {test_files[1].name})...")
+            print(
+                f"  [{label}] perf test ({test_files[0].name} → {test_files[1].name})..."
+            )
             perf = _run_headless_perf(test_files[0], test_files[1], has_git)
             if not _print_perf_result(label, perf):
                 all_ok = False
 
     print("=" * 50)
     if ran == 0:
-        print("No projects configured. Run with --rust/--svelte/--python <path> --save to set up.")
+        print(
+            "No projects configured. Run with --rust/--svelte/--python <path> --save to set up."
+        )
         sys.exit(1)
 
     print("PASS" if all_ok else "FAIL")
     sys.exit(0 if all_ok else 1)
 
 
+# === smoke ===
+
+_LUA_SMOKE = r"""
+local files = vim.g.smoke_files and vim.json.decode(vim.g.smoke_files) or {}
+local results = {}
+local idx = 0
+
+local function next_file()
+  idx = idx + 1
+  if idx > #files then
+    io.write("SMOKE:" .. vim.json.encode(results) .. "\n")
+    io.flush()
+    vim.cmd("qa!")
+    return
+  end
+
+  local path = files[idx]
+  vim.cmd("edit " .. path)
+  vim.defer_fn(function()
+    vim.api.nvim_buf_set_lines(0, 0, 0, false, { "/" })
+    vim.v.errmsg = ""
+    vim.api.nvim_exec_autocmds("TextChangedI", { buffer = 0 })
+    vim.defer_fn(function()
+      results[path] = vim.v.errmsg ~= "" and vim.v.errmsg or nil
+      next_file()
+    end, 300)
+  end, 300)
+end
+
+next_file()
+"""
+
+
+@dataclass
+class _SmokeResult:
+    errors: dict[str, str] = field(default_factory=dict)
+    raw_output: str = ""
+
+
+def _run_headless_smoke(files: list[Path]) -> _SmokeResult:
+    with tempfile.NamedTemporaryFile(suffix=".lua", mode="w", delete=False) as tmp:
+        tmp.write(_LUA_SMOKE)
+        lua_path = tmp.name
+
+    files_json = json.dumps([str(f) for f in files])
+    try:
+        result = subprocess.run(
+            [
+                "nvim",
+                "--headless",
+                "--cmd",
+                f"let g:smoke_files = '{files_json}'",
+                "-c",
+                f"luafile {lua_path}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        output = result.stdout + result.stderr
+        for line in output.splitlines():
+            if line.startswith("SMOKE:"):
+                data = json.loads(line.removeprefix("SMOKE:"))
+                errors = (
+                    {k: v for k, v in data.items() if v}
+                    if isinstance(data, dict)
+                    else {}
+                )
+                return _SmokeResult(errors=errors)
+        return _SmokeResult(raw_output=output[:500])
+    except subprocess.TimeoutExpired:
+        return _SmokeResult(raw_output="TIMEOUT")
+    finally:
+        Path(lua_path).unlink(missing_ok=True)
+
+
+def _smoke_main(args: argparse.Namespace) -> None:
+    if args.files:
+        files = [Path(f) for f in args.files]
+    else:
+        # create temp files of common types to exercise completion autocmds
+        import tempfile as _tf
+
+        tmp_files = []
+        for suffix in (".md", ".py"):
+            f = _tf.NamedTemporaryFile(suffix=suffix, mode="w", delete=False)
+            f.write("")
+            f.close()
+            tmp_files.append(Path(f.name))
+        files = tmp_files
+
+    print(f"smoke testing {len(files)} file(s)...")
+    result = _run_headless_smoke(files)
+
+    if result.raw_output:
+        print(f"FAIL (no SMOKE output)\n{result.raw_output}")
+        sys.exit(1)
+
+    if result.errors:
+        for path, err in result.errors.items():
+            print(f"  FAIL {path}: {err}")
+        sys.exit(1)
+
+    print("PASS")
+
+
 # === commit ===
 
+# TODO: not DRY enough
 _DOTFILES_ROOT = COMPOSITES_DIR / "pkm" / "diencephalon"
 _DOTFILES_NVIM = _DOTFILES_ROOT / "dotfiles" / ".config" / "nvim"
 
@@ -456,7 +600,10 @@ def _changed_nvim_files(cwd: Path) -> list[str]:
 
 def _format_plugin_versions(lock: dict[str, dict], top_n: int = 20) -> str:
     items = sorted(lock.items())[:top_n]
-    lines = [f"  {name:<40} {info['commit'][:10]}  ({info.get('branch', '')})" for name, info in items]
+    lines = [
+        f"  {name:<40} {info['commit'][:10]}  ({info.get('branch', '')})"
+        for name, info in items
+    ]
     if len(lock) > top_n:
         lines.append(f"  ... and {len(lock) - top_n} more (see lazy-lock.json)")
     return "\n".join(lines)
@@ -499,7 +646,9 @@ def _commit_main(args: argparse.Namespace) -> None:
 
     result = subprocess.run(
         ["git", "commit", "-m", commit_msg],
-        cwd=_DOTFILES_ROOT, text=True, capture_output=True,
+        cwd=_DOTFILES_ROOT,
+        text=True,
+        capture_output=True,
     )
     if result.returncode != 0:
         raise SystemExit(f"git commit failed:\n{result.stderr}")
@@ -524,7 +673,8 @@ def _git_remote(plugin_dir: Path) -> str | None:
     try:
         return subprocess.check_output(
             ["git", "-C", str(plugin_dir), "remote", "get-url", "origin"],
-            stderr=subprocess.DEVNULL, text=True,
+            stderr=subprocess.DEVNULL,
+            text=True,
         ).strip()
     except subprocess.CalledProcessError:
         return None
@@ -551,7 +701,11 @@ def _collect_plugins(lock: dict[str, dict]) -> list[_PluginInfo]:
         if not parsed:
             continue
         owner, repo = parsed
-        plugins.append(_PluginInfo(name=name, owner=owner, repo=repo, current_commit=info["commit"]))
+        plugins.append(
+            _PluginInfo(
+                name=name, owner=owner, repo=repo, current_commit=info["commit"]
+            )
+        )
     return plugins
 
 
@@ -580,7 +734,11 @@ def _fetch_releases(owner: str, repo: str, headers: dict, limit: int = 5) -> lis
 
 
 def _format_plugin_notes(plugin: _PluginInfo, releases: list[dict]) -> str:
-    lines = [f"# {plugin.owner}/{plugin.repo}", f"Current commit: `{plugin.current_commit[:12]}`", ""]
+    lines = [
+        f"# {plugin.owner}/{plugin.repo}",
+        f"Current commit: `{plugin.current_commit[:12]}`",
+        "",
+    ]
     if not releases:
         lines.append("_No releases found (tag-only or private repo)_\n")
         return "\n".join(lines)
@@ -639,27 +797,61 @@ def _rn_main(args: argparse.Namespace) -> None:
 
 # === entry point ===
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="nvim tooling")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    p_verify = sub.add_parser("verify", help="Headless LSP verification against test projects")
-    p_verify.add_argument("--rust",        default=None, help="Path to a Rust project")
-    p_verify.add_argument("--svelte",      default=None, help="Path to a Svelte project")
-    p_verify.add_argument("--python",      default=None, help="Path to a Python project")
-    p_verify.add_argument("--save",        action="store_true", help="Save provided paths as defaults")
-    p_verify.add_argument("--show-config", action="store_true", help="Print current config and exit")
-    p_verify.add_argument("--perf",        action="store_true", help="Enforce performance thresholds")
+    p_verify = sub.add_parser(
+        "verify", help="Headless LSP verification against test projects"
+    )
+    p_verify.add_argument("--rust", default=None, help="Path to a Rust project")
+    p_verify.add_argument("--svelte", default=None, help="Path to a Svelte project")
+    p_verify.add_argument("--python", default=None, help="Path to a Python project")
+    p_verify.add_argument(
+        "--save", action="store_true", help="Save provided paths as defaults"
+    )
+    p_verify.add_argument(
+        "--show-config", action="store_true", help="Print current config and exit"
+    )
+    p_verify.add_argument(
+        "--perf", action="store_true", help="Enforce performance thresholds"
+    )
 
-    p_commit = sub.add_parser("commit", help="Commit nvim config with plugin version snapshot")
-    p_commit.add_argument("--message", "-m", default="", help="Extra commit message prefix")
-    p_commit.add_argument("--dry-run",       action="store_true", help="Print commit message without committing")
-    p_commit.add_argument("--all",           action="store_true", help="Stage all nvim changes (default: only init.lua)")
+    p_commit = sub.add_parser(
+        "commit", help="Commit nvim config with plugin version snapshot"
+    )
+    p_commit.add_argument(
+        "--message", "-m", default="", help="Extra commit message prefix"
+    )
+    p_commit.add_argument(
+        "--dry-run", action="store_true", help="Print commit message without committing"
+    )
+    p_commit.add_argument(
+        "--all",
+        action="store_true",
+        help="Stage all nvim changes (default: only init.lua)",
+    )
 
-    p_rn = sub.add_parser("release_notes", help="Fetch release notes for nvim and all lazy plugins")
-    p_rn.add_argument("--token",     default=os.environ.get("GITHUB_TOKEN"), help="GitHub API token")
-    p_rn.add_argument("--limit",     type=int, default=5, help="Max releases per plugin (default 5)")
-    p_rn.add_argument("--nvim-only", action="store_true", help="Only fetch nvim release notes")
+    p_rn = sub.add_parser(
+        "release_notes", help="Fetch release notes for nvim and all lazy plugins"
+    )
+    p_rn.add_argument(
+        "--token", default=os.environ.get("GITHUB_TOKEN"), help="GitHub API token"
+    )
+    p_rn.add_argument(
+        "--limit", type=int, default=5, help="Max releases per plugin (default 5)"
+    )
+    p_rn.add_argument(
+        "--nvim-only", action="store_true", help="Only fetch nvim release notes"
+    )
+
+    p_smoke = sub.add_parser(
+        "smoke", help="Smoke-test runtime autocmd/completion behavior (non-LSP)"
+    )
+    p_smoke.add_argument(
+        "files", nargs="*", help="Files to test (default: temp .md and .py files)"
+    )
 
     args = parser.parse_args()
     if args.cmd == "verify":
@@ -668,10 +860,12 @@ def main() -> None:
         _commit_main(args)
     elif args.cmd == "release_notes":
         _rn_main(args)
+    elif args.cmd == "smoke":
+        _smoke_main(args)
 
 
 def get_completions(args: list[str]) -> list[str]:
-    subcmds = ["verify", "commit", "release_notes"]
+    subcmds = ["verify", "commit", "release_notes", "smoke"]
     if not args or args[0] not in subcmds:
         return subcmds
     subcmd, rest = args[0], args[1:]
