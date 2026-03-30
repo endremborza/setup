@@ -1,9 +1,0 @@
-[init]
-	defaultBranch = main
-[user]
-	name = Endre Márk Borza
-	email = endremborza@gmail.com
-[receive]
-	denyCurrentBranch = updateInstead
-[pull]
-	rebase = false
