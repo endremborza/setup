@@ -1,50 +1,35 @@
-import json
-import requests
-import datetime
 import argparse
-import time
+import datetime
 import os
-
-from pathlib import Path
+import time
 
 from rich.console import Console, Group
 from rich.live import Live
+from rich.progress import BarColumn, Progress, TextColumn
 from rich.rule import Rule
-from rich.progress import Progress, BarColumn, TextColumn
+
+from . import auth
 
 console = Console()
+_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 
 
-def find_token():
-    path = Path.home() / ".claude" / ".credentials.json"
-    with path.open() as f:
-        data = json.load(f)
-        return data["claudeAiOauth"]["accessToken"]
-
-
-def get_usage():
-    token = find_token()
-    url = "https://api.anthropic.com/api/oauth/usage"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "anthropic-beta": "oauth-2025-04-20",
-    }
-    r = requests.get(url, headers=headers)
+def _get_usage() -> dict:
+    r = auth.request("get", _USAGE_URL)
     r.raise_for_status()
     return r.json()
 
 
-def percent_time_elapsed(resets_at, total_seconds):
+def _percent_time_elapsed(resets_at: str, total_seconds: int) -> float:
     reset = datetime.datetime.fromisoformat(resets_at)
     now = datetime.datetime.now(datetime.timezone.utc)
     elapsed = total_seconds - (reset - now).total_seconds()
-    pct = max(0, min(100, (elapsed / total_seconds) * 100))
-    return pct
+    return max(0.0, min(100.0, (elapsed / total_seconds) * 100))
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--w", "--watch", action="store_true", dest="watch")
+    parser.add_argument("--watch", "-w", action="store_true")
     parser.add_argument("--interval", type=int, default=300)
     args = parser.parse_args()
 
@@ -56,7 +41,6 @@ def main():
         BarColumn(bar_width=40),
         expand=False,
     )
-
     five_usage_task = progress.add_task("", total=100, label="5-Hour Usage")
     five_time_task = progress.add_task("", total=100, label="5-Hour Time")
     seven_usage_task = progress.add_task("", total=100, label="7-Day Usage")
@@ -65,7 +49,7 @@ def main():
     five_resets_at = [""]
     week_resets_at = [""]
 
-    def render():
+    def render() -> Group:
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return Group(
             Rule("[bold]Claude Code Usage[/bold]"),
@@ -74,37 +58,26 @@ def main():
             f"[dim]Last updated: {timestamp}  |  5h resets: {five_resets_at[0]} | 1w resets: {week_resets_at[0]}[/dim]",
         )
 
-    def update_values():
-        usage = get_usage()
+    def update_values() -> None:
+        usage = _get_usage()
         five = usage["five_hour"]
         seven = usage["seven_day"]
-
-        five_usage = five["utilization"]
-        seven_usage = seven["utilization"]
-
-        try:
-            five_time = percent_time_elapsed(five["resets_at"], 5 * 3600)
-            seven_time = percent_time_elapsed(seven["resets_at"], 7 * 24 * 3600)
-        except Exception as e:
-            print(usage)
-            raise e
 
         five_resets_at[0] = (
             datetime.datetime.fromisoformat(five["resets_at"])
             .astimezone()
             .strftime("%H:%M")
         )
-
         week_resets_at[0] = (
             datetime.datetime.fromisoformat(seven["resets_at"])
             .astimezone()
             .strftime("%a, %H")
         )
 
-        progress.update(five_usage_task, completed=five_usage)
-        progress.update(seven_usage_task, completed=seven_usage)
-        progress.update(five_time_task, completed=five_time)
-        progress.update(seven_time_task, completed=seven_time)
+        progress.update(five_usage_task, completed=five["utilization"])
+        progress.update(five_time_task, completed=_percent_time_elapsed(five["resets_at"], 5 * 3600))
+        progress.update(seven_usage_task, completed=seven["utilization"])
+        progress.update(seven_time_task, completed=_percent_time_elapsed(seven["resets_at"], 7 * 24 * 3600))
 
     if args.watch:
         try:
@@ -114,7 +87,6 @@ def main():
                         update_values()
                     except Exception as e:
                         print(type(e).__name__)
-
                     live.update(render())
                     time.sleep(args.interval)
         except KeyboardInterrupt:
@@ -126,7 +98,3 @@ def main():
 
 def get_completions(args: list[str]) -> list[str]:
     return ["--watch", "--interval"]
-
-
-if __name__ == "__main__":
-    main()
