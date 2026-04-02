@@ -310,6 +310,7 @@ require('lazy').setup({
 
       local search_flags = {
         "--no-ignore-vcs",
+        "--follow",
         "--ignore-file", ignore_file,
         '--hidden',
       }
