@@ -6,7 +6,7 @@ from pathlib import Path
 
 from . import _cache, _client
 
-_DEFAULT_MODEL = "gemini-flash-latest"
+_DEFAULT_MODEL = "local"
 _DEFAULT_FILES = ["README.md", "AGENTS.md", "CLAUDE.md"]
 
 _SYSTEM_PROMPT = """\
@@ -23,12 +23,15 @@ context (CLAUDE.md, AGENTS.md, README.md) shows this convention is already in us
 
 
 def _build_context(files: list[str]) -> str:
-    parts: list[str] = []
+    file_parts: dict[str, str] = {}
+
     for name in files:
         path = Path(name)
         if path.exists():
-            parts.append(f'<file name="{name}">\n{path.read_text()}\n</file>')
-
+            part_txt = path.read_text()
+            if part_txt not in file_parts.values():
+                file_parts[name] = part_txt
+    parts = [f'<file name="{k}">\n{v}\n</file>' for k, v in file_parts.items()]
     diff = subprocess.run(["git", "diff", "--staged"], capture_output=True, text=True)
     if diff.returncode != 0:
         raise SystemExit(f"git diff --staged failed: {diff.stderr.strip()}")
@@ -60,7 +63,11 @@ def main() -> None:
     args = parser.parse_args()
 
     context = _build_context(args.files)
-    print(_client.send(args.model, _SYSTEM_PROMPT, context, effort=args.effort))
+    print(
+        _client.send(
+            args.model, _SYSTEM_PROMPT, context, temperature=0.2, effort=args.effort
+        )
+    )
 
 
 def get_completions(args: list[str]) -> list[str]:

@@ -5,9 +5,9 @@ import sys
 
 from . import _cache, _client
 
-_PROVIDERS = {
-    "anthropic": _client.fetch_anthropic_models,
-    "google": _client.fetch_google_models,
+_PROVIDERS: dict[str, _client.Client] = {
+    "anthropic": _client.AnthropicClient(),
+    "google": _client.GoogleClient(),
 }
 
 
@@ -26,7 +26,7 @@ def main() -> None:
     for provider in targets:
         if args.refresh or _cache.needs_refresh(provider):
             try:
-                models = _PROVIDERS[provider]()
+                models = _PROVIDERS[provider].fetch_models()
                 _cache.save(provider, models)
                 print(f"[{provider}] {len(models)} models cached.", file=sys.stderr)
             except SystemExit as e:
