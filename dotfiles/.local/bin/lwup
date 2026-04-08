@@ -5,7 +5,7 @@ import subprocess
 import sys
 import time
 
-AB = "alacritty -e ttss"
+AB = "alacritty -e cril ttss"
 APPS = ["firefox", AB, AB, "logseq", AB, AB, "~/.xinitrc"]
 
 
@@ -29,6 +29,12 @@ def ensure_tmux_session(session_name: str) -> None:
     )
     if result.returncode != 0:
         run_cmd(["tmux", "new-session", "-ds", session_name])
+    for var in ("DISPLAY", "XAUTHORITY"):
+        val = os.environ.get(var)
+        if val:
+            subprocess.run(
+                ["tmux", "set-environment", "-g", var, val], capture_output=True
+            )
 
 
 def launch_in_tmux(
