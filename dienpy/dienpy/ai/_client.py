@@ -10,6 +10,8 @@ EFFORT_BUDGETS: dict[str, int | None] = {
     "high": 32768,
 }
 
+LOCAL_URL = "http://localhost:8081/v1/chat/completions"
+
 
 class Client(ABC):
     @abstractmethod
@@ -78,19 +80,26 @@ class AnthropicClient(Client):
 
 
 class GoogleClient(Client):
+    def __init__(self) -> None:
+        self._client = None
+
     def _sdk_client(self):
+        if self._client is not None:
+            return self._client
         from google import genai
 
         api_key = os.environ.get("GEMINI_API_KEY")
         if api_key:
-            return genai.Client(api_key=api_key)
-        try:
-            return genai.Client()
-        except Exception:
-            raise SystemExit(
-                "Google auth not configured. Set GEMINI_API_KEY or run: "
-                "gcloud auth application-default login"
-            )
+            self._client = genai.Client(api_key=api_key)
+        else:
+            try:
+                self._client = genai.Client()
+            except Exception:
+                raise SystemExit(
+                    "Google auth not configured. Set GEMINI_API_KEY or run: "
+                    "gcloud auth application-default login"
+                )
+        return self._client
 
     def send(
         self,
@@ -163,8 +172,18 @@ class LocalClient(Client):
             body["repeat_penalty"] = frequency_penalty
         if presence_penalty is not None:
             body["presence_penalty"] = presence_penalty
-        r = requests.post("http://localhost:8080/v1/chat/completions", json=body)
-        r.raise_for_status()
+        r = requests.post(LOCAL_URL, json=body)
+        if not r.ok:
+            try:
+                detail = r.json().get("error", {})
+                msg = (
+                    detail.get("message") or detail
+                    if isinstance(detail, str)
+                    else str(detail)
+                )
+            except Exception:
+                msg = r.text
+            raise SystemExit(f"Local model error {r.status_code}: {msg}")
         return r.json()["choices"][0]["message"]["content"].strip()
 
     def fetch_models(self) -> list[str]:
