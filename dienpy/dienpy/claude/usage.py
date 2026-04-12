@@ -10,12 +10,19 @@ from rich.rule import Rule
 
 from . import auth
 
+
+class Http429(Exception):
+    pass
+
+
 console = Console()
 _USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 
 
 def _get_usage() -> dict:
     r = auth.request("get", _USAGE_URL)
+    if r.status_code == 429:
+        raise Http429()
     r.raise_for_status()
     return r.json()
 
@@ -75,9 +82,14 @@ def main() -> None:
         )
 
         progress.update(five_usage_task, completed=five["utilization"])
-        progress.update(five_time_task, completed=_percent_time_elapsed(five["resets_at"], 5 * 3600))
+        progress.update(
+            five_time_task, completed=_percent_time_elapsed(five["resets_at"], 5 * 3600)
+        )
         progress.update(seven_usage_task, completed=seven["utilization"])
-        progress.update(seven_time_task, completed=_percent_time_elapsed(seven["resets_at"], 7 * 24 * 3600))
+        progress.update(
+            seven_time_task,
+            completed=_percent_time_elapsed(seven["resets_at"], 7 * 24 * 3600),
+        )
 
     if args.watch:
         try:
