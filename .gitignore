@@ -9,3 +9,8 @@ venv/
 *.xpi
 snip-data
 history.txt
+
+# Claude Code harness state (not the stowed dotfiles/.claude/)
+/.claude/
+/dienpy/.claude/
+/setup/.claude/
