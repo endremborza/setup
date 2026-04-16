@@ -2,7 +2,9 @@ import json
 import random
 from pathlib import Path
 
-proot = Path("/home/borza/synced/assets/values")
+from .constants import ASSETS_DIR
+
+proot = ASSETS_DIR / "values"
 
 
 def get_name(s=None):
@@ -20,5 +22,9 @@ def get_name(s=None):
     return f"{rng.choice(p1)} {rng.choice(p2)} of {rng.choice(p3)}"
 
 
-if __name__ == "__main__":
+def main():
     print(get_name())
+
+
+if __name__ == "__main__":
+    main()

@@ -2,23 +2,9 @@
 name = "dienpy"
 dynamic = ["version", "description"]
 dependencies = [
-    "flask",
-    "flask-cors",
-    "html2text",
-    "pandas",
-    "pyarrow",
     "requests",
     "rich",
-    "beautifulsoup4",
-    "lxml",
-    "html5lib",
     "tabulate",
-    "brotli",
-    "arxiv",
-    "python-dotenv",
-    "pytz>=2026.1.post1",
-    "google-api-python-client>=2.192.0",
-    "google-auth>=2.49.1",
     "anthropic>=0.86.0",
     "google-genai>=1.68.0",
 ]
