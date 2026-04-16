@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+PLUGIN="$(npm root -g)/@prettier/plugin-xml/src/plugin.js"
+prettier --plugin="$PLUGIN" --parser=xml $@

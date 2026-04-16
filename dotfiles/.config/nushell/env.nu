@@ -48,16 +48,6 @@ def create_right_prompt [] {
     ([$last_exit_code, (char space), $time_segment] | str join)
 }
 
-def check_watch_history [] {
-    ls $'($env.LOGS_DIR)/watches' | each {|e| cat $e.name | from csv } | reduce {|l,r| $l | append $r}
-}
-
-def series_list [] { medroy-ls | lines | each {to nuon} }
-def medroy [series: string@series_list] { 
-	~/.local/bin/medroy $series
-}
-
-
 def "nu-complete dienpy-mods" [] {
     ^python -c 'import pkgutil, dienpy; print("\n".join(m.name for m in pkgutil.iter_modules(dienpy.__path__)))' 
     | lines
