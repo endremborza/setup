@@ -8,7 +8,7 @@ from rich.live import Live
 from rich.progress import BarColumn, Progress, TextColumn
 from rich.rule import Rule
 
-from . import auth
+from . import _auth as auth
 
 
 class Http429(Exception):
