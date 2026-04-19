@@ -7,6 +7,7 @@ dependencies = [
     "tabulate",
     "anthropic>=0.86.0",
     "google-genai>=1.68.0",
+    "setup",
 ]
 
 [project.scripts]
@@ -15,3 +16,6 @@ dienpy = "dienpy.__main__:main"
 [build-system]
 requires = ["flit_core >=3.2,<4"]
 build-backend = "flit_core.buildapi"
+
+[tool.uv.sources]
+setup = { path = "../setup", editable = true }
