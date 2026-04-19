@@ -1,0 +1,44 @@
+[lua]
+tag = "5.5.0"
+source = "lua.org"
+checked = "2026-04-18"
+
+[luarocks]
+tag = "3.13.0"
+source = "github:luarocks/luarocks"
+checked = "2026-04-18"
+
+[jq]
+tag = "jq-1.8.1"
+source = "github:jqlang/jq"
+checked = "2026-04-18"
+
+[neovim]
+tag = "v0.11.6"
+source = "github:neovim/neovim"
+checked = "2026-04-18"
+
+[fzf]
+tag = "v0.67.0"
+source = "github:junegunn/fzf"
+checked = "2026-04-18"
+
+[tmux]
+tag = "3.6a"
+source = "github:tmux/tmux"
+checked = "2026-04-18"
+
+[alacritty]
+tag = "v0.13.2"
+source = "github:alacritty/alacritty"
+checked = "2026-04-18"
+
+[nerd-fonts]
+tag = "v3.2.1"
+source = "github:ryanoasis/nerd-fonts"
+checked = "2026-04-18"
+
+[logseq]
+tag = "0.10.9"
+source = "github:logseq/logseq"
+checked = "2026-04-18"
