@@ -1,3 +1,11 @@
 from dienpy.cli import Dispatcher
 
-_dispatcher = Dispatcher.from_package("dienpy.versions", prog="dienpy versions")
+_dispatcher = Dispatcher(
+    prog="dienpy versions",
+    commands={
+        "list": "dienpy.versions.list",
+        "check": "dienpy.versions.check",
+        "bump": "dienpy.versions.bump",
+        "upgrade-system": "dienpy.versions.upgrade_system",
+    },
+)
