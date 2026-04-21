@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 
 import setup.steps  # noqa: F401 — registers all steps
-from setup.runner import REGISTRY, run, update
+from setup.runner import REGISTRY, run, update, verify
 
 
 def main() -> None:
@@ -11,14 +11,18 @@ def main() -> None:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     run_p = sub.add_parser("run", help="Run setup up to a given level")
-    run_p.add_argument("--level", "-l", type=int, default=1, help="Max level to run (0-4, default 1)")
-    run_p.add_argument("--dry-run", "-n", action="store_true", help="Show what would run without executing")
-    run_p.add_argument("--step", "-s", metavar="NAME", help="Run a single named step")
+    run_p.add_argument("--level", "-l", type=int, default=1)
+    run_p.add_argument("--dry-run", "-n", action="store_true")
+    run_p.add_argument("--step", "-s", metavar="NAME")
 
     upd_p = sub.add_parser("update", help="Re-run steps ignoring idempotency checks")
-    upd_p.add_argument("--step", "-s", metavar="NAME", help="Update a single named step")
+    upd_p.add_argument("--step", "-s", metavar="NAME")
 
-    sub.add_parser("list", help="List all registered steps")
+    sub.add_parser("list", help="List all registered steps with level, check, and verify")
+
+    ver_p = sub.add_parser("verify", help="Run verify commands for installed steps")
+    ver_p.add_argument("--level", "-l", type=int, default=1)
+    ver_p.add_argument("--step", "-s", metavar="NAME")
 
     args = parser.parse_args()
 
@@ -29,7 +33,11 @@ def main() -> None:
     elif args.cmd == "list":
         for s in REGISTRY:
             check = f"  [check: {s.check}]" if s.check else ""
-            print(f"  L{s.level}  {s.name}{check}")
+            vfy = f"  [verify: {s.verify}]" if s.verify else ""
+            print(f"  L{s.level}  {s.name}{check}{vfy}")
+    elif args.cmd == "verify":
+        ok = verify(level=args.level, step_name=args.step)
+        raise SystemExit(0 if ok else 1)
 
 
 if __name__ == "__main__":

@@ -13,11 +13,17 @@ class Step:
     name: str
     level: int
     check: str | None = None
+    verify: str | None = None
 
 
-def step(level: int, name: str, check: str | None = None) -> Callable:
+def step(
+    level: int,
+    name: str,
+    check: str | None = None,
+    verify: str | None = None,
+) -> Callable:
     def decorator(fn: Callable[[], None]) -> Callable[[], None]:
-        REGISTRY.append(Step(fn=fn, name=name, level=level, check=check))
+        REGISTRY.append(Step(fn=fn, name=name, level=level, check=check, verify=verify))
         return fn
 
     return decorator
@@ -58,3 +64,17 @@ def update(step_name: str | None = None) -> None:
             print(f"[ ok ] {s.name}")
         except Exception as e:
             print(f"[FAIL] {s.name}: {e}")
+
+
+def verify(level: int, step_name: str | None = None) -> bool:
+    steps = [s for s in _steps_for(level, step_name) if s.verify]
+    if not steps:
+        print("No verify commands registered for this level.")
+        return True
+    all_ok = True
+    for s in steps:
+        ok = _check_passes(s.verify)
+        print(f"{'[ ok ]' if ok else '[FAIL]'} {s.name}")
+        if not ok:
+            all_ok = False
+    return all_ok

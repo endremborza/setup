@@ -15,6 +15,7 @@ class ToolVersion:
     tag: str
     source: str
     checked: str
+    installed: str = ""
 
 
 def load() -> dict[str, ToolVersion]:
@@ -30,8 +31,10 @@ def dump(versions: dict[str, ToolVersion]) -> None:
             f'tag = "{tv.tag}"',
             f'source = "{tv.source}"',
             f'checked = "{tv.checked}"',
-            "",
         ]
+        if tv.installed:
+            lines.append(f'installed = "{tv.installed}"')
+        lines.append("")
     _TOML_PATH.write_text("\n".join(lines))
 
 

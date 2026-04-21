@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from setup.runner import REGISTRY, Step, run, update
+from setup.runner import REGISTRY, Step, run, update, verify
 
 
 @pytest.fixture(autouse=True)
@@ -105,3 +105,36 @@ def test_update_single_step():
 
     fn0.assert_called_once()
     fn1.assert_not_called()
+
+
+def test_verify_returns_true_when_all_pass():
+    REGISTRY.append(Step(fn=MagicMock(), name="a", level=0, verify="true"))
+    REGISTRY.append(Step(fn=MagicMock(), name="b", level=0, verify="true"))
+
+    with patch("setup.runner._check_passes", return_value=True):
+        assert verify(level=0) is True
+
+
+def test_verify_returns_false_on_failure():
+    REGISTRY.append(Step(fn=MagicMock(), name="a", level=0, verify="false"))
+
+    with patch("setup.runner._check_passes", return_value=False):
+        assert verify(level=0) is False
+
+
+def test_verify_skips_steps_without_verify():
+    REGISTRY.append(Step(fn=MagicMock(), name="no-verify", level=0))
+
+    with patch("setup.runner._check_passes") as mock_check:
+        verify(level=0)
+    mock_check.assert_not_called()
+
+
+def test_verify_respects_level():
+    REGISTRY.append(Step(fn=MagicMock(), name="l0", level=0, verify="true"))
+    REGISTRY.append(Step(fn=MagicMock(), name="l2", level=2, verify="true"))
+
+    with patch("setup.runner._check_passes", return_value=True) as mock_check:
+        verify(level=1)
+
+    assert mock_check.call_count == 1

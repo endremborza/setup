@@ -4,6 +4,9 @@ ENV PATH="/root/.local/bin:/root/.cargo/bin:$PATH"
 ENV DIENCEPHALON_PATH=/opt/diencephalon
 ENV DIEN_ROOT=/opt/diencephalon
 
+# Full level-0 + level-1 build. Expensive (neovim from source, lua, tmux, fzf).
+# Do not run in standard CI — gate behind a nightly or manual trigger.
+
 RUN apt-get update && apt-get install -y sudo curl git make && \
     rm -rf /var/lib/apt/lists/* && \
     echo 'root ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
@@ -12,10 +15,5 @@ WORKDIR /opt/diencephalon
 COPY . .
 
 RUN make install-uv
-
-# Level 0: real install (apt-base, rust, rclone)
-RUN make setup-run LEVEL=0
-# Level 1: dry-run — validates step registration without expensive builds
-RUN make setup-dry-run LEVEL=1
-RUN make setup-verify LEVEL=0
-RUN make setup-list
+RUN make setup-run LEVEL=1
+RUN make setup-verify LEVEL=1

@@ -14,14 +14,14 @@ source = "github:jqlang/jq"
 checked = "2026-04-18"
 
 [neovim]
-tag = "v0.11.6"
+tag = "v0.12.1"
 source = "github:neovim/neovim"
-checked = "2026-04-18"
+checked = "2026-04-19"
 
 [fzf]
-tag = "v0.67.0"
+tag = "v0.71.0"
 source = "github:junegunn/fzf"
-checked = "2026-04-18"
+checked = "2026-04-19"
 
 [tmux]
 tag = "3.6a"
@@ -29,16 +29,26 @@ source = "github:tmux/tmux"
 checked = "2026-04-18"
 
 [alacritty]
-tag = "v0.13.2"
+tag = "v0.17.0"
 source = "github:alacritty/alacritty"
-checked = "2026-04-18"
+checked = "2026-04-19"
 
 [nerd-fonts]
-tag = "v3.2.1"
+tag = "v3.4.0"
 source = "github:ryanoasis/nerd-fonts"
-checked = "2026-04-18"
+checked = "2026-04-19"
 
 [logseq]
-tag = "0.10.9"
+tag = "0.10.15"
 source = "github:logseq/logseq"
-checked = "2026-04-18"
+checked = "2026-04-19"
+
+[bun]
+tag = "bun-v1.3.13"
+source = "github:oven-sh/bun"
+checked = "2026-04-21"
+
+[rust]
+tag = "1.95.0"
+source = "github:rust-lang/rust"
+checked = "2026-04-19"

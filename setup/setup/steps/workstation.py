@@ -6,8 +6,9 @@ from pathlib import Path
 
 from setup.runner import step
 from setup.util import apt_install, run_cmd, write_system_file, ONSET_PATH
+from setup.versions import get as _v
 
-_LOGSEQ_VERSION = "0.10.9"
+_LOGSEQ_VERSION = _v("logseq")
 
 _RFKILL_SERVICE = """\
 [Unit]

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from setup.runner import step
 from setup.util import apt_install, clone_gh, run_cmd, write_system_file, extended_env
+from setup.versions import get as _v
 
 _APT_DESKTOP = [
     "libxcb-xfixes0-dev",
@@ -30,8 +31,8 @@ _APT_DESKTOP = [
     "bluez",
 ]
 
-_ALACRITTY_TAG = "v0.13.2"
-_NERD_FONT_VERSION = "v3.2.1"
+_ALACRITTY_TAG = _v("alacritty")
+_NERD_FONT_VERSION = _v("nerd-fonts")
 _NERD_FONT_NAME = "UbuntuMono"
 
 
