@@ -2,6 +2,7 @@
 
 [ -f ~/.local-aliases ] && . ~/.local-aliases
 alias clopuh="claude --model claude-opus-4-7 --effort high"
+alias clopux="claude --model claude-opus-4-7 --effort xhigh"
 alias clopum="claude --model claude-opus-4-7 --effort max"
 alias clsoh="claude --model claude-sonnet-4-6 --effort high"
 alias clsom="claude --model claude-sonnet-4-6 --effort medium"
