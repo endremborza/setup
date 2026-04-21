@@ -15,7 +15,7 @@ Public, generalizable CLI toolkit — one entry point (`dienpy <module> [args...
 | `nvim` | Headless LSP verify, plugin release notes, commit helper |
 | `ai` | AI commit messages, model listing, caching |
 | `claude` | Claude API auth and usage tracking |
-| `check_versions` | Check upstream versions for tracked tools |
+| `versions` | Check and bump pinned tool versions (reads `setup/versions.toml`) |
 | `random_naming` | Generate random project names |
 | `upload_to_tmp_s3` | Upload file to temporary S3 bucket |
 
