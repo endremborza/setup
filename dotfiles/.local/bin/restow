@@ -6,15 +6,19 @@ SHARE_DIR=${SHARE_DIR:-/mnt/data/synced/share}
 cd "$DIEN_ROOT"
 stow --no-folding --verbose=1 --ignore=.claude -t ~ dotfiles
 
-cd "$HYPO_ROOT"
-stow --no-folding --verbose=1 -t ~ dotfiles
-stow --no-folding --verbose=1 -t ~ secrets
+if [ -d "$HYPO_ROOT" ]; then
+    cd "$HYPO_ROOT"
+    stow --no-folding --verbose=1 -t ~ dotfiles
+    stow --no-folding --verbose=1 -t ~ secrets
 
-cd "$HYPO_ROOT/local-dotfiles"
-stow --no-folding --verbose=1 -t ~ "host-$(hostname)"
+    cd "$HYPO_ROOT/local-dotfiles"
+    stow --no-folding --verbose=1 -t ~ "host-$(hostname)"
+fi
 
-cd "$DIEN_ROOT/dotfiles"
-stow --no-folding --verbose=1 -t "$SHARE_DIR/.claude" .claude
+if [ -d "$SHARE_DIR" ]; then
+    cd "$DIEN_ROOT/dotfiles"
+    stow --no-folding --verbose=1 -t "$SHARE_DIR/.claude" .claude
+fi
 
 # Generate environment.d for systemd user services
 # Sources each file in bash to expand variable references, then outputs KEY=VALUE
