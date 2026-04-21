@@ -5,10 +5,15 @@
 _proto_complete() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local args=("${COMP_WORDS[@]:1:$((COMP_CWORD-1))}")
-    local out
-    out=$("$1" --complete "${args[@]}" 2>/dev/null) || return
-    [[ -z "$out" ]] && return
     local IFS=$'\n'
-    mapfile -t COMPREPLY < <(compgen -W "$out" -- "$cur")
+    local -a candidates
+    mapfile -t candidates < <("$1" --complete "${args[@]}" 2>/dev/null)
+    [[ ${#candidates[@]} -eq 0 ]] && return
+    local cur_plain="${cur//\\ / }"
+    COMPREPLY=()
+    local c
+    for c in "${candidates[@]}"; do
+        [[ "$c" == "$cur_plain"* ]] && COMPREPLY+=("$c")
+    done
     [[ ${#COMPREPLY[@]} -gt 0 ]] && compopt -o filenames
 }
