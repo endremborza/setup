@@ -1,3 +1,4 @@
+"""Upload a file to a temporary S3 bucket."""
 import os
 import subprocess
 import sys

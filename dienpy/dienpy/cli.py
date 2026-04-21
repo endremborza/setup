@@ -68,13 +68,29 @@ class Dispatcher:
             result[cmd] = child.tree() if child is not None else None
         return result
 
+    def _get_doc(self, cmd: str) -> str:
+        target = self._commands[cmd]
+        if callable(target):
+            return (target.__doc__ or "").strip().split("\n")[0]
+        try:
+            mod = importlib.import_module(target)
+            return (mod.__doc__ or "").strip().split("\n")[0]
+        except ImportError:
+            return ""
+
     def run(self) -> None:
         argv = sys.argv[1:]
         cmds = self.commands()
 
         if not argv or argv[0] in ("-h", "--help"):
             print(f"Usage: {self._prog} <command> [args...]")
-            print(f"Commands: {', '.join(cmds)}")
+            if cmds:
+                width = max(len(c) for c in cmds)
+                print("Commands:")
+                for cmd in cmds:
+                    doc = self._get_doc(cmd)
+                    suffix = f"  {doc}" if doc else ""
+                    print(f"  {cmd:<{width}}{suffix}")
             return
 
         if argv[0] == "--complete":

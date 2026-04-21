@@ -1,3 +1,4 @@
+"""Pinned tool version management (check, bump, list, upgrade-system)."""
 from dienpy.cli import Dispatcher
 
 _dispatcher = Dispatcher(

@@ -1,3 +1,4 @@
+"""Generate random project names."""
 import json
 import random
 from pathlib import Path

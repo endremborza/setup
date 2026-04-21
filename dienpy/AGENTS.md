@@ -8,16 +8,10 @@ Public, generalizable CLI toolkit — one entry point (`dienpy <module> [args...
 - **Each module** is self-contained with a `main()` function and optionally a `get_completions(args: list[str]) -> list[str]` function for shell tab-completion, or is managed by `Dispatcher` in `dienpy.cli`
 - **Shell completion**: `dotfiles/.local/share/bash-completion/completions/dienpy` relies on `_proto_complete` calls `dienpy --complete [module] [args...]`
 
-## Current Modules
+## Discovering Commands
 
-| Module | Purpose |
-|--------|---------|
-| `nvim` | Headless LSP verify, plugin release notes, commit helper |
-| `ai` | AI commit messages, model listing, caching |
-| `claude` | Claude API auth and usage tracking |
-| `versions` | Check and bump pinned tool versions (reads `setup/versions.toml`) |
-| `random_naming` | Generate random project names |
-| `upload_to_tmp_s3` | Upload file to temporary S3 bucket |
+Run `dienpy --help` to list all commands with one-line descriptions (sourced from each module's `__doc__`).
+Run `dienpy <cmd> --help` for per-command usage.
 
 ## Adding a Module
 
