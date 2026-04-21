@@ -1,3 +1,4 @@
+"""Run system package upgrades for all pinned tools."""
 import argparse
 import os
 import shutil

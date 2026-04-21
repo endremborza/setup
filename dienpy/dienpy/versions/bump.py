@@ -1,3 +1,4 @@
+"""Bump a pinned tool version in versions.toml."""
 import sys
 
 from setup.versions import bump, load

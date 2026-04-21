@@ -1,3 +1,4 @@
+"""Check pinned tool versions against their latest releases."""
 import argparse
 import os
 
