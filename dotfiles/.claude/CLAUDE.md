@@ -14,9 +14,9 @@
 - When a mistake is made, take note of it in a persistent way, to avoid making it again.
 
 ## Decision Heuristics
-- Prefer simpler architecture over micro-optimizations unless performance is proven to be critical.
+- Prefer simpler architecture over micro-optimizations unless performance is declared to be critical.
 - Optimize only after identifying a bottleneck.
-- Avoid premature abstraction.
+- Avoid premature abstraction, but do strive to find the ideal one. This is also an issue where clarifying questions are encouraged.
 - If introducing a dependency, explain why it is superior to a small custom implementation.
 
 
