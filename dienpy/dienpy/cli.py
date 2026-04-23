@@ -7,9 +7,10 @@ import importlib
 import pkgutil
 import sys
 from collections.abc import Callable
-from types import ModuleType
 
 _SKIP = frozenset({"__main__", "__init__", "constants", "cli"})
+DISP_VAR = "_dispatcher"
+COMP_FUN = "get_completions"
 
 
 def handle_help(prog: str, summary: str = "") -> bool:
@@ -64,7 +65,7 @@ class Dispatcher:
             except ImportError:
                 result[cmd] = None
                 continue
-            child = getattr(mod, "_dispatcher", None)
+            child = getattr(mod, DISP_VAR, None)
             result[cmd] = child.tree() if child is not None else None
         return result
 
@@ -78,19 +79,50 @@ class Dispatcher:
         except ImportError:
             return ""
 
+    def _help_lines(self) -> list[str]:
+        cmds = self.commands()
+        lines = [f"Usage: {self._prog} <command> [args...]"]
+        if cmds:
+            width = max(len(c) for c in cmds)
+            lines.append("Commands:")
+            for cmd in cmds:
+                doc = self._get_doc(cmd)
+                suffix = f"  {doc}" if doc else ""
+                lines.append(f"  {cmd:<{width}}{suffix}")
+        return lines
+
+    def _collect_help_all(self, sections: list[list[str]]) -> None:
+        sections.append(self._help_lines())
+        for cmd in self.commands():
+            target = self._commands[cmd]
+            if callable(target):
+                continue
+            try:
+                mod = importlib.import_module(target)
+            except ImportError:
+                continue
+            child = getattr(mod, DISP_VAR, None)
+            if child is not None:
+                child._collect_help_all(sections)
+            else:
+                complete_fn = getattr(mod, COMP_FUN, None)
+                if complete_fn:
+                    subs = complete_fn([])
+                    if subs:
+                        sections.append([f"{self._prog} {cmd}", f"  {', '.join(subs)}"])
+
     def run(self) -> None:
         argv = sys.argv[1:]
         cmds = self.commands()
 
         if not argv or argv[0] in ("-h", "--help"):
-            print(f"Usage: {self._prog} <command> [args...]")
-            if cmds:
-                width = max(len(c) for c in cmds)
-                print("Commands:")
-                for cmd in cmds:
-                    doc = self._get_doc(cmd)
-                    suffix = f"  {doc}" if doc else ""
-                    print(f"  {cmd:<{width}}{suffix}")
+            print("\n".join(self._help_lines()))
+            return
+
+        if argv[0] == "--help-all":
+            sections: list[list[str]] = []
+            self._collect_help_all(sections)
+            print("\n\n".join("\n".join(s) for s in sections))
             return
 
         if argv[0] == "--complete":
@@ -120,20 +152,20 @@ class Dispatcher:
     def _load(
         self, cmd: str
     ) -> tuple[Callable[[], None], Callable[[list[str]], list[str]] | None]:
-        """Returns ``(run_fn, complete_fn | None)``.
+        f"""Returns ``(run_fn, complete_fn | None)``.
 
-        For module-backed commands, checks for a ``_dispatcher`` attribute first
-        (nested Dispatcher), then falls back to ``main`` / ``get_completions``.
+        For module-backed commands, checks for a ``{DISP_VAR}`` attribute first
+        (nested Dispatcher), then falls back to ``main`` / ``{COMP_FUN}``.
         Callable targets are wrapped so ``--help`` prints the docstring.
         """
         target = self._commands[cmd]
         if callable(target):
             return self._wrap_callable(cmd, target), None
         mod = importlib.import_module(target)
-        child = getattr(mod, "_dispatcher", None)
+        child = getattr(mod, DISP_VAR, None)
         if child is not None:
             return child.run, child.get_completions
-        return mod.main, getattr(mod, "get_completions", None)
+        return mod.main, getattr(mod, COMP_FUN, None)
 
     def _wrap_callable(self, cmd: str, fn: Callable[[], None]) -> Callable[[], None]:
         prog = f"{self._prog} {cmd}"
