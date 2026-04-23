@@ -12,6 +12,7 @@ Public, generalizable CLI toolkit — one entry point (`dienpy <module> [args...
 
 Run `dienpy --help` to list all commands with one-line descriptions (sourced from each module's `__doc__`).
 Run `dienpy <cmd> --help` for per-command usage.
+Run `dienpy --help-all` for a full recursive listing: all dispatcher levels expanded, plus subcommands/flags for each leaf module that exposes `get_completions`.
 
 ## Adding a Module
 
