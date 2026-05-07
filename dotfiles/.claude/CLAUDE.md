@@ -44,7 +44,7 @@
   - Unless specific performance requirements are noted
 - Type hints required, pyright works on my nvim setup
 - Tools: ruff does my formatting on my nvim, uv manages environments in .venv
-  - never use pip, always use uv, for scripts /mnt/data/pytools is a globally used environment that can be used
+  - never use pip, always use uv, for scripts try uv run by default (if .venv available, which will almost always be true in projects using python) us uv run for python scripts. otherwise /mnt/data/pytools is a globally used environment that can be used with some commonly used packages installed
 - Prefer dataclasses for structured data
 - Prefer functional design with minimal mutations for data heavy workloads
 
