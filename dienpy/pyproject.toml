@@ -8,6 +8,8 @@ dependencies = [
     "anthropic>=0.86.0",
     "google-genai>=1.68.0",
     "setup",
+    "kokoro-onnx>=0.5.0",
+    "sounddevice>=0.5.5",
 ]
 
 [project.scripts]
