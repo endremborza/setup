@@ -2,7 +2,7 @@ LEVEL ?= 1
 
 .PHONY: install install-uv install-dienpy \
         setup-run setup-verify setup-dry-run setup-list \
-        test docker-test docker-level1
+        test docker-test docker-ci
 
 install: install-dienpy
 
@@ -27,10 +27,10 @@ setup-list:
 test:
 	uv run --directory setup pytest
 
-# Level 0 for real, level 1 dry-run — fast CI gate
+# Full level 0+1 real build + verify (~30 min); replaces `dienpy versions upgrade-system --test`
 docker-test:
-	docker build -f setup/tests/Dockerfile -t diencephalon-setup-test .
+	docker build --progress=plain -f setup/tests/Dockerfile.level1 -t diencephalon-setup-test .
 
-# Full level 0+1 real build + verify — slow (~30 min)
-docker-level1:
-	docker build -f setup/tests/Dockerfile.level1 -t diencephalon-setup-level1 .
+# Fast CI gate: level 0 real + level 1 dry-run
+docker-ci:
+	docker build --progress=plain -f setup/tests/Dockerfile -t diencephalon-setup-ci .
