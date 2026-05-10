@@ -14,6 +14,7 @@ _APT_DESKTOP = [
     "libfreetype6-dev",
     "libfontconfig1-dev",
     "alsa-utils",
+    "libportaudio2",
     "pulseaudio",
     "pulseaudio-utils",
     "pulseaudio-module-bluetooth",
