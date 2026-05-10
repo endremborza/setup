@@ -5,7 +5,7 @@ ENV DIENCEPHALON_PATH=/opt/diencephalon
 ENV DIEN_ROOT=/opt/diencephalon
 
 # Full level-0 + level-1 build. Expensive (neovim from source, lua, tmux, fzf).
-# Do not run in standard CI — gate behind a nightly or manual trigger.
+# Run via: make docker-test
 
 RUN apt-get update && apt-get install -y sudo curl git make && \
     rm -rf /var/lib/apt/lists/* && \
@@ -15,5 +15,10 @@ WORKDIR /opt/diencephalon
 COPY . .
 
 RUN make install-uv
+
+# Ubuntu 24.04 ships /root/.profile; remove it so the restow step (level 0, runs before
+# rust) can stow dotfiles/.profile as a symlink without conflict.
+RUN rm -f /root/.profile
+
 RUN make setup-run LEVEL=1
 RUN make setup-verify LEVEL=1
