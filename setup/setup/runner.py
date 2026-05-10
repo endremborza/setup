@@ -33,6 +33,11 @@ def _check_passes(cmd: str) -> bool:
     return subprocess.run(cmd, shell=True, capture_output=True).returncode == 0
 
 
+def _run_check(cmd: str) -> tuple[bool, str]:
+    r = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    return r.returncode == 0, (r.stdout + r.stderr).strip()
+
+
 def _steps_for(level: int | None, step_name: str | None) -> list[Step]:
     if step_name is not None:
         matched = [s for s in REGISTRY if s.name == step_name]
@@ -73,8 +78,14 @@ def verify(level: int, step_name: str | None = None) -> bool:
         return True
     all_ok = True
     for s in steps:
-        ok = _check_passes(s.verify)
-        print(f"{'[ ok ]' if ok else '[FAIL]'} {s.name}")
+        ok, output = _run_check(s.verify)
+        if ok:
+            summary = output.splitlines()[0] if output else ""
+            print(f"[ ok ] {s.name}  {summary}")
+        else:
+            print(f"[FAIL] {s.name}  cmd={s.verify!r}")
+            for line in output.splitlines()[:8]:
+                print(f"       {line}")
         if not ok:
             all_ok = False
     return all_ok
