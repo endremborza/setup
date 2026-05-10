@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 from setup.runner import step
 from setup.util import apt_install, append_to_profile, run_cmd
 
@@ -31,8 +34,13 @@ _APT_BASE = [
     "tree",
     "btop",
     "libclang-dev",
+    "libgraphite2-3",
     "openssh-server",
 ]
+
+_DIENCEPHALON = Path(
+    os.environ.get("DIENCEPHALON_PATH", Path.home() / "repos/diencephalon")
+)
 
 
 @step(
@@ -44,6 +52,18 @@ _APT_BASE = [
 def install_apt_base() -> None:
     run_cmd("sudo apt-get update")
     apt_install(_APT_BASE)
+
+
+# Registered between apt-base and rust so that dotfiles/.profile is a stow symlink
+# before append_to_profile runs (which would otherwise create a conflicting real file).
+@step(
+    level=0,
+    name="restow",
+    check="test -f ~/.config/environment.d/10-vars.conf",
+    verify="test -f ~/.config/environment.d/10-vars.conf",
+)
+def run_restow() -> None:
+    run_cmd(f"bash {_DIENCEPHALON}/dotfiles/.local/bin/restow")
 
 
 @step(level=0, name="rust", check="rustc --version", verify="rustc --version")
