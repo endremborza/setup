@@ -1,6 +1,4 @@
-from __future__ import annotations
-
-import os
+import subprocess
 from pathlib import Path
 
 from setup.runner import step
@@ -22,8 +20,6 @@ _CARGO_TOOLS: list[tuple[str, str]] = [
     ("bat", "bat --version"),
     ("tree-sitter-cli", "tree-sitter --version"),
 ]
-
-_DIENCEPHALON = Path(os.environ.get("DIENCEPHALON_PATH", Path.home() / "repos/diencephalon"))
 
 
 @step(level=1, name="tectonic", check="tectonic --version", verify="tectonic --version")
@@ -86,8 +82,10 @@ def install_jq() -> None:
     run_cmd("git submodule update --init", cwd=dest)
     run_cmd("autoreconf -i", cwd=dest)
     run_cmd("./configure --with-oniguruma=builtin", cwd=dest)
-    run_cmd("make clean && make -j8", cwd=dest)
+    run_cmd("make clean", cwd=dest)
+    run_cmd("make -j8", cwd=dest)
     run_cmd("sudo make install", cwd=dest)
+    run_cmd("sudo ldconfig")
 
 
 @step(level=1, name="sc-im", check="sc-im --version", verify="sc-im --version")
@@ -131,17 +129,19 @@ def install_node() -> None:
         "sh -c 'curl https://raw.githubusercontent.com/creationix/nvm/master/install.sh | bash'"
     )
     nvm_dir = Path.home() / ".nvm"
-    run_cmd(
-        f"sh -c '. {nvm_dir}/nvm.sh && nvm install node'",
-        env={**extended_env(), "NVM_DIR": str(nvm_dir)},
+    nvm_env = {**extended_env(), "NVM_DIR": str(nvm_dir)}
+    run_cmd(f"sh -c '. {nvm_dir}/nvm.sh && nvm install node'", env=nvm_env)
+    # nvm installs node outside the system PATH; symlink into ~/.local/bin so it's always available
+    result = subprocess.run(
+        f"sh -c '. {nvm_dir}/nvm.sh && command -v node'",
+        shell=True,
+        capture_output=True,
+        text=True,
+        env=nvm_env,
     )
-
-
-@step(
-    level=1,
-    name="restow",
-    check="test -f ~/.config/environment.d/10-vars.conf",
-    verify="test -f ~/.config/environment.d/10-vars.conf",
-)
-def run_restow() -> None:
-    run_cmd(f"bash {_DIENCEPHALON}/dotfiles/.local/bin/restow")
+    if result.returncode == 0:
+        node_bin = Path(result.stdout.strip())
+        link = Path.home() / ".local/bin" / "node"
+        link.parent.mkdir(parents=True, exist_ok=True)
+        link.unlink(missing_ok=True)
+        link.symlink_to(node_bin)
