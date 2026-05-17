@@ -1,7 +1,9 @@
 #!/bin/bash
-DIEN_ROOT=${DIEN_ROOT:-/mnt/data/synced/composites/pkm/diencephalon}
-HYPO_ROOT=${HYPO_ROOT:-/mnt/data/synced/composites/pkm/hypothalamus}
-SHARE_DIR=${SHARE_DIR:-/mnt/data/synced/share}
+# TODO: this is repeated from .vars
+: "${SYNC_ROOT:=$HOME/synced}"
+DIEN_ROOT=${DIEN_ROOT:-$SYNC_ROOT/composites/pkm/diencephalon}
+HYPO_ROOT=${HYPO_ROOT:-$SYNC_ROOT/composites/pkm/hypothalamus}
+SHARE_DIR=${SHARE_DIR:-$SYNC_ROOT/share}
 
 cd "$DIEN_ROOT"
 stow --no-folding --verbose=1 --ignore=.claude -t ~ dotfiles
