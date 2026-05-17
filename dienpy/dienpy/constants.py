@@ -6,7 +6,7 @@ def _env_path(key: str, fallback: str) -> Path:
     return Path(os.environ.get(key, fallback))
 
 
-SYNC_ROOT = _env_path("SYNC_ROOT", "/mnt/data/synced")
+SYNC_ROOT = _env_path("SYNC_ROOT", str(Path.home() / "synced"))
 
 CODE_DIR = _env_path("CODE_DIR", str(SYNC_ROOT / "code"))
 COMPOSITES_DIR = _env_path("COMPOSITES_DIR", str(SYNC_ROOT / "composites"))
@@ -15,12 +15,13 @@ DATA_DIR = _env_path("DATA_DIR", str(SYNC_ROOT / "data"))
 ASSETS_DIR = _env_path("ASSETS_DIR", str(SYNC_ROOT / "assets"))
 MEDIA_DIR = _env_path("MEDIA_DIR", str(SYNC_ROOT / "media"))
 SHARE_DIR = _env_path("SHARE_DIR", str(SYNC_ROOT / "share"))
+ARCHIVE_DIR = _env_path("ARCHIVE_DIR", str(SYNC_ROOT / "archive"))
 
 PDF_STORE = FOLIOS_DIR / "pile"
 REPO_STORE = ASSETS_DIR / "repos"
 STANDALONE_ANALYSIS_BASES = DATA_DIR / "standalone"
 
-LOGS_DIR = _env_path("LOGS_DIR", "/mnt/data/logs")
+LOGS_DIR = _env_path("LOGS_DIR", str(SYNC_ROOT / "logs"))
 
 REMOTE_NAME = "gdrive"
 REMOTE_ROOT = "rcloned"
