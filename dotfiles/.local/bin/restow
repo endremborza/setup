@@ -10,11 +10,13 @@ stow --no-folding --verbose=1 --ignore=.claude -t ~ dotfiles
 
 if [ -d "$HYPO_ROOT" ]; then
     cd "$HYPO_ROOT"
-    stow --no-folding --verbose=1 -t ~ dotfiles
-    stow --no-folding --verbose=1 -t ~ secrets
+    [ -d dotfiles ] && stow --no-folding --verbose=1 -t ~ dotfiles
+    [ -d secrets ] && stow --no-folding --verbose=1 -t ~ secrets
 
-    cd "$HYPO_ROOT/local-dotfiles"
-    stow --no-folding --verbose=1 -t ~ "host-$(hostname)"
+    if [ -d "$HYPO_ROOT/local-dotfiles/host-$(hostname)" ]; then
+        cd "$HYPO_ROOT/local-dotfiles"
+        stow --no-folding --verbose=1 -t ~ "host-$(hostname)"
+    fi
 fi
 
 if [ -d "$SHARE_DIR" ]; then
