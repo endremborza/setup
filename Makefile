@@ -4,7 +4,7 @@ PROFILE_FLAGS := $(addprefix --profile ,$(PROFILES))
 
 .PHONY: install install-uv install-dienpy \
         setup-run setup-verify setup-dry-run setup-list \
-        test docker-test docker-ci
+        test docker-test docker-ci docker-bootstrap
 
 install: install-dienpy
 
@@ -36,3 +36,7 @@ docker-test:
 # Fast CI gate: base real + base+shell+dev dry-run
 docker-ci:
 	docker build --progress=plain -f setup/tests/Dockerfile -t diencephalon-setup-ci .
+
+# End-to-end bootstrap: clones diencephalon from a file:// URL and runs bootstrap.sh.
+docker-bootstrap:
+	docker build --progress=plain -f setup/tests/Dockerfile.bootstrap -t diencephalon-setup-bootstrap .
