@@ -35,8 +35,25 @@ network:
   renderer: NetworkManager
 """
 
+# Block Ubuntu's snap-shim transitional firefox (1:1snap1-0ubuntuN). Its epoch
+# (1:) outranks any Mozilla version, so unattended-upgrades silently swaps real
+# firefox for the snap shim. Priority -1 makes it uninstallable, leaving
+# Mozilla's apt build as the only candidate.
+_FIREFOX_NEGATIVE_PIN = """\
+Package: firefox*
+Pin: release o=Ubuntu
+Pin-Priority: -1
+"""
 
-@step(level=4, name="firefox-apt", check="dpkg -s firefox 2>/dev/null | grep -q 'Status: install ok'")
+# Mozilla version starts "DDD.D..." (e.g. 150.0.3~build1). The snap shim starts
+# with an epoch ("1:1snap1-..."), so an unanchored "starts with digits-dot" check
+# distinguishes them.
+_FIREFOX_CHECK = (
+    r"dpkg-query -W -f='${Version}' firefox 2>/dev/null | grep -qE '^[0-9]+\.[0-9]+'"
+)
+
+
+@step(profile="screen-apps", name="firefox-apt", check=_FIREFOX_CHECK)
 def setup_firefox_apt() -> None:
     run_cmd("sudo install -d -m 0755 /etc/apt/keyrings")
     run_cmd(
@@ -49,11 +66,20 @@ def setup_firefox_apt() -> None:
         Path("/etc/apt/preferences.d/mozilla"),
         "Package: *\nPin: origin packages.mozilla.org\nPin-Priority: 1000\n",
     )
+    write_system_file(
+        Path("/etc/apt/preferences.d/no-firefox-from-ubuntu"), _FIREFOX_NEGATIVE_PIN
+    )
+    subprocess.run(["sudo", "snap", "remove", "--purge", "firefox"], check=False)
+    installed = subprocess.run(
+        ["dpkg-query", "-W", "-f=${Version}", "firefox"], capture_output=True, text=True
+    ).stdout
+    if "snap" in installed:
+        subprocess.run(["sudo", "apt-get", "purge", "-y", "firefox"], check=True)
     run_cmd("sudo apt-get update")
     apt_install(["firefox"])
 
 
-@step(level=4, name="logseq", check=f"test -L ~/.local/bin/Logseq")
+@step(profile="screen-apps", name="logseq", check=f"test -L ~/.local/bin/Logseq")
 def install_logseq() -> None:
     zip_name = f"Logseq-linux-x64-{_LOGSEQ_VERSION}.zip"
     url = f"https://github.com/logseq/logseq/releases/download/{_LOGSEQ_VERSION}/{zip_name}"
@@ -67,7 +93,7 @@ def install_logseq() -> None:
     link.symlink_to(app)
 
 
-@step(level=4, name="bluetooth-autoenable")
+@step(profile="screen-apps", name="bluetooth-autoenable")
 def configure_bluetooth() -> None:
     bt_conf = Path("/etc/bluetooth/main.conf")
     if bt_conf.exists():
@@ -77,22 +103,34 @@ def configure_bluetooth() -> None:
             if "AutoEnable=true" not in text:
                 text += "\nAutoEnable=true\n"
             write_system_file(bt_conf, text)
-    write_system_file(Path("/etc/systemd/system/rfkill-unblock.service"), _RFKILL_SERVICE)
-    subprocess.run(["sudo", "systemctl", "enable", "rfkill-unblock.service"], check=True)
+    write_system_file(
+        Path("/etc/systemd/system/rfkill-unblock.service"), _RFKILL_SERVICE
+    )
+    subprocess.run(
+        ["sudo", "systemctl", "enable", "rfkill-unblock.service"], check=True
+    )
 
 
-@step(level=4, name="autologin")
+@step(profile="screen-apps", name="autologin")
 def configure_autologin() -> None:
     user = os.environ.get("USER", os.getlogin())
     override_dir = Path("/etc/systemd/system/getty@tty1.service.d")
     subprocess.run(["sudo", "mkdir", "-p", str(override_dir)], check=True)
-    write_system_file(override_dir / "override.conf", _AUTOLOGIN_OVERRIDE.format(user=user))
+    write_system_file(
+        override_dir / "override.conf", _AUTOLOGIN_OVERRIDE.format(user=user)
+    )
 
 
-@step(level=4, name="network-nm")
+@step(profile="screen-apps", name="network-nm")
 def configure_network() -> None:
     write_system_file(Path("/etc/netplan/00-installer-config.yaml"), _NETPLAN)
     run_cmd("sudo netplan apply")
-    subprocess.run(["sudo", "systemctl", "disable", "--now", "NetworkManager-wait-online.service"])
-    subprocess.run(["sudo", "systemctl", "mask", "NetworkManager-wait-online.service"], check=True)
-    subprocess.run(["sudo", "systemctl", "mask", "systemd-networkd.service"], check=True)
+    subprocess.run(
+        ["sudo", "systemctl", "disable", "--now", "NetworkManager-wait-online.service"]
+    )
+    subprocess.run(
+        ["sudo", "systemctl", "mask", "NetworkManager-wait-online.service"], check=True
+    )
+    subprocess.run(
+        ["sudo", "systemctl", "mask", "systemd-networkd.service"], check=True
+    )

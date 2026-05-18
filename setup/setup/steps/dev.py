@@ -22,7 +22,12 @@ _CARGO_TOOLS: list[tuple[str, str]] = [
 ]
 
 
-@step(level=1, name="tectonic", check="tectonic --version", verify="tectonic --version")
+@step(
+    profile="dev",
+    name="tectonic",
+    check="tectonic --version",
+    verify="tectonic --version",
+)
 def install_tectonic() -> None:
     run_cmd(
         "sh -c 'curl --proto \"=https\" --tlsv1.2 -fsSL https://drop-sh.fullyjustified.net | sh'"
@@ -35,7 +40,7 @@ def install_tectonic() -> None:
 
 
 @step(
-    level=1,
+    profile="shell",
     name="cargo-tools",
     check="rg --version",
     verify=" && ".join(cmd for _, cmd in _CARGO_TOOLS),
@@ -44,12 +49,12 @@ def install_cargo_tools() -> None:
     cargo_install([crate for crate, _ in _CARGO_TOOLS])
 
 
-@step(level=1, name="nushell", check="nu --version", verify="nu --version")
+@step(profile="shell", name="nushell", check="nu --version", verify="nu --version")
 def install_nushell() -> None:
     run_cmd("cargo install nu --locked", env=extended_env())
 
 
-@step(level=1, name="lua", check="lua -v", verify="lua -v")
+@step(profile="shell", name="lua", check="lua -v", verify="lua -v")
 def install_lua() -> None:
     ONSET_PATH.mkdir(parents=True, exist_ok=True)
     run_cmd(
@@ -62,7 +67,12 @@ def install_lua() -> None:
     run_cmd("sudo make install", cwd=src)
 
 
-@step(level=1, name="luarocks", check="luarocks --version", verify="luarocks --version")
+@step(
+    profile="shell",
+    name="luarocks",
+    check="luarocks --version",
+    verify="luarocks --version",
+)
 def install_luarocks() -> None:
     ONSET_PATH.mkdir(parents=True, exist_ok=True)
     run_cmd(
@@ -76,7 +86,7 @@ def install_luarocks() -> None:
     run_cmd("sudo make install", cwd=src)
 
 
-@step(level=1, name="jq", check="jq --version", verify="jq --version")
+@step(profile="shell", name="jq", check="jq --version", verify="jq --version")
 def install_jq() -> None:
     dest = clone_gh("jqlang", "jq", _JQ_TAG)
     run_cmd("git submodule update --init", cwd=dest)
@@ -88,7 +98,7 @@ def install_jq() -> None:
     run_cmd("sudo ldconfig")
 
 
-@step(level=1, name="sc-im", check="sc-im --version", verify="sc-im --version")
+@step(profile="shell", name="sc-im", check="sc-im --version", verify="sc-im --version")
 def install_scim() -> None:
     dest = clone_gh("andmarti1424", "sc-im", "main")
     run_cmd("make -C src", cwd=dest)
@@ -99,14 +109,14 @@ def install_scim() -> None:
     link.symlink_to(dest / "src/sc-im")
 
 
-@step(level=1, name="neovim", check="nvim --version", verify="nvim --version")
+@step(profile="shell", name="neovim", check="nvim --version", verify="nvim --version")
 def install_neovim() -> None:
     dest = clone_gh("neovim", "neovim", _NEOVIM_TAG)
     run_cmd("make CMAKE_BUILD_TYPE=RelWithDebInfo", cwd=dest)
     run_cmd("sudo make install", cwd=dest)
 
 
-@step(level=1, name="fzf", check="fzf --version", verify="fzf --version")
+@step(profile="shell", name="fzf", check="fzf --version", verify="fzf --version")
 def install_fzf() -> None:
     dest = clone_gh("junegunn", "fzf", _FZF_TAG)
     run_cmd("./install --all --key-bindings --completion --update-rc", cwd=dest)
@@ -115,7 +125,7 @@ def install_fzf() -> None:
     run_cmd(f"stow --verbose=3 -t {bin_dir} bin", cwd=dest)
 
 
-@step(level=1, name="tmux", check="tmux -V", verify="tmux -V")
+@step(profile="shell", name="tmux", check="tmux -V", verify="tmux -V")
 def install_tmux() -> None:
     dest = clone_gh("tmux", "tmux", _TMUX_TAG)
     run_cmd("sh autogen.sh", cwd=dest)
@@ -123,7 +133,7 @@ def install_tmux() -> None:
     run_cmd("sudo make install", cwd=dest)
 
 
-@step(level=1, name="node", check="node --version", verify="node --version")
+@step(profile="dev", name="node", check="node --version", verify="node --version")
 def install_node() -> None:
     run_cmd(
         "sh -c 'curl https://raw.githubusercontent.com/creationix/nvm/master/install.sh | bash'"

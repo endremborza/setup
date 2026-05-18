@@ -4,7 +4,13 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from setup.util import apt_install, cargo_install, check_binary, extended_env, write_system_file
+from setup.util import (
+    apt_install,
+    cargo_install,
+    check_binary,
+    extended_env,
+    write_system_file,
+)
 
 
 def test_extended_env_prepends_cargo_and_local_bin():

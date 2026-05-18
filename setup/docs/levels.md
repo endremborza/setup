@@ -1,27 +1,54 @@
-# Setup Levels
+# Setup Profiles
 
-Each level is a strictly additive group of steps. Running level N also runs all levels below it. Steps are idempotent: if the `check` command passes, the step is skipped.
+Each profile is an independent feature group. A machine declares which profiles it wants; `base` is always implicit. Profiles compose freely — a workstation might run `shell + dev + screen + screen-apps`, a headless dev box runs `shell + dev`, a minimal server runs just `shell`. Steps are idempotent: if the `check` command passes, the step is skipped.
 
-| Level | Steps | Target env | Test method |
-|-------|-------|------------|-------------|
-| 0 | apt-base, rust, rclone | any Linux | Docker (actual run) |
-| 1 | tectonic, cargo-tools, nushell, lua, luarocks, jq, sc-im, neovim, fzf, tmux, node, restow | headless dev | Docker (dry-run; full in `Dockerfile.level1`) |
-| 2 | systemd services, cron jobs | server | Docker-systemd or QEMU |
-| 3 | xorg, leftwm, alacritty, nerd-fonts, x11-config, timezone, grub | workstation | QEMU |
-| 4 | firefox, logseq, bluetooth, autologin, network-nm | workstation-full | QEMU |
+> Phase G will replace this file with `profiles.md` + `paths.md` + `tiers.md` + `ledger.md`. Until then, this is the single doc.
 
-## What "success" looks like per level
+| Profile | Steps | Target env | Test method |
+|---------|-------|------------|-------------|
+| `base` | apt-base, restow, rust, rclone | any Linux | Docker (actual run) |
+| `shell` | cargo-tools (rg/dust/fd/bat/tree-sitter), nushell, lua, luarocks, jq, sc-im, neovim, fzf, tmux | any interactive box | Docker (dry-run; full in `Dockerfile.level1`) |
+| `dev` | tectonic, node | dev workstation | Docker (dry-run) |
+| `server` | (placeholder; cron/systemd is currently user-managed) | server | — |
+| `screen` | apt-desktop, user-groups, leftwm, alacritty, nerd-fonts, x11-config, timezone, grub-quiet | graphical workstation | QEMU (TODO) |
+| `screen-apps` | firefox-apt, logseq, bluetooth-autoenable, autologin, network-nm | full workstation | QEMU (TODO) |
 
-**Level 0** — `setup verify --level 0` passes: `rustc`, `rclone` respond to `--version`.
+`base` runs `restow` between `apt-base` and `rust` so the `.profile` stow symlink is in place before `rust` calls `append_to_profile`.
 
-**Level 1** — `setup verify --level 1` passes: all level-0 checks plus `nvim`, `fzf`, `tmux`, `lua`, `luarocks`, `jq`, `node`, `rg` all respond; `~/.config/environment.d/10-vars.conf` exists (restow ran).
+## Invocation
 
-**Level 2** — systemd user services are enabled and active; cron jobs are present in crontab.
+```
+setup run                              # base only
+setup run --profile shell              # base + shell
+setup run --profile shell --profile dev  # base + shell + dev
+SETUP_PROFILES="shell dev" setup run   # equivalent to above (env-driven)
+setup verify --profile shell           # verify base + shell steps
+setup list                             # all registered steps, grouped by profile
+```
 
-**Level 3** — `startx` launches leftwm; alacritty opens; nerd fonts are listed by `fc-list`.
+`make setup-run PROFILES="shell dev"` and `make setup-verify PROFILES="shell dev"` are equivalent.
 
-**Level 4** — Firefox installed from Mozilla APT (not snap); Logseq binary is linked in `~/.local/bin`; Bluetooth auto-enables on boot.
+## What "success" looks like per profile
+
+**base** — `setup verify` (no flag) passes: `rustc`, `rclone` respond to `--version`; `~/.config/environment.d/10-vars.conf` exists (restow ran).
+
+**shell** — `setup verify --profile shell` passes: all base checks plus `nvim`, `fzf`, `tmux`, `lua`, `luarocks`, `jq`, `rg`, `nu`, `sc-im` respond.
+
+**dev** — all shell checks plus `tectonic` and `node` respond.
+
+**screen** — `startx` launches leftwm; alacritty opens; nerd fonts are listed by `fc-list`.
+
+**screen-apps** — Firefox installed from Mozilla APT (not snap); Logseq binary is linked in `~/.local/bin`; Bluetooth auto-enables on boot.
+
+## Bootstrap path
+
+Fresh-machine flow:
+
+1. `bash bootstrap.sh` — installs `curl`, `git`, `stow`, then `uv` if missing, clones `diencephalon` into `$SYNC_ROOT/composites/pkm/diencephalon`, runs `restow` once so PATH and env vars are live, then calls `make setup-run PROFILES="$PROFILES"` (defaulting to base only).
+2. `make setup-run PROFILES="..."` → `uv run setup run --profile ...` — walks the registry and executes each step in the requested profile set (`base` always included), skipping any whose `check` already passes.
+
+Override `PROFILES` env to go further in one shot: `PROFILES="shell dev" bash bootstrap.sh`.
 
 ## Prerequisites (not managed by setup)
 
-`uv` must be installed before running any setup level. On a fresh machine, use `bootstrap.sh` which handles this. See `docs/testing.md` for how this is handled in Docker.
+`uv` must be installed before running any setup command. On a fresh machine, use `bootstrap.sh` which handles this. See `docs/testing.md` for how this is handled in Docker.

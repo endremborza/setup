@@ -36,13 +36,14 @@ _APT_BASE = [
     "openssh-server",
 ]
 
+_SYNC_ROOT = Path(os.environ.get("SYNC_ROOT", str(Path.home() / "synced")))
 _DIENCEPHALON = Path(
-    os.environ.get("DIENCEPHALON_PATH", Path.home() / "repos/diencephalon")
+    os.environ.get("DIEN_ROOT", str(_SYNC_ROOT / "composites/pkm/diencephalon"))
 )
 
 
 @step(
-    level=0,
+    profile="base",
     name="apt-base",
     check="dpkg -s build-essential 2>/dev/null | grep -q 'Status: install ok'",
     verify="dpkg -s build-essential 2>/dev/null | grep -q 'Status: install ok'",
@@ -55,7 +56,7 @@ def install_apt_base() -> None:
 # Registered between apt-base and rust so that dotfiles/.profile is a stow symlink
 # before append_to_profile runs (which would otherwise create a conflicting real file).
 @step(
-    level=0,
+    profile="base",
     name="restow",
     check="test -f ~/.config/environment.d/10-vars.conf",
     verify="test -f ~/.config/environment.d/10-vars.conf",
@@ -64,12 +65,14 @@ def run_restow() -> None:
     run_cmd(f"bash {_DIENCEPHALON}/dotfiles/.local/bin/restow")
 
 
-@step(level=0, name="rust", check="rustc --version", verify="rustc --version")
+@step(profile="base", name="rust", check="rustc --version", verify="rustc --version")
 def install_rust() -> None:
     run_cmd("sh -c 'curl https://sh.rustup.rs -sSf | sh -s -- -y'")
     append_to_profile('. "$HOME/.cargo/env"')
 
 
-@step(level=0, name="rclone", check="rclone --version", verify="rclone --version")
+@step(
+    profile="base", name="rclone", check="rclone --version", verify="rclone --version"
+)
 def install_rclone() -> None:
     run_cmd("sh -c 'sudo -v && curl https://rclone.org/install.sh | sudo bash'")

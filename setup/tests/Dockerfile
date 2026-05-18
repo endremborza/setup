@@ -1,21 +1,26 @@
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
-ENV PATH="/root/.local/bin:/root/.cargo/bin:$PATH"
-ENV DIENCEPHALON_PATH=/opt/diencephalon
-ENV DIEN_ROOT=/opt/diencephalon
+ENV HOME=/root
+ENV USER=root
+ENV PATH="/root/.local/bin:/root/.cargo/bin:${PATH}"
+# Canonical layout: SYNC_ROOT defaults to $HOME/synced via .vars. No env overrides.
 
-RUN apt-get update && apt-get install -y sudo curl git make && \
+RUN apt-get update && apt-get install -y sudo curl git make stow && \
     rm -rf /var/lib/apt/lists/* && \
     echo 'root ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
 
-WORKDIR /opt/diencephalon
+# Place the diencephalon checkout under the canonical synced tree.
+WORKDIR /root/synced/composites/pkm/diencephalon
 COPY . .
+
+# Ubuntu's stock /root/.profile would conflict with the stow symlink restow creates.
+RUN rm -f /root/.profile
 
 RUN make install-uv
 
-# Level 0: real install (apt-base, rust, rclone)
-RUN make setup-run LEVEL=0
-# Level 1: dry-run — validates step registration without expensive builds
-RUN make setup-dry-run LEVEL=1
-RUN make setup-verify LEVEL=0
+# base profile: real install (apt-base, restow, rust, rclone)
+RUN make setup-run PROFILES=
+# shell + dev: dry-run only (cheap; just validates step registration)
+RUN make setup-dry-run PROFILES="shell dev"
+RUN make setup-verify PROFILES=
 RUN make setup-list
