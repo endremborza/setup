@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 from setup.util import (
     apt_install,
     cargo_install,
-    check_binary,
     extended_env,
     write_system_file,
 )
@@ -47,16 +46,6 @@ def test_cargo_install_calls_cargo(tmp_path):
     assert "cargo" in cmd
     assert "install" in cmd
     assert "ripgrep" in cmd
-
-
-def test_check_binary_found():
-    with patch("shutil.which", return_value="/usr/bin/git"):
-        assert check_binary("git") is True
-
-
-def test_check_binary_not_found():
-    with patch("shutil.which", return_value=None):
-        assert check_binary("nonexistent-tool-xyz") is False
 
 
 def test_write_system_file(tmp_path):

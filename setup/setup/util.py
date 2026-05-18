@@ -30,10 +30,6 @@ def run_cmd(
     )
 
 
-def check_binary(name: str) -> bool:
-    return shutil.which(name, path=extended_env()["PATH"]) is not None
-
-
 def apt_install(packages: list[str]) -> None:
     subprocess.run(["sudo", "apt-get", "install", "-y", *packages], check=True)
 

@@ -1,24 +1,21 @@
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
-ENV HOME=/root
-ENV USER=root
 ENV PATH="/root/.local/bin:/root/.cargo/bin:${PATH}"
 
-# Minimal pre-bootstrap state: curl + git only. bootstrap.sh installs the rest.
-RUN apt-get update && apt-get install -y sudo curl git ca-certificates && \
+# bootstrap.sh installs sudo/curl/git/stow/make itself; we only need git+curl
+# to exist beforehand so the apt-get update step inside bootstrap.sh can run
+# under sudo without a chicken-and-egg.
+RUN apt-get update && apt-get install -y sudo curl git && \
     rm -rf /var/lib/apt/lists/* && \
-    echo 'root ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
+    echo 'root ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers && \
+    rm -f /root/.profile
 
-# Stage the diencephalon repo as a local clone source. bootstrap.sh then
-# `git clone $DIENCEPHALON_URL` to the canonical synced location.
+# Stage the diencephalon repo as a local clone source for bootstrap.sh.
 COPY . /tmp/diencephalon-src
 
-# Ubuntu's stock /root/.profile would conflict with the stow symlink restow creates.
-RUN rm -f /root/.profile
-
-# Exercises: arg parsing, git clone to canonical layout, restow, make setup-run.
+# End-to-end: arg parsing, git clone to canonical layout, restow, make setup-run.
 RUN DIENCEPHALON_URL=/tmp/diencephalon-src bash /tmp/diencephalon-src/setup/bootstrap.sh --tier guest
 
-# Independent verify after bootstrap completes (PROFILES= so we verify only base).
+# Independent verify (PROFILES= → just base).
 WORKDIR /root/synced/composites/pkm/diencephalon
 RUN make setup-verify PROFILES=

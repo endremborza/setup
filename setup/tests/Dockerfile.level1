@@ -1,25 +1,17 @@
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
-ENV HOME=/root
-ENV USER=root
 ENV PATH="/root/.local/bin:/root/.cargo/bin:${PATH}"
-# Canonical layout: SYNC_ROOT defaults to $HOME/synced via .vars. No env overrides.
-
-# Full base+shell+dev install. Expensive (neovim from source, lua, tmux, fzf, etc.).
-# Run via: make docker-test
+# Canonical layout: SYNC_ROOT defaults to $HOME/synced via .vars.
+# Full base+shell+dev install (~30 min). Run via: make docker-test
 
 RUN apt-get update && apt-get install -y sudo curl git make stow && \
     rm -rf /var/lib/apt/lists/* && \
-    echo 'root ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
+    echo 'root ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers && \
+    rm -f /root/.profile
 
 WORKDIR /root/synced/composites/pkm/diencephalon
 COPY . .
 
-RUN make install-uv
-
-# Ubuntu 24.04 ships /root/.profile; remove it so the restow step (base profile,
-# runs before rust) can stow dotfiles/.profile as a symlink without conflict.
-RUN rm -f /root/.profile
-
-RUN make setup-run PROFILES="shell dev"
-RUN make setup-verify PROFILES="shell dev"
+RUN make install-uv && \
+    make setup-run PROFILES="shell dev" && \
+    make setup-verify PROFILES="shell dev"

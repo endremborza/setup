@@ -58,6 +58,15 @@ def _steps_for(profiles: Iterable[str] | None, step_name: str | None) -> list[St
     return [s for s in REGISTRY if s.profile in wanted]
 
 
+def _invoke(s: Step) -> None:
+    """Run a step's body, printing [ ok ]/[FAIL]. Caller decides skip/dry."""
+    try:
+        s.fn()
+        print(f"[ ok ] {s.name}")
+    except Exception as e:
+        print(f"[FAIL] {s.name}: {e}")
+
+
 def run(
     profiles: Iterable[str] | None,
     dry_run: bool = False,
@@ -66,30 +75,22 @@ def run(
     for s in _steps_for(profiles, step_name):
         if not dry_run and s.check and _check_passes(s.check):
             print(f"[skip] {s.name}")
-            continue
-        if dry_run:
+        elif dry_run:
             print(f"[dry ] {s.name}")
-            continue
-        try:
-            s.fn()
-            print(f"[ ok ] {s.name}")
-        except Exception as e:
-            print(f"[FAIL] {s.name}: {e}")
+        else:
+            _invoke(s)
 
 
 def update(step_name: str | None = None) -> None:
-    if step_name is None:
-        targets = list(REGISTRY)
-    else:
-        targets = [s for s in REGISTRY if s.name == step_name]
-        if not targets:
-            raise SystemExit(f"No step named {step_name!r}")
+    targets = (
+        list(REGISTRY)
+        if step_name is None
+        else [s for s in REGISTRY if s.name == step_name]
+    )
+    if step_name is not None and not targets:
+        raise SystemExit(f"No step named {step_name!r}")
     for s in targets:
-        try:
-            s.fn()
-            print(f"[ ok ] {s.name}")
-        except Exception as e:
-            print(f"[FAIL] {s.name}: {e}")
+        _invoke(s)
 
 
 def verify(profiles: Iterable[str] | None, step_name: str | None = None) -> bool:

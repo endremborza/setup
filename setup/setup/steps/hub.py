@@ -33,6 +33,14 @@ _LEDGER_BARE = _GIT_DIR / "ledger.git"
 _FLEET_REMOTE = "fleet"
 
 
+def _bare_verify(path: Path) -> str:
+    """Shell command: passes iff `path` exists and is a bare git repo."""
+    return (
+        f"test -d {path} && "
+        f"git -C {path} rev-parse --is-bare-repository 2>/dev/null | grep -q true"
+    )
+
+
 def _ensure_remote(repo: Path, name: str, url: Path) -> None:
     r = subprocess.run(
         ["git", "-C", str(repo), "remote", "get-url", name],
@@ -49,12 +57,15 @@ def _ensure_remote(repo: Path, name: str, url: Path) -> None:
         )
 
 
-@step(
-    profile="hub",
-    name="sshd",
-    check="systemctl is-active --quiet ssh && systemctl is-enabled --quiet ssh",
-    verify="systemctl is-active --quiet ssh && systemctl is-enabled --quiet ssh",
-)
+def _init_bare(bare: Path) -> None:
+    if not bare.exists():
+        run_cmd(f"git init --bare {bare}")
+
+
+_SSHD_RUNNING = "systemctl is-active --quiet ssh && systemctl is-enabled --quiet ssh"
+
+
+@step(profile="hub", name="sshd", check=_SSHD_RUNNING, verify=_SSHD_RUNNING)
 def enable_sshd() -> None:
     run_cmd("sudo systemctl enable --now ssh")
 
@@ -73,36 +84,25 @@ def create_git_dir() -> None:
     profile="hub",
     name="bare-hypothalamus",
     check=f"test -d {_HYPOTHALAMUS_BARE}",
-    verify=(
-        f"test -d {_HYPOTHALAMUS_BARE} && "
-        f"git -C {_HYPOTHALAMUS_BARE} rev-parse --is-bare-repository 2>/dev/null | grep -q true"
-    ),
+    verify=_bare_verify(_HYPOTHALAMUS_BARE),
 )
 def init_bare_hypothalamus() -> None:
-    if not _HYPOTHALAMUS_BARE.exists():
-        run_cmd(f"git init --bare {_HYPOTHALAMUS_BARE}")
+    _init_bare(_HYPOTHALAMUS_BARE)
     if (_HYPO_ROOT / ".git").exists():
         _ensure_remote(_HYPO_ROOT, _FLEET_REMOTE, _HYPOTHALAMUS_BARE)
         # Initial sync — best-effort. Subsequent pushes are the user's responsibility.
-        subprocess.run(
-            ["git", "-C", str(_HYPO_ROOT), "push", _FLEET_REMOTE, "--all"],
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(_HYPO_ROOT), "push", _FLEET_REMOTE, "--tags"],
-            capture_output=True,
-        )
+        for refspec in ("--all", "--tags"):
+            subprocess.run(
+                ["git", "-C", str(_HYPO_ROOT), "push", _FLEET_REMOTE, refspec],
+                capture_output=True,
+            )
 
 
 @step(
     profile="hub",
     name="bare-ledger",
     check=f"test -d {_LEDGER_BARE}",
-    verify=(
-        f"test -d {_LEDGER_BARE} && "
-        f"git -C {_LEDGER_BARE} rev-parse --is-bare-repository 2>/dev/null | grep -q true"
-    ),
+    verify=_bare_verify(_LEDGER_BARE),
 )
 def init_bare_ledger() -> None:
-    if not _LEDGER_BARE.exists():
-        run_cmd(f"git init --bare {_LEDGER_BARE}")
+    _init_bare(_LEDGER_BARE)
