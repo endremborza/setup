@@ -1,17 +1,11 @@
 """Bump a pinned tool version in versions.toml."""
-import sys
 
-from setup.versions import bump, load
+from setup.versions import bump as _bump, load
 
 
-def main() -> None:
-    args = sys.argv[1:]
-    if len(args) != 2 or args[0] in ("-h", "--help"):
-        print("Usage: dienpy versions bump <tool> <tag>")
-        print(f"Tools: {', '.join(load())}")
-        return
-    tool, tag = args
-    bump(tool, tag)
+def main(tool: str, tag: str) -> None:
+    """Bump <tool> to <tag> in versions.toml."""
+    _bump(tool, tag)
     print(f"Bumped {tool} to {tag}")
 
 

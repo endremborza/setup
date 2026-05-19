@@ -11,7 +11,6 @@ from setup.util import extended_env, run_cmd
 
 @dataclass
 class ToolEntry:
-    level: int
     check: str | None
     install_fn: Callable[[], None]
     upgrade_fn: Callable[[], None] | None = None
@@ -50,12 +49,11 @@ def _build() -> dict[str, ToolEntry]:
         if name not in step_map:
             continue
         s = step_map[name]
-        entry = ToolEntry(level=s.level, check=s.check, install_fn=s.fn)
+        entry = ToolEntry(check=s.check, install_fn=s.fn)
         if name == "rust":
             entry.upgrade_fn = _rustup_update
         result[name] = entry
     result["bun"] = ToolEntry(
-        level=1,
         check="bun --version",
         install_fn=_bun_install,
         upgrade_fn=_bun_upgrade,

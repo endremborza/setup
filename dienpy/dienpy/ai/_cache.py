@@ -1,4 +1,5 @@
 """Disk-cached model list for all AI providers. Used for autocomplete and display."""
+
 import json
 import time
 from pathlib import Path

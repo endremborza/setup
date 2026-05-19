@@ -1,4 +1,5 @@
 """List all pinned tool versions from versions.toml."""
+
 from setup.versions import load
 
 
