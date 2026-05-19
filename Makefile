@@ -31,7 +31,7 @@ test:
 
 # Full base+shell+dev real build + verify (~30 min); replaces `dienpy versions upgrade-system --test`
 docker-test:
-	docker build --progress=plain -f setup/tests/Dockerfile.level1 -t diencephalon-setup-test .
+	docker build --progress=plain -f setup/tests/Dockerfile.full -t diencephalon-setup-test .
 
 # Fast CI gate: base real + base+shell+dev dry-run
 docker-ci:
