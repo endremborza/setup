@@ -4,7 +4,7 @@ import argparse
 import os
 
 import setup.steps  # noqa: F401 — registers all steps
-from setup.runner import BASE_PROFILE, REGISTRY, run, update, verify
+from setup.runner import BASE_PROFILE, REGISTRY, run, verify
 
 
 def _env_profiles() -> list[str]:
@@ -37,10 +37,13 @@ def main() -> None:
     run_p = sub.add_parser("run", help="Run setup for the given profile(s)")
     _profile_args(run_p)
     run_p.add_argument("--dry-run", "-n", action="store_true")
+    run_p.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        help="Run steps even when their check command passes.",
+    )
     run_p.add_argument("--step", "-s", metavar="NAME")
-
-    upd_p = sub.add_parser("update", help="Re-run steps ignoring idempotency checks")
-    upd_p.add_argument("--step", "-s", metavar="NAME")
 
     sub.add_parser(
         "list", help="List all registered steps with profile, check, and verify"
@@ -57,9 +60,8 @@ def main() -> None:
             profiles=_resolve_cli_profiles(args.profile),
             dry_run=args.dry_run,
             step_name=args.step,
+            force=args.force,
         )
-    elif args.cmd == "update":
-        update(step_name=args.step)
     elif args.cmd == "list":
         width = max((len(s.profile) for s in REGISTRY), default=4)
         for s in REGISTRY:

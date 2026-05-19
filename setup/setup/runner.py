@@ -34,17 +34,16 @@ def step(
     return decorator
 
 
-def _check_passes(cmd: str) -> bool:
-    return subprocess.run(cmd, shell=True, capture_output=True).returncode == 0
-
-
-def _run_check(cmd: str) -> tuple[bool, str]:
+def run_check(cmd: str) -> tuple[bool, str]:
     r = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     return r.returncode == 0, (r.stdout + r.stderr).strip()
 
 
+def check_passes(cmd: str) -> bool:
+    return run_check(cmd)[0]
+
+
 def _resolve_profiles(profiles: Iterable[str] | None) -> set[str]:
-    """`base` is always implicit; add anything else the caller asked for."""
     return {BASE_PROFILE, *(profiles or ())}
 
 
@@ -59,7 +58,6 @@ def _steps_for(profiles: Iterable[str] | None, step_name: str | None) -> list[St
 
 
 def _invoke(s: Step) -> None:
-    """Run a step's body, printing [ ok ]/[FAIL]. Caller decides skip/dry."""
     try:
         s.fn()
         print(f"[ ok ] {s.name}")
@@ -71,26 +69,15 @@ def run(
     profiles: Iterable[str] | None,
     dry_run: bool = False,
     step_name: str | None = None,
+    force: bool = False,
 ) -> None:
     for s in _steps_for(profiles, step_name):
-        if not dry_run and s.check and _check_passes(s.check):
-            print(f"[skip] {s.name}")
-        elif dry_run:
+        if dry_run:
             print(f"[dry ] {s.name}")
+        elif not force and s.check and check_passes(s.check):
+            print(f"[skip] {s.name}")
         else:
             _invoke(s)
-
-
-def update(step_name: str | None = None) -> None:
-    targets = (
-        list(REGISTRY)
-        if step_name is None
-        else [s for s in REGISTRY if s.name == step_name]
-    )
-    if step_name is not None and not targets:
-        raise SystemExit(f"No step named {step_name!r}")
-    for s in targets:
-        _invoke(s)
 
 
 def verify(profiles: Iterable[str] | None, step_name: str | None = None) -> bool:
@@ -100,7 +87,7 @@ def verify(profiles: Iterable[str] | None, step_name: str | None = None) -> bool
         return True
     all_ok = True
     for s in steps:
-        ok, output = _run_check(s.verify)
+        ok, output = run_check(s.verify)
         if ok:
             summary = output.splitlines()[0] if output else ""
             print(f"[ ok ] {s.name}  {summary}")
@@ -108,6 +95,5 @@ def verify(profiles: Iterable[str] | None, step_name: str | None = None) -> bool
             print(f"[FAIL] {s.name}  cmd={s.verify!r}")
             for line in output.splitlines()[:8]:
                 print(f"       {line}")
-        if not ok:
             all_ok = False
     return all_ok
