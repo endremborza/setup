@@ -1,0 +1,8 @@
+#! /bin/sh
+_cl() { claude --effort xhigh --model claude-opus-4-8 --permission-mode auto; }
+if [ "$1" = "--raw" ]; then
+    echo "$2" | _cl
+else
+    [ -f "$1" ] || { echo "File not found: $1" >&2; exit 1; }
+    cat "$1" | _cl
+fi
