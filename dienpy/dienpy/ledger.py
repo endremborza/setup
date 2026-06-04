@@ -17,7 +17,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from dienpy._toml import fmt_entry
-from dienpy.cli import handle_help
 from dienpy.constants import SYNC_ROOT
 
 LEDGER_DIR = SYNC_ROOT / "composites" / "pkm" / "ledger"
@@ -71,11 +70,6 @@ def _build_entry() -> str:
 
 def main() -> None:
     """Update this machine's row in the fleet ledger."""
-    if handle_help(
-        "dienpy ledger",
-        "Clone the fleet ledger if missing, write/refresh this host's entry, push.",
-    ):
-        return
     if not LEDGER_DIR.exists():
         LEDGER_DIR.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "clone", _ledger_url(), str(LEDGER_DIR)], check=True)
