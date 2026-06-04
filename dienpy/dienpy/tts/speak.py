@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import sys
 
@@ -23,19 +22,18 @@ def get_completions(args: list[str]) -> list[str]:
     return ["--voice", "--speed", "--no-markdown"]
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--voice", default=DEFAULT_VOICE, choices=ALL_VOICES)
-    parser.add_argument("--speed", type=float, default=1.0, metavar="N")
-    parser.add_argument("--no-markdown", action="store_true")
-    args = parser.parse_args()
-
+def main(
+    *, voice: str = DEFAULT_VOICE, speed: float = 1.0, no_markdown: bool = False
+) -> None:
+    """Speak text piped via stdin."""
+    if voice not in ALL_VOICES:
+        raise SystemExit(f"Unknown voice {voice!r}; available: {', '.join(ALL_VOICES)}")
     raw = sys.stdin.read()
-    text = raw if args.no_markdown else to_plain(raw)
+    text = raw if no_markdown else to_plain(raw)
     if not text.strip():
         raise SystemExit("No text to speak")
 
     if server_is_running():
-        server_send(text, args.voice, args.speed)
+        server_send(text, voice, speed)
     else:
-        asyncio.run(speak_async(load_kokoro(), text, args.voice, args.speed))
+        asyncio.run(speak_async(load_kokoro(), text, voice, speed))

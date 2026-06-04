@@ -1,15 +1,9 @@
 """Preview or apply pinned tool version installs."""
 
-import argparse
-import subprocess
-
-from setup.versions import dump, load, bump
+from setup.runner import check_passes
+from setup.versions import dump, load
 
 from .registry import TOOLS
-
-
-def _check_passes(cmd: str) -> bool:
-    return subprocess.run(cmd, shell=True, capture_output=True).returncode == 0
 
 
 def cmd_dry_run() -> None:
@@ -24,12 +18,12 @@ def cmd_dry_run() -> None:
         elif tv.installed == tv.tag:
             action = "up-to-date"
         elif not tv.installed:
-            if entry.check and _check_passes(entry.check):
+            if entry.check and check_passes(entry.check):
                 action = "mark-installed"
             else:
                 action = "install"
         else:
-            action = f"upgrade"
+            action = "upgrade"
         print(f"{tv.name:<14} {installed:<18} {tv.tag:<18} {action}")
 
 
@@ -42,7 +36,7 @@ def cmd_live() -> None:
             continue
 
         if not tv.installed and entry.check:
-            if _check_passes(entry.check):
+            if check_passes(entry.check):
                 print(f"[init] {tv.name}: marking installed at {tv.tag}")
                 versions[tv.name].installed = tv.tag
                 dump(versions)
@@ -63,20 +57,9 @@ def cmd_live() -> None:
             print(f"[FAIL] {tv.name}: {e}")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(prog="dienpy versions upgrade-system")
-    parser.add_argument(
-        "--live",
-        action="store_true",
-        help="install tools whose pinned version differs from installed",
-    )
-    args = parser.parse_args()
-
-    if args.live:
+def main(*, live: bool = False) -> None:
+    """Preview pinned upgrades; --live installs anything where pinned != installed."""
+    if live:
         cmd_live()
     else:
         cmd_dry_run()
-
-
-def get_completions(args: list[str]) -> list[str]:
-    return [] if args else ["--live"]

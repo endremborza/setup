@@ -1,15 +1,14 @@
-"""Upload a file to a temporary S3 bucket."""
+"""Upload a file to the $TMP_S3_BUCKET temporary S3 bucket."""
+
 import os
 import subprocess
 import sys
 
-BUCKET = os.environ["TMP_S3_BUCKET"]
 
-
-def upload():
-    print(sys.argv)
+def main() -> None:
+    bucket = os.environ["TMP_S3_BUCKET"]
     fname = sys.argv[1]
-    comm = ["aws", "s3", "cp", fname, f"s3://{BUCKET}"]
+    comm = ["aws", "s3", "cp", fname, f"s3://{bucket}"]
     if ".json" in fname:
         comm.extend(["--content-type", "application/json"])
     if fname.endswith(".gz"):
@@ -20,7 +19,7 @@ def upload():
         "s3api",
         "put-object-acl",
         "--bucket",
-        BUCKET,
+        bucket,
         "--key",
         fname,
         "--acl",
@@ -29,8 +28,8 @@ def upload():
     subprocess.run(comm)
     subprocess.run(pubcomm)
 
-    print(f"https://{BUCKET}.s3.amazonaws.com/{fname}")
+    print(f"https://{bucket}.s3.amazonaws.com/{fname}")
 
 
 if __name__ == "__main__":
-    upload()
+    main()

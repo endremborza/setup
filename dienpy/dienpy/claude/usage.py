@@ -1,4 +1,5 @@
-import argparse
+"""Show or watch Claude API usage windows (5h and weekly)."""
+
 import datetime
 import os
 import time
@@ -34,12 +35,8 @@ def _percent_time_elapsed(resets_at: str, total_seconds: int) -> float:
     return max(0.0, min(100.0, (elapsed / total_seconds) * 100))
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--watch", "-w", action="store_true")
-    parser.add_argument("--interval", type=int, default=300)
-    args = parser.parse_args()
-
+def main(*, watch: bool = False, interval: int = 300) -> None:
+    """Show or watch Claude API usage windows (5h and weekly)."""
     os.system("clear")
 
     progress = Progress(
@@ -91,7 +88,7 @@ def main() -> None:
             completed=_percent_time_elapsed(seven["resets_at"], 7 * 24 * 3600),
         )
 
-    if args.watch:
+    if watch:
         try:
             with Live(render(), refresh_per_second=4, console=console) as live:
                 while True:
@@ -100,7 +97,7 @@ def main() -> None:
                     except Exception as e:
                         print(type(e).__name__)
                     live.update(render())
-                    time.sleep(args.interval)
+                    time.sleep(interval)
         except KeyboardInterrupt:
             console.print("\n[bold yellow]Stopped watching.[/bold yellow]")
     else:
