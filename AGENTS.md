@@ -1,27 +1,87 @@
-# diencephalon
+# diencephalon — agent guide
 
-Public dotfiles, scripts, and tooling. Config files in `dotfiles/` are symlinked to `~` via GNU stow (see `dotfiles/.local/bin/restow`). **Public repo** — generalizable config and tools that others could draw inspiration from. No secrets, no personal paths.
+Public dotfiles, scripts, and tooling. Config files in `dotfiles/` are symlinked to `~` via GNU stow (`dotfiles/.local/bin/restow`). **Public repo** — no secrets, no personal paths.
 
-## Repository structure
+User-facing docs: [README.md](README.md). Deep reference (profiles, env, testing): [SETUP.md](SETUP.md).
 
-| Directory | Purpose |
-|-----------|---------|
-| `dienpy/` | Public Python CLI toolkit (`dienpy <module> [args]`). See `dienpy/AGENTS.md`. |
-| `dotfiles/` | Generic dotfiles stowed to `~` via GNU stow (nvim, alacritty, tmux, leftwm, shell config, utility scripts). |
-| `setup/` | Leveled system bootstrap package. See `setup/docs/`. |
-| `util/` | Templates (systemd service/socket) used by `create-service`. |
+## Repo layout
+
+| Directory   | Purpose                                                                    |
+|-------------|----------------------------------------------------------------------------|
+| `dotfiles/` | Generic dotfiles stowed to `~` (nvim, alacritty, tmux, leftwm, shell, etc) |
+| `setup/`    | Profile-based bootstrap package (`setup` CLI)                              |
+| `dienpy/`   | Public Python CLI (`dienpy <module>`) — see `dienpy/AGENTS.md`             |
+| `util/`     | Templates (systemd service/socket) used by `create-service`                |
 
 ## Boundary rule
 
-This repo must contain **only** generalizable, public-safe content. Anything referencing personal paths (`/home/<user>/...`), secrets, specific hostnames, or personal services belongs in a private companion repo. The dependency direction: private repos may depend on this one, never the reverse.
+Only generalizable, public-safe content. Anything referencing personal paths, secrets, hostnames, or personal services belongs in the private companion repo (`hypothalamus`). Dependency direction: private may depend on public, never the reverse.
+
+`dotfiles/.vars` defines the base env layer (`SYNC_ROOT` and derived paths). `.profile` sources it. `dienpy/dienpy/constants.py` mirrors the same defaults in code for bootstrap.
+
+## Setup architecture
+
+`setup/setup/` is a small profile registry + runner. Each install is a `@step`-decorated function declaring its profile, an idempotency `check`, and a `verify` smoke test.
+
+```
+setup/setup/
+├── __main__.py      # argparse: run | list | verify
+├── runner.py        # @step decorator, REGISTRY, run/verify
+├── util.py          # run_cmd, apt_install, cargo_install, clone_gh, …
+├── versions.py      # load/dump versions.toml; fetch latest from upstream
+└── steps/
+    ├── base.py          # apt-base, restow, rust, rclone
+    ├── dev.py           # shell + dev profile steps
+    ├── desktop.py       # screen profile
+    ├── workstation.py   # screen-apps profile
+    └── hub.py           # fleet git-server provisioning
+```
+
+### Adding a step
+
+```python
+from setup.runner import step
+from setup.util import apt_install
+
+@step(
+    profile="shell",
+    name="my-tool",
+    check="my-tool --version",   # passes → step is skipped
+    verify="my-tool --version",  # used by `setup verify`
+)
+def install_my_tool() -> None:
+    apt_install(["my-tool"])
+```
+
+Then import the module from `setup/steps/__init__.py` so the decorator runs at import.
+
+Rules:
+- One home per tool. No duplication between `dotfiles/`, `setup/`, `dienpy/`.
+- Steps must be idempotent (the `check` exists so reruns are cheap).
+- A package never vendors a file that's already stowed from `dotfiles/`. Read the stowed path instead (`~/rclone_filter.txt`, etc.).
+- Step names must be unique across all profiles — `dienpy versions` keys off the name.
+
+### Versions
+
+Pinned tags live in `setup/versions.toml`. The toml is the source of truth — `setup/setup/versions.py` does load/dump round-trip (no line-level patching). Step modules import `from setup.versions import get as _v` and read tags at module-load time.
+
+`dienpy versions` (in `dienpy/dienpy/versions/`) is the management front end: list, check upstream, bump, dry-run upgrade, live upgrade. It composes the step registry — version ownership lives in dienpy, not setup.
 
 ## Stow integration
 
-`dotfiles/.local/bin/restow` stows this repo's `dotfiles/` to `~` with `--no-folding`. A private companion can stow additional dotfiles alongside — GNU stow merges directories, so both repos can contribute files to `~/.local/bin/` without conflict as long as no filename appears in both.
+`dotfiles/.local/bin/restow` stows this repo's `dotfiles/` to `~` with `--no-folding`. A private companion (`hypothalamus`) stows alongside — GNU stow merges directories, so both contribute files to `~/.local/bin/` etc. as long as filenames don't collide.
 
-## Environment variables
+## Three-layer env vars
 
-`dotfiles/.vars` defines the base env layer: `SYNC_ROOT` and all derived paths. Shell startup (`.profile`) sources this file. `dienpy/dienpy/constants.py` mirrors these with hardcoded defaults for bootstrap.
+| Layer | File              | Source                                  | Content                                |
+|-------|-------------------|-----------------------------------------|----------------------------------------|
+| 1     | `~/.vars`         | diencephalon                            | Base paths, tool config, non-secret    |
+| 2     | `~/.secret-vars`  | hypothalamus/secrets                    | API keys, tokens                       |
+| 3     | `~/.local-vars`   | hypothalamus/local-dotfiles/host-$(hn)  | Machine-specific (GPU, hardware, port) |
+
+Each layer can reference earlier ones. `.profile` and `.xinitrc` source them in order. `restow` regenerates `~/.config/environment.d/{10,20,30}-*.conf` so systemd user services see the same env.
+
+Full boot-to-desktop propagation flow (including tmux/dbus/import-environment gotchas) is in [SETUP.md](SETUP.md#environment-propagation).
 
 ## nvim config
 
@@ -30,12 +90,10 @@ Lives at `dotfiles/.config/nvim/init.lua`. Uses lazy.nvim + mason + mason-lspcon
 ### Key decisions
 
 - **LSP config**: `vim.lsp.config('server', {...})` per-server + `automatic_enable = true`.
-- **Non-file buffer guard**: `vim.lsp.start` is wrapped to prevent LSP on non-file buffers (`fugitive://`, `gitsigns://`, `term://`).
-- **lazydev.nvim**: Provides `vim` global type info to lua_ls. Must be a dependency of nvim-lspconfig with `ft = 'lua'`.
+- **Non-file buffer guard**: `vim.lsp.start` is wrapped to prevent LSP on `fugitive://`, `gitsigns://`, `term://`.
+- **lazydev.nvim** provides `vim` global type info to lua_ls. Must be a dependency of nvim-lspconfig with `ft = 'lua'`.
 
-### Workflows
-
-#### Updating nvim or plugins
+### Updating nvim or plugins
 
 1. `dienpy nvim release_notes` — fetch recent release notes for all plugins
 2. Review for breaking changes
@@ -43,12 +101,12 @@ Lives at `dotfiles/.config/nvim/init.lua`. Uses lazy.nvim + mason + mason-lspcon
 4. `dienpy nvim verify --perf` — headless LSP health check
 5. `dienpy nvim commit` — commit with plugin version snapshot
 
-#### Diagnosing LSP issues
+### Diagnosing LSP
 
 1. `dienpy nvim verify --perf`
 2. `:LspInfo`, `:LspLog`
 3. Check mason install: `~/.local/share/nvim/mason/bin/<server>`
-4. Check lazy-lock.json vs upstream changelogs
+4. Check `lazy-lock.json` vs upstream changelogs
 
 ### Common pitfalls
 
