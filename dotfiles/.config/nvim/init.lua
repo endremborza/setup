@@ -420,6 +420,8 @@ require('lazy').setup({
           attach_mappings = function(prompt_bufnr, map)
             local actions = require("telescope.actions")
             local action_state = require("telescope.actions.state")
+            local finders = require("telescope.finders")
+            local make_entry = require("telescope.make_entry")
 
             local function select()
               local entry = action_state.get_selected_entry()
@@ -427,8 +429,36 @@ require('lazy').setup({
               open_file(entry.value)
             end
 
+            local function refresh()
+              if review_base ~= "HEAD" then return end
+              local p = action_state.get_current_picker(prompt_bufnr)
+              local row = p:get_selection_row()
+              local callbacks = { unpack(p._completion_callbacks) }
+              p:register_completion_callback(function(self)
+                self:set_selection(row)
+                self._completion_callbacks = callbacks
+              end)
+              local fopts = { cwd = p.cwd, split_char = "\0" }
+              fopts.entry_maker = make_entry.gen_from_git_status(fopts)
+              p:refresh(finders.new_oneshot_job({ "git", "status", "-z", "-uall", "--", "." }, fopts),
+                { reset_prompt = false })
+            end
+
+            local function stage(add)
+              local entry = action_state.get_selected_entry()
+              if not entry then return end
+              local p = action_state.get_current_picker(prompt_bufnr)
+              vim.system(add and { "git", "add", "--", entry.value }
+                or { "git", "restore", "--staged", "--", entry.value }, { cwd = p.cwd }):wait()
+              refresh()
+            end
+
             map("i", "<CR>", select)
             map("n", "<CR>", select)
+            map("i", "<Right>", function() stage(true) end)
+            map("n", "<Right>", function() stage(true) end)
+            map("i", "<Left>", function() stage(false) end)
+            map("n", "<Left>", function() stage(false) end)
             return true
           end,
         })
