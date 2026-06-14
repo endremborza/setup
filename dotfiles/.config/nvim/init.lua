@@ -203,6 +203,7 @@ require('lazy').setup({
         { '<leader>c', group = '[C]ode' },
         { '<leader>d', group = '[D]ocument' },
         { '<leader>g', group = '[G]it' },
+        { '<leader>i', group = '[I]nsert' },
         { '<leader>r', group = '[R]ename' },
         { '<leader>s', group = '[S]earch' },
         { '<leader>w', group = '[W]orkspace' },
@@ -711,6 +712,24 @@ vim.keymap.set('n', ']d', function()
 end, { desc = 'Go to next diagnostic message' })
 vim.keymap.set('n', '<leader>e', vim.diagnostic.open_float, { desc = 'Open floating diagnostic message' })
 vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostics list' })
+
+vim.keymap.set('n', '<leader>id', function()
+  vim.cmd('normal! o## ' .. os.date('%Y-%m-%d') .. ' ')
+  vim.cmd('startinsert!')
+end, { desc = '[I]nsert [D]ate heading' })
+
+vim.keymap.set('n', '<leader>it', function()
+  vim.cmd('normal! a' .. os.date('%H:%M'))
+end, { desc = '[I]nsert [T]ime' })
+
+vim.keymap.set('n', '<leader>iD', function()
+  vim.cmd('normal! a' .. os.date('%Y-%m-%d %H:%M'))
+end, { desc = '[I]nsert [D]ate and time' })
+
+vim.keymap.set('n', '<leader>ic', function()
+  vim.cmd('normal! a- [ ] ')
+  vim.cmd('startinsert!')
+end, { desc = '[I]nsert [C]heckbox' })
 
 local function force_refresh_gitsigns()
   local gs = package.loaded.gitsigns
