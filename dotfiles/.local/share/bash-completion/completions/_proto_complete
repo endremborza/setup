@@ -1,5 +1,7 @@
 # Protocol-based completion for tools supporting --complete.
 # Tool contract: `<tool> --complete [args...]` outputs newline-separated candidates.
+# A lone candidate of $'\eFILES' (dienpy.cli.FILE_COMPLETION) defers to readline's
+# native pathname completion (~, /, $VAR, absolute/relative).
 # Usage: source this file, then: complete -F _proto_complete <tool>
 
 _proto_complete() {
@@ -9,6 +11,11 @@ _proto_complete() {
     local -a candidates
     mapfile -t candidates < <("$1" --complete "${args[@]}" 2>/dev/null)
     [[ ${#candidates[@]} -eq 0 ]] && return
+    if [[ ${#candidates[@]} -eq 1 && "${candidates[0]}" == $'\eFILES' ]]; then
+        COMPREPLY=()
+        compopt -o default -o filenames
+        return
+    fi
     local cur_plain="${cur//\\ / }"
     COMPREPLY=()
     local c
