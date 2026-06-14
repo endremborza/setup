@@ -36,6 +36,12 @@ DISP_VAR = "_dispatcher"
 COMP_FUN = "get_completions"
 _HELP_FLAGS = (["-h"], ["--help"])
 
+# Sentinel a leaf's ``get_completions`` may return (as the sole candidate) to
+# request the shell's native pathname completion — handles ``~``, ``/``, ``$VAR``
+# and absolute/relative paths, which a static candidate list cannot. Recognised
+# by the ``_proto_complete`` bash function; keep the two literals in sync.
+FILE_COMPLETION = "\x1bFILES"
+
 
 def _unwrap_annotation(ann: object) -> tuple[object, list | None]:
     """Return ``(base_type, choices_or_None)``.
