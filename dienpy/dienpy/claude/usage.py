@@ -20,7 +20,8 @@ console = Console()
 _USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 
 
-def _get_usage() -> dict:
+def get_usage() -> dict:
+    """Fetch the raw Claude usage payload (``five_hour``, ``seven_day``, ...)."""
     r = auth.request("get", _USAGE_URL)
     if r.status_code == 429:
         raise Http429()
@@ -63,7 +64,7 @@ def main(*, watch: bool = False, interval: int = 300) -> None:
         )
 
     def update_values() -> None:
-        usage = _get_usage()
+        usage = get_usage()
         five = usage["five_hour"]
         seven = usage["seven_day"]
 
