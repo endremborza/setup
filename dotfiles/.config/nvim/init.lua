@@ -202,6 +202,7 @@ require('lazy').setup({
         { "z=",        desc = "Spelling suggestions" },
         { '<leader>c', group = '[C]ode' },
         { '<leader>d', group = '[D]ocument' },
+        { '<leader>f', group = '[F]ile' },
         { '<leader>g', group = '[G]it' },
         { '<leader>i', group = '[I]nsert' },
         { '<leader>r', group = '[R]ename' },
@@ -735,6 +736,39 @@ local function force_refresh_gitsigns()
   local gs = package.loaded.gitsigns
   if gs then pcall(gs.reset_base, true) end
 end
+
+vim.keymap.set('n', '<leader>fd', function()
+  local file = vim.fn.expand('%:p')
+  if file == '' then
+    vim.notify('No file to delete', vim.log.levels.WARN)
+    return
+  end
+  if vim.fn.confirm('Delete ' .. file .. '?', '&Yes\n&No', 2) ~= 1 then return end
+  vim.fn.delete(file)
+  vim.cmd('bdelete!')
+end, { desc = '[F]ile [D]elete' })
+
+vim.keymap.set('n', '<leader>fc', function()
+  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  vim.fn.setreg('+', table.concat(lines, '\n'))
+  vim.notify('Copied ' .. #lines .. ' lines to clipboard')
+end, { desc = '[F]ile [C]opy contents' })
+
+vim.keymap.set('n', '<leader>fr', function()
+  local file = vim.fn.expand('%')
+  if file == '' then
+    vim.notify('No file to restore', vim.log.levels.WARN)
+    return
+  end
+  if vim.fn.confirm('Restore ' .. file .. ' to HEAD? (discards staged + unstaged changes)', '&Yes\n&No', 2) ~= 1 then return end
+  vim.cmd('Git restore --source=HEAD --staged --worktree -- ' .. vim.fn.fnameescape(file))
+  vim.cmd('edit!')
+  force_refresh_gitsigns()
+end, { desc = '[F]ile [R]estore to HEAD' })
+
+vim.keymap.set('n', '<leader>fh', function()
+  require('telescope.builtin').git_bcommits()
+end, { desc = '[F]ile commit [H]istory' })
 
 vim.keymap.set('n', '<leader>gs', ":Git<enter>", { desc = '[G]it [S]tatus' })
 vim.keymap.set('n', '<leader>gd', ":Gdiffsplit<enter>", { desc = '[G]it [D]iff' })
