@@ -3,7 +3,13 @@ case "$(basename "$0")" in
     pipeclf) MODEL=claude-fable-5 ;;
     *) MODEL=claude-opus-4-8 ;;
 esac
-_cl() { claude --effort xhigh --model "$MODEL" --permission-mode auto; }
+CL="env -u ANTHROPIC_API_KEY claude --effort xhigh --model $MODEL --permission-mode auto"
+if [ "$1" = "--interactive" ]; then
+    shift
+    _cl() { $CL; }
+else
+    _cl() { timeout -k 10 "${PIPECL_TIMEOUT:-10800}" $CL -p; }
+fi
 if [ "$1" = "--raw" ]; then
     echo "$2" | _cl
 else
