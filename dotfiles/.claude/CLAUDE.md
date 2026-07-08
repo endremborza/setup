@@ -4,8 +4,20 @@
 - I will do the committing myself
 
 ## Planning Flow
-- write out plans to md files relevant in the repository
+- write out plans to md files (see *Docs vs. .cril* for where each kind belongs)
 - when part of a plan is completed, completely remove it from the planning .md, you can add it to a different file if that is necessary, but we follow changes through git, not having crossed out todo points in a md
+
+## Docs vs. .cril
+
+> a project might have a `.cril` directory, a symlink to a PKM system, if it is not present, disregard this part 
+
+`.cril/` is the repo's slice of my cross-repo PKM (symlinked into each repo, gitignored, never committed). The split is by tense/audience:
+- **`docs/` (committed)** = the project *as it is*, for anyone reading the code: architecture, data model, schemas, shipped-feature references, build/dev setup, benchmarks & results, anything cited externally (e.g. a paper).
+- **`.cril/` (PKM, not committed)** = everything about *changing or running* the project, for me as its driver: todos/backlogs, plans & design explorations, ideas, engineering debt, launch/marketing copy, high-level progress notes, and reusable agent prompts/playbooks.
+
+Invariants:
+- `docs/` never links into `.cril/`; `.cril/` may link into the repo — the repo stays self-contained.
+- When a `.cril/` plan ships, fold its *as-built* description into `docs/` and delete the plan (history lives in git, not stale checklists).
 
 ## Response Expectations
 - If something is ambiguous, or a plan is too complex with many possible paths, ask precise clarifying questions.
@@ -30,6 +42,7 @@
 - DRY - no duplication
 - Elegant, maintainable code over clever tricks
 - Prefer composition and small, focused functions
+- If a new feature supersedes or subsumes a previous one, the previous one should be replaced and deleted unless performance is harmed, but in all cases deletion should be brought up and considered
 
 ## Performance Mindset
 - Consider algorithmic complexity.
