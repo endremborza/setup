@@ -4,6 +4,10 @@ case "$(basename "$0")" in
     *) MODEL=claude-opus-4-8 ;;
 esac
 CL="env -u ANTHROPIC_API_KEY claude --effort xhigh --model $MODEL --permission-mode auto"
+if [ "$1" = "--safe" ]; then
+    shift
+    CL="$CL --safe-mode"
+fi
 if [ "$1" = "--interactive" ]; then
     shift
     _cl() { $CL; }
