@@ -754,6 +754,26 @@ vim.keymap.set('n', '<leader>fc', function()
   vim.notify('Copied ' .. #lines .. ' lines to clipboard')
 end, { desc = '[F]ile [C]opy contents' })
 
+vim.keymap.set('n', '<leader>fy', function()
+  local path = vim.fn.expand('%')
+  if path == '' then
+    vim.notify('No file path to copy', vim.log.levels.WARN)
+    return
+  end
+  vim.fn.setreg('+', path)
+  vim.notify('Copied ' .. path)
+end, { desc = '[F]ile relative path [y]ank' })
+
+vim.keymap.set('n', '<leader>fY', function()
+  local path = vim.fn.expand('%:p')
+  if path == '' then
+    vim.notify('No file path to copy', vim.log.levels.WARN)
+    return
+  end
+  vim.fn.setreg('+', path)
+  vim.notify('Copied ' .. path)
+end, { desc = '[F]ile absolute path [Y]ank' })
+
 vim.keymap.set('n', '<leader>fr', function()
   local file = vim.fn.expand('%')
   if file == '' then
