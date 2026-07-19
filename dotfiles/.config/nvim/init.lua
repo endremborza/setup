@@ -748,6 +748,41 @@ vim.keymap.set('n', '<leader>fd', function()
   vim.cmd('bdelete!')
 end, { desc = '[F]ile [D]elete' })
 
+vim.keymap.set('n', '<leader>fm', function()
+  local old = vim.fn.expand('%:p')
+  if old == '' then
+    vim.notify('No file to rename', vim.log.levels.WARN)
+    return
+  end
+  -- default = bare filename → same-dir rename; type a path (sub/, ../, ~/, /) to move
+  local input = vim.fn.input({ prompt = 'Rename to: ', default = vim.fn.expand('%:t'), completion = 'file' })
+  if input == '' then return end
+
+  local new
+  if input:match('^[~/]') then
+    new = vim.fn.expand(input)
+  else
+    new = vim.fn.expand('%:p:h') .. '/' .. input
+  end
+  new = vim.fn.fnamemodify(new, ':p')
+  if new == old then return end
+  if vim.fn.filereadable(new) == 1 then
+    vim.notify(new .. ' already exists', vim.log.levels.ERROR)
+    return
+  end
+
+  vim.fn.mkdir(vim.fn.fnamemodify(new, ':h'), 'p')
+  vim.cmd('saveas ' .. vim.fn.fnameescape(new))
+  vim.fn.delete(old)
+  for _, b in ipairs(vim.api.nvim_list_bufs()) do
+    if b ~= vim.api.nvim_get_current_buf() and vim.api.nvim_buf_get_name(b) == old then
+      vim.api.nvim_buf_delete(b, { force = true })
+    end
+  end
+  force_refresh_gitsigns()
+  vim.notify('Renamed to ' .. vim.fn.fnamemodify(new, ':~:.'))
+end, { desc = '[F]ile [m]ove/rename' })
+
 vim.keymap.set('n', '<leader>fc', function()
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   vim.fn.setreg('+', table.concat(lines, '\n'))
