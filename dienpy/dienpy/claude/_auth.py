@@ -50,13 +50,13 @@ def warn_if_changed(label: str, value: str) -> None:
         )
 
 
-def _read() -> dict:
-    with _CREDENTIALS_PATH.open() as f:
+def _read(path: Path) -> dict:
+    with path.open() as f:
         return json.load(f)
 
 
-def _write(creds: dict) -> None:
-    with _CREDENTIALS_PATH.open("w") as f:
+def _write(path: Path, creds: dict) -> None:
+    with path.open("w") as f:
         json.dump(creds, f, indent=2)
 
 
@@ -64,10 +64,10 @@ def _expired(creds: dict) -> bool:
     return time.time() >= creds["claudeAiOauth"].get("expiresAt", 0) - 60
 
 
-def _refresh() -> None:
+def _refresh(path: Path) -> None:
     warn_if_changed("client_id", _CLIENT_ID)
     warn_if_changed("anthropic-beta", _BETA_HEADER)
-    creds = _read()
+    creds = _read(path)
     r = requests.post(
         _TOKEN_URL,
         json={
@@ -86,14 +86,14 @@ def _refresh() -> None:
     oauth["expiresAt"] = int(time.time()) + data.get("expires_in", 3600)
     if "refresh_token" in data:
         oauth["refreshToken"] = data["refresh_token"]
-    _write(creds)
+    _write(path, creds)
 
 
-def _make_headers(extra: dict[str, str] | None = None) -> dict[str, str]:
-    creds = _read()
+def _make_headers(path: Path, extra: dict[str, str] | None = None) -> dict[str, str]:
+    creds = _read(path)
     if _expired(creds):
-        _refresh()
-        creds = _read()
+        _refresh(path)
+        creds = _read(path)
     headers = {
         "Authorization": f"Bearer {creds['claudeAiOauth']['accessToken']}",
         "anthropic-beta": _BETA_HEADER,
@@ -108,13 +108,21 @@ def request(
     method: str,
     url: str,
     extra_headers: dict[str, str] | None = None,
+    creds_path: Path | None = None,
     **kwargs,
 ) -> requests.Response:
-    """Authenticated request with automatic token refresh on 401."""
-    r = getattr(requests, method)(url, headers=_make_headers(extra_headers), **kwargs)
+    """Authenticated request with automatic token refresh on 401.
+
+    creds_path overrides the default ~/.claude/.credentials.json; refreshed
+    tokens are written back to whichever file was used.
+    """
+    path = creds_path or _CREDENTIALS_PATH
+    r = getattr(requests, method)(
+        url, headers=_make_headers(path, extra_headers), **kwargs
+    )
     if r.status_code == 401:
-        _refresh()
+        _refresh(path)
         r = getattr(requests, method)(
-            url, headers=_make_headers(extra_headers), **kwargs
+            url, headers=_make_headers(path, extra_headers), **kwargs
         )
     return r

@@ -3,6 +3,7 @@
 import datetime
 import os
 import time
+from pathlib import Path
 
 from rich.console import Console, Group
 from rich.live import Live
@@ -20,9 +21,9 @@ console = Console()
 _USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 
 
-def get_usage() -> dict:
+def get_usage(creds_path: Path | None = None) -> dict:
     """Fetch the raw Claude usage payload (``five_hour``, ``seven_day``, ...)."""
-    r = auth.request("get", _USAGE_URL)
+    r = auth.request("get", _USAGE_URL, creds_path=creds_path)
     if r.status_code == 429:
         raise Http429()
     r.raise_for_status()
