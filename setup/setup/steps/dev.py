@@ -98,7 +98,11 @@ def install_jq() -> None:
     run_cmd("sudo ldconfig")
 
 
-@step(profile="shell", name="sc-im", check="sc-im --version", verify="sc-im --version")
+# sc-im --version exits nonzero; grep the banner instead.
+_SCIM_CHECK = "sc-im --version 2>&1 | grep -q 'sc-im - version'"
+
+
+@step(profile="shell", name="sc-im", check=_SCIM_CHECK, verify=_SCIM_CHECK)
 def install_scim() -> None:
     dest = clone_gh("andmarti1424", "sc-im", "main")
     run_cmd("make -C src", cwd=dest)

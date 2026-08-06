@@ -2,7 +2,10 @@
 set -euo pipefail
 
 # Bootstrap a fresh machine.
-# Usage: bash bootstrap.sh --tier hub|member|guest
+# Usage: bash bootstrap.sh [--tier hub|member|guest]
+#
+# Default (no --tier): public-only — clone diencephalon, restow, run profiles.
+# What every leaf and edge machine needs; fleet (hypothalamus) drives it remotely.
 #
 # Env:
 #   SYNC_ROOT         (default: $HOME/synced)
@@ -31,8 +34,8 @@ while [ $# -gt 0 ]; do
 done
 
 case "$TIER" in
-    hub|member|guest) ;;
-    *) echo "Usage: bash bootstrap.sh --tier hub|member|guest" >&2; exit 1 ;;
+    ""|hub|member|guest) ;;
+    *) echo "Usage: bash bootstrap.sh [--tier hub|member|guest]" >&2; exit 1 ;;
 esac
 
 : "${SYNC_ROOT:=$HOME/synced}"
@@ -61,6 +64,11 @@ if [ "$TIER" = "member" ] && [ ! -d "$HYPO_ROOT" ]; then
     fi
     mkdir -p "$(dirname "$HYPO_ROOT")"
     git clone "$HYPOTHALAMUS_URL" "$HYPO_ROOT"
+fi
+
+# Distro skeleton rc file blocks the stow symlink on fresh machines.
+if [ -f "$HOME/.profile" ] && [ ! -L "$HOME/.profile" ]; then
+    rm "$HOME/.profile"
 fi
 
 export SYNC_ROOT DIEN_ROOT

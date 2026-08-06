@@ -7,14 +7,14 @@ ENV PATH="/root/.local/bin:/root/.cargo/bin:${PATH}"
 # under sudo without a chicken-and-egg.
 RUN apt-get update && apt-get install -y sudo curl git && \
     rm -rf /var/lib/apt/lists/* && \
-    echo 'root ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers && \
-    rm -f /root/.profile
+    echo 'root ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
 
 # Stage the diencephalon repo as a local clone source for bootstrap.sh.
 COPY . /tmp/diencephalon-src
 
-# End-to-end: arg parsing, git clone to canonical layout, restow, make setup-run.
-RUN DIENCEPHALON_URL=/tmp/diencephalon-src bash /tmp/diencephalon-src/setup/bootstrap.sh --tier guest
+# End-to-end: default (tier-less) path — git clone to canonical layout,
+# skeleton-.profile removal, restow, make setup-run.
+RUN DIENCEPHALON_URL=/tmp/diencephalon-src bash /tmp/diencephalon-src/setup/bootstrap.sh
 
 # Independent verify (PROFILES= → just base).
 WORKDIR /root/synced/composites/pkm/diencephalon
