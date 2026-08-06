@@ -55,7 +55,10 @@ def write_system_file(path: Path, content: str) -> None:
         f.write(content)
         tmp = Path(f.name)
     try:
-        subprocess.run(["sudo", "cp", str(tmp), str(path)], check=True)
+        # install, not cp: the tempfile's 600 must not become the target mode
+        subprocess.run(
+            ["sudo", "install", "-m", "644", str(tmp), str(path)], check=True
+        )
     finally:
         tmp.unlink(missing_ok=True)
 

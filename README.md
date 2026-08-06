@@ -14,18 +14,17 @@ Public dotfiles, scripts, and bootstrap tooling. No secrets, no personal paths -
 ### Fresh machine
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/endremborza/diencephalon/main/setup/bootstrap.sh \
-  | bash -s -- --tier guest
+curl -fsSL https://raw.githubusercontent.com/endremborza/setup/main/setup/bootstrap.sh | bash
 ```
 
 Installs `uv`, clones the repo to `$SYNC_ROOT/composites/pkm/diencephalon`, stows dotfiles, runs `setup run` (base profile only).
 
-Bootstrap takes `--tier {hub,member,guest}` — see [SETUP.md](SETUP.md#bootstrap-tiers). Set `PROFILES="shell dev"` env to push further in one shot.
+Bootstrap also takes `--tier {hub,member,guest}` — see [SETUP.md](SETUP.md#bootstrap-tiers). Set `PROFILES="shell dev"` env to push further in one shot.
 
 ### Existing machine
 
 ```bash
-git clone https://github.com/endremborza/diencephalon
+git clone https://github.com/endremborza/setup diencephalon
 cd diencephalon
 make install
 ```
@@ -42,6 +41,8 @@ A profile is an independent feature group. `base` is always implicit; layer othe
 | `screen`       | xorg, leftwm, alacritty, nerd-fonts, X11 config                   |
 | `screen-apps`  | firefox-apt, logseq, bluetooth, autologin, network-nm             |
 | `hub`          | sshd, bare git repos for fleet                                    |
+| `wg`           | wireguard (interface config is the enroller's job)                |
+| `edge`         | nftables default-deny input, unattended-upgrades                  |
 
 ```bash
 setup run                                # base only

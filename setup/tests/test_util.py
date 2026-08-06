@@ -56,4 +56,4 @@ def test_write_system_file(tmp_path):
     mock_run.assert_called_once()
     cmd = mock_run.call_args[0][0]
     assert "sudo" in cmd
-    assert "cp" in cmd
+    assert "install" in cmd

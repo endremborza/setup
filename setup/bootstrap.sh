@@ -10,7 +10,7 @@ set -euo pipefail
 # Env:
 #   SYNC_ROOT         (default: $HOME/synced)
 #   PROFILES          (default: empty — base only; space-separated, e.g. "shell dev")
-#   DIENCEPHALON_URL  (default: https://github.com/endremborza/diencephalon)
+#   DIENCEPHALON_URL  (default: https://github.com/endremborza/setup)
 #   HUB_USER          (default: $USER — SSH user on the Hub for fleet repos)
 #   HYPOTHALAMUS_URL  (default: derived from PRIMARY_HOSTNAME — override for tests/file:// clones)
 #
@@ -41,7 +41,7 @@ esac
 : "${SYNC_ROOT:=$HOME/synced}"
 : "${PROFILES:=}"
 : "${HUB_USER:=${USER:-$(id -un)}}"
-DIENCEPHALON_URL="${DIENCEPHALON_URL:-https://github.com/endremborza/diencephalon}"
+DIENCEPHALON_URL="${DIENCEPHALON_URL:-https://github.com/endremborza/setup}"
 DIEN_ROOT="$SYNC_ROOT/composites/pkm/diencephalon"
 HYPO_ROOT="$SYNC_ROOT/composites/pkm/hypothalamus"
 

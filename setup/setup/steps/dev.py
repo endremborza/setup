@@ -98,8 +98,9 @@ def install_jq() -> None:
     run_cmd("sudo ldconfig")
 
 
-# sc-im --version exits nonzero; grep the banner instead.
-_SCIM_CHECK = "sc-im --version 2>&1 | grep -q 'sc-im - version'"
+# sc-im --version exits nonzero; grep the banner instead. No -q: early pipe
+# close can leave sc-im blocked on SIGPIPE under subprocess capture.
+_SCIM_CHECK = "sc-im --version 2>&1 | grep 'sc-im - version' > /dev/null"
 
 
 @step(profile="shell", name="sc-im", check=_SCIM_CHECK, verify=_SCIM_CHECK)
