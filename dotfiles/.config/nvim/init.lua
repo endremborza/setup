@@ -341,80 +341,18 @@ require('lazy').setup({
       pcall(require('telescope').load_extension, 'fzf')
 
       local tele_std = require('telescope.builtin')
-
-      local review_left = nil
-      local review_right = nil
-      local review_base = "HEAD"
-
-      local function in_review_mode()
-        return review_left and review_right
-            and vim.api.nvim_win_is_valid(review_left)
-            and vim.api.nvim_win_is_valid(review_right)
-      end
-
-      local function set_rl_windows()
-        local before = {}
-        for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do before[w] = true end
-        local file_win = vim.api.nvim_get_current_win()
-        vim.cmd("Gvdiffsplit " .. review_base)
-        local new_win
-        for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-          if not before[w] then
-            new_win = w; break
-          end
-        end
-        review_left = new_win or vim.api.nvim_get_current_win()
-        review_right = file_win
-        vim.api.nvim_set_current_win(review_right)
-        vim.schedule(function() vim.cmd("diffupdate!") end)
-      end
-
-      local function toggle_review()
-        if in_review_mode() then
-          vim.api.nvim_set_current_win(review_right)
-          vim.cmd("only")
-          vim.cmd("diffoff")
-          review_left = nil
-          review_right = nil
-          return
-        end
-
-        vim.cmd("botright Git")
-        vim.cmd("resize 15")
-        vim.cmd("normal! G")
-
-        vim.cmd("wincmd k")
-        set_rl_windows()
-      end
-
-      local function review_file(file)
-        if vim.api.nvim_win_is_valid(review_left) then
-          vim.api.nvim_win_close(review_left, false)
-        end
-        vim.api.nvim_set_current_win(review_right)
-        vim.cmd("diffoff")
-        vim.cmd("edit " .. vim.fn.fnameescape(file))
-        set_rl_windows()
-      end
-
-      local function open_file(file)
-        if not in_review_mode() then
-          vim.cmd("edit " .. vim.fn.fnameescape(file))
-          return
-        end
-        review_file(file)
-      end
+      local grev = require('regroup.review')
 
       local function review_changed_file()
         local picker
-        if review_base == "HEAD" then
+        if grev.base == "HEAD" then
           picker = function(opts)
             tele_std.git_status(opts)
           end
         else
           picker = function(opts)
             tele_std.git_files(vim.tbl_extend("force", opts or {}, {
-              git_command = { "git", "diff", "--name-only", review_base }
+              git_command = { "git", "diff", "--name-only", grev.base }
             }))
           end
         end
@@ -428,11 +366,11 @@ require('lazy').setup({
             local function select()
               local entry = action_state.get_selected_entry()
               actions.close(prompt_bufnr)
-              open_file(entry.value)
+              grev.open(entry.value)
             end
 
             local function refresh()
-              if review_base ~= "HEAD" then return end
+              if grev.base ~= "HEAD" then return end
               local p = action_state.get_current_picker(prompt_bufnr)
               local row = p:get_selection_row()
               local callbacks = { unpack(p._completion_callbacks) }
@@ -475,12 +413,12 @@ require('lazy').setup({
             local function select_branch()
               local entry = action_state.get_selected_entry()
               actions.close(prompt_bufnr)
-              review_base = entry.value
+              grev.base = entry.value
             end
 
             local function select_head()
               actions.close(prompt_bufnr)
-              review_base = "HEAD"
+              grev.base = "HEAD"
             end
 
             map("i", "<CR>", select_branch)
@@ -512,7 +450,7 @@ require('lazy').setup({
       end
 
       vim.keymap.set("n", "<leader>gf", review_changed_file, { desc = "Review changed [F]ile" })
-      vim.keymap.set("n", "<leader>gr", toggle_review, { desc = "Toggle Git [R]eview mode" })
+      vim.keymap.set("n", "<leader>gr", grev.toggle, { desc = "Toggle Git [R]eview mode" })
       vim.keymap.set("n", "<leader>gb", pick_review_branch, { desc = "Review [B]asis branch" })
       vim.keymap.set("n", "<leader>go", checkout_branch, { desc = "Check[O]ut Branch" })
 
@@ -845,6 +783,8 @@ vim.keymap.set("n", "<leader>gh", function()
   local end_line = line + 5
   vim.cmd(string.format("Git log -L %d,%d:%s", start_line, end_line, file))
 end, { desc = "[G]it commit [H]istory (log) for current line" })
+
+require('regroup').setup()
 
 local highlight_group = vim.api.nvim_create_augroup('YankHighlight', { clear = true })
 vim.api.nvim_create_autocmd('TextYankPost', {
