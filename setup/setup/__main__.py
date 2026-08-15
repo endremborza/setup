@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 
-import setup.steps  # noqa: F401 — registers all steps
+import setup.bricks  # noqa: F401 — registers all bricks
 from setup.runner import BASE_PROFILE, REGISTRY, run, verify
 
 
@@ -41,17 +41,17 @@ def main() -> None:
         "--force",
         "-f",
         action="store_true",
-        help="Run steps even when their check command passes.",
+        help="Run bricks even when their check command passes.",
     )
-    run_p.add_argument("--step", "-s", metavar="NAME")
+    run_p.add_argument("--brick", "-b", metavar="NAME")
 
     sub.add_parser(
-        "list", help="List all registered steps with profile, check, and verify"
+        "list", help="List all registered bricks with profile, check, and verify"
     )
 
-    ver_p = sub.add_parser("verify", help="Run verify commands for installed steps")
+    ver_p = sub.add_parser("verify", help="Run verify commands for installed bricks")
     _profile_args(ver_p)
-    ver_p.add_argument("--step", "-s", metavar="NAME")
+    ver_p.add_argument("--brick", "-b", metavar="NAME")
 
     args = parser.parse_args()
 
@@ -59,17 +59,17 @@ def main() -> None:
         run(
             profiles=_resolve_cli_profiles(args.profile),
             dry_run=args.dry_run,
-            step_name=args.step,
+            brick_name=args.brick,
             force=args.force,
         )
     elif args.cmd == "list":
-        width = max((len(s.profile) for s in REGISTRY), default=4)
-        for s in REGISTRY:
-            check = f"  [check: {s.check}]" if s.check else ""
-            vfy = f"  [verify: {s.verify}]" if s.verify else ""
-            print(f"  [{s.profile:>{width}}]  {s.name}{check}{vfy}")
+        width = max((len(b.profile_label) for b in REGISTRY), default=4)
+        for b in REGISTRY:
+            check = f"  [check: {b.check}]" if b.check else ""
+            vfy = f"  [verify: {b.verify}]" if b.verify else ""
+            print(f"  [{b.profile_label:>{width}}]  {b.name}{check}{vfy}")
     elif args.cmd == "verify":
-        ok = verify(profiles=_resolve_cli_profiles(args.profile), step_name=args.step)
+        ok = verify(profiles=_resolve_cli_profiles(args.profile), brick_name=args.brick)
         raise SystemExit(0 if ok else 1)
 
 

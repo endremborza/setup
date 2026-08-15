@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from setup.runner import step
+from setup.runner import brick
 from setup.util import apt_install, append_to_profile, run_cmd
 
 _APT_BASE = [
@@ -28,6 +28,7 @@ _APT_BASE = [
     "git",
     "make",
     "stow",
+    "rsync",
     "xclip",
     "tree",
     "btop",
@@ -42,11 +43,13 @@ _DIENCEPHALON = Path(
 )
 
 
-@step(
+# check keys on the newest list addition so extending the list re-runs the
+# (idempotent) install fleet-wide on the next update.
+@brick(
     profile="base",
     name="apt-base",
-    check="dpkg -s build-essential 2>/dev/null | grep -q 'Status: install ok'",
-    verify="dpkg -s build-essential 2>/dev/null | grep -q 'Status: install ok'",
+    check="dpkg -s rsync 2>/dev/null | grep -q 'Status: install ok'",
+    verify="dpkg -s rsync 2>/dev/null | grep -q 'Status: install ok'",
 )
 def install_apt_base() -> None:
     run_cmd("sudo apt-get update")
@@ -55,7 +58,7 @@ def install_apt_base() -> None:
 
 # Registered between apt-base and rust so that dotfiles/.profile is a stow symlink
 # before append_to_profile runs (which would otherwise create a conflicting real file).
-@step(
+@brick(
     profile="base",
     name="restow",
     check="test -f ~/.config/environment.d/10-vars.conf",
@@ -65,13 +68,13 @@ def run_restow() -> None:
     run_cmd(f"bash {_DIENCEPHALON}/dotfiles/.local/bin/restow")
 
 
-@step(profile="base", name="rust", check="rustc --version", verify="rustc --version")
+@brick(profile="base", name="rust", check="rustc --version", verify="rustc --version")
 def install_rust() -> None:
     run_cmd("sh -c 'curl https://sh.rustup.rs -sSf | sh -s -- -y'")
     append_to_profile('. "$HOME/.cargo/env"')
 
 
-@step(
+@brick(
     profile="base", name="rclone", check="rclone --version", verify="rclone --version"
 )
 def install_rclone() -> None:

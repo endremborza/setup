@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from setup.runner import REGISTRY, Step, run, verify
+from setup.runner import REGISTRY, Brick, run, verify
 
 
 @pytest.fixture(autouse=True)
@@ -16,19 +16,19 @@ def isolated_registry():
     REGISTRY.extend(original)
 
 
-def make_step(
+def make_brick(
     name: str, profile: str, check: str | None = None
-) -> tuple[MagicMock, Step]:
+) -> tuple[MagicMock, Brick]:
     fn = MagicMock()
-    s = Step(fn=fn, name=name, profile=profile, check=check)
+    s = Brick(fn=fn, name=name, profile=profile, check=check)
     REGISTRY.append(s)
     return fn, s
 
 
 def test_run_includes_base_implicitly():
-    fn_base, _ = make_step("apt", profile="base")
-    fn_shell, _ = make_step("tmux", profile="shell")
-    fn_dev, _ = make_step("node", profile="dev")
+    fn_base, _ = make_brick("apt", profile="base")
+    fn_shell, _ = make_brick("tmux", profile="shell")
+    fn_dev, _ = make_brick("node", profile="dev")
 
     run(profiles=["shell"])
 
@@ -38,9 +38,9 @@ def test_run_includes_base_implicitly():
 
 
 def test_run_multiple_profiles():
-    fn_base, _ = make_step("apt", profile="base")
-    fn_shell, _ = make_step("tmux", profile="shell")
-    fn_dev, _ = make_step("node", profile="dev")
+    fn_base, _ = make_brick("apt", profile="base")
+    fn_shell, _ = make_brick("tmux", profile="shell")
+    fn_dev, _ = make_brick("node", profile="dev")
 
     run(profiles=["shell", "dev"])
 
@@ -50,8 +50,8 @@ def test_run_multiple_profiles():
 
 
 def test_run_no_profiles_only_base():
-    fn_base, _ = make_step("apt", profile="base")
-    fn_shell, _ = make_step("tmux", profile="shell")
+    fn_base, _ = make_brick("apt", profile="base")
+    fn_shell, _ = make_brick("tmux", profile="shell")
 
     run(profiles=None)
 
@@ -59,23 +59,23 @@ def test_run_no_profiles_only_base():
     fn_shell.assert_not_called()
 
 
-def test_run_single_step_by_name():
-    fn0, _ = make_step("base-step", profile="base")
-    fn1, _ = make_step("dev-step", profile="dev")
+def test_run_single_brick_by_name():
+    fn0, _ = make_brick("base-brick", profile="base")
+    fn1, _ = make_brick("dev-brick", profile="dev")
 
-    run(profiles=None, step_name="dev-step")
+    run(profiles=None, brick_name="dev-brick")
 
     fn0.assert_not_called()
     fn1.assert_called_once()
 
 
-def test_run_unknown_step_exits():
+def test_run_unknown_brick_exits():
     with pytest.raises(SystemExit):
-        run(profiles=None, step_name="nonexistent")
+        run(profiles=None, brick_name="nonexistent")
 
 
 def test_run_skips_when_check_passes():
-    fn, _ = make_step("checked", profile="base", check="true")
+    fn, _ = make_brick("checked", profile="base", check="true")
 
     with patch("setup.runner.check_passes", return_value=True):
         run(profiles=None)
@@ -84,7 +84,7 @@ def test_run_skips_when_check_passes():
 
 
 def test_run_executes_when_check_fails():
-    fn, _ = make_step("checked", profile="base", check="false")
+    fn, _ = make_brick("checked", profile="base", check="false")
 
     with patch("setup.runner.check_passes", return_value=False):
         run(profiles=None)
@@ -93,7 +93,7 @@ def test_run_executes_when_check_fails():
 
 
 def test_run_force_ignores_check():
-    fn, _ = make_step("checked", profile="base", check="true")
+    fn, _ = make_brick("checked", profile="base", check="true")
 
     with patch("setup.runner.check_passes", return_value=True):
         run(profiles=None, force=True)
@@ -102,7 +102,7 @@ def test_run_force_ignores_check():
 
 
 def test_run_dry_run_skips_execution():
-    fn, _ = make_step("base-step", profile="base")
+    fn, _ = make_brick("base-brick", profile="base")
 
     run(profiles=None, dry_run=True)
 
@@ -112,8 +112,8 @@ def test_run_dry_run_skips_execution():
 def test_run_continues_after_failure(capsys):
     fn_fail = MagicMock(side_effect=RuntimeError("boom"))
     fn_ok = MagicMock()
-    REGISTRY.append(Step(fn=fn_fail, name="fail", profile="base"))
-    REGISTRY.append(Step(fn=fn_ok, name="ok", profile="base"))
+    REGISTRY.append(Brick(fn=fn_fail, name="fail", profile="base"))
+    REGISTRY.append(Brick(fn=fn_ok, name="ok", profile="base"))
 
     run(profiles=None)
 
@@ -122,20 +122,20 @@ def test_run_continues_after_failure(capsys):
 
 
 def test_verify_returns_true_when_all_pass():
-    REGISTRY.append(Step(fn=MagicMock(), name="a", profile="base", verify="true"))
-    REGISTRY.append(Step(fn=MagicMock(), name="b", profile="base", verify="true"))
+    REGISTRY.append(Brick(fn=MagicMock(), name="a", profile="base", verify="true"))
+    REGISTRY.append(Brick(fn=MagicMock(), name="b", profile="base", verify="true"))
 
     assert verify(profiles=None) is True
 
 
 def test_verify_returns_false_on_failure():
-    REGISTRY.append(Step(fn=MagicMock(), name="a", profile="base", verify="false"))
+    REGISTRY.append(Brick(fn=MagicMock(), name="a", profile="base", verify="false"))
 
     assert verify(profiles=None) is False
 
 
-def test_verify_skips_steps_without_verify():
-    REGISTRY.append(Step(fn=MagicMock(), name="no-verify", profile="base"))
+def test_verify_skips_bricks_without_verify():
+    REGISTRY.append(Brick(fn=MagicMock(), name="no-verify", profile="base"))
 
     with patch("setup.runner.run_check") as mock_check:
         verify(profiles=None)
@@ -144,10 +144,10 @@ def test_verify_skips_steps_without_verify():
 
 def test_verify_respects_profile_set():
     REGISTRY.append(
-        Step(fn=MagicMock(), name="base-vfy", profile="base", verify="true")
+        Brick(fn=MagicMock(), name="base-vfy", profile="base", verify="true")
     )
     REGISTRY.append(
-        Step(fn=MagicMock(), name="server-vfy", profile="server", verify="true")
+        Brick(fn=MagicMock(), name="server-vfy", profile="server", verify="true")
     )
 
     with patch("setup.runner.run_check", return_value=(True, "")) as mock_check:

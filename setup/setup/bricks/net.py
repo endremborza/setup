@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from setup.runner import step
+from setup.runner import brick
 from setup.util import apt_install, run_cmd, write_system_file
 
 # Input-only hardening: default-deny inbound except lo, established, icmp,
@@ -32,7 +32,7 @@ APT::Periodic::Unattended-Upgrade "1";
 """
 
 
-@step(
+@brick(
     profile="wg",
     name="wireguard",
     check="command -v wg",
@@ -42,7 +42,20 @@ def install_wireguard() -> None:
     apt_install(["wireguard"])
 
 
-@step(
+# Config (/etc/caddy/Caddyfile) and service state are the fleet controller's
+# job — `fleet caddy` renders from its inventory and deploys on update. The
+# distro package is deliberately used as-is (auto-HTTPS needs no plugins).
+@brick(
+    profile="web",
+    name="caddy",
+    check="dpkg -s caddy 2>/dev/null | grep -q 'Status: install ok'",
+    verify="command -v caddy",
+)
+def install_caddy() -> None:
+    apt_install(["caddy"])
+
+
+@brick(
     profile="edge",
     name="nftables-deny",
     check="grep -q 'policy drop' /etc/nftables.conf 2>/dev/null",
@@ -56,7 +69,7 @@ def install_nftables_deny() -> None:
     run_cmd("sudo systemctl enable --now nftables")
 
 
-@step(
+@brick(
     profile="edge",
     name="unattended-upgrades",
     check="test -f /etc/apt/apt.conf.d/20auto-upgrades",

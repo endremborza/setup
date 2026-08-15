@@ -3,7 +3,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH="/root/.local/bin:/root/.cargo/bin:${PATH}"
 
 # bootstrap.sh installs sudo/curl/git/stow/make itself; we only need git+curl
-# to exist beforehand so the apt-get update step inside bootstrap.sh can run
+# to exist beforehand so the apt-get update inside bootstrap.sh can run
 # under sudo without a chicken-and-egg.
 RUN apt-get update && apt-get install -y sudo curl git && \
     rm -rf /var/lib/apt/lists/* && \

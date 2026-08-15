@@ -1,7 +1,7 @@
 import subprocess
 from pathlib import Path
 
-from setup.runner import step
+from setup.runner import brick
 from setup.util import cargo_install, clone_gh, run_cmd, extended_env, ONSET_PATH
 from setup.versions import get as _v
 
@@ -22,24 +22,31 @@ _CARGO_TOOLS: list[tuple[str, str]] = [
 ]
 
 
-@step(
+# musl build: static, works on any glibc (fleet spans 22.04 and 24.04).
+# Version-aware check: a pin bump fails the check fleet-wide, so the next
+# `fleet update` converges every machine to the pinned version.
+_TECTONIC_VERSION = _v("tectonic")
+_TECTONIC_CHECK = f"tectonic --version | grep -qF 'Tectonic {_TECTONIC_VERSION}'"
+_TECTONIC_URL = (
+    "https://github.com/tectonic-typesetting/tectonic/releases/download/"
+    f"tectonic%40{_TECTONIC_VERSION}/"
+    f"tectonic-{_TECTONIC_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+)
+
+
+@brick(
     profile="dev",
     name="tectonic",
-    check="tectonic --version",
-    verify="tectonic --version",
+    check=_TECTONIC_CHECK,
+    verify=_TECTONIC_CHECK,
 )
 def install_tectonic() -> None:
-    run_cmd(
-        "sh -c 'curl --proto \"=https\" --tlsv1.2 -fsSL https://drop-sh.fullyjustified.net | sh'"
-    )
-    tectonic = Path("tectonic")
-    if tectonic.exists():
-        dest = Path.home() / ".local/bin/tectonic"
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        tectonic.rename(dest)
+    dest = Path.home() / ".local/bin"
+    dest.mkdir(parents=True, exist_ok=True)
+    run_cmd(f"sh -c 'curl -fsSL {_TECTONIC_URL} | tar -xz -C {dest} tectonic'")
 
 
-@step(
+@brick(
     profile="shell",
     name="cargo-tools",
     check="rg --version",
@@ -49,12 +56,12 @@ def install_cargo_tools() -> None:
     cargo_install([crate for crate, _ in _CARGO_TOOLS])
 
 
-@step(profile="shell", name="nushell", check="nu --version", verify="nu --version")
+@brick(profile="shell", name="nushell", check="nu --version", verify="nu --version")
 def install_nushell() -> None:
     run_cmd("cargo install nu --locked", env=extended_env())
 
 
-@step(profile="shell", name="lua", check="lua -v", verify="lua -v")
+@brick(profile="shell", name="lua", check="lua -v", verify="lua -v")
 def install_lua() -> None:
     ONSET_PATH.mkdir(parents=True, exist_ok=True)
     run_cmd(
@@ -67,7 +74,7 @@ def install_lua() -> None:
     run_cmd("sudo make install", cwd=src)
 
 
-@step(
+@brick(
     profile="shell",
     name="luarocks",
     check="luarocks --version",
@@ -86,7 +93,7 @@ def install_luarocks() -> None:
     run_cmd("sudo make install", cwd=src)
 
 
-@step(profile="shell", name="jq", check="jq --version", verify="jq --version")
+@brick(profile="shell", name="jq", check="jq --version", verify="jq --version")
 def install_jq() -> None:
     dest = clone_gh("jqlang", "jq", _JQ_TAG)
     run_cmd("git submodule update --init", cwd=dest)
@@ -103,7 +110,7 @@ def install_jq() -> None:
 _SCIM_CHECK = "sc-im --version 2>&1 | grep 'sc-im - version' > /dev/null"
 
 
-@step(profile="shell", name="sc-im", check=_SCIM_CHECK, verify=_SCIM_CHECK)
+@brick(profile="shell", name="sc-im", check=_SCIM_CHECK, verify=_SCIM_CHECK)
 def install_scim() -> None:
     dest = clone_gh("andmarti1424", "sc-im", "main")
     run_cmd("make -C src", cwd=dest)
@@ -114,14 +121,14 @@ def install_scim() -> None:
     link.symlink_to(dest / "src/sc-im")
 
 
-@step(profile="shell", name="neovim", check="nvim --version", verify="nvim --version")
+@brick(profile="shell", name="neovim", check="nvim --version", verify="nvim --version")
 def install_neovim() -> None:
     dest = clone_gh("neovim", "neovim", _NEOVIM_TAG)
     run_cmd("make CMAKE_BUILD_TYPE=RelWithDebInfo", cwd=dest)
     run_cmd("sudo make install", cwd=dest)
 
 
-@step(profile="shell", name="fzf", check="fzf --version", verify="fzf --version")
+@brick(profile="shell", name="fzf", check="fzf --version", verify="fzf --version")
 def install_fzf() -> None:
     dest = clone_gh("junegunn", "fzf", _FZF_TAG)
     run_cmd("./install --all --key-bindings --completion --update-rc", cwd=dest)
@@ -130,7 +137,7 @@ def install_fzf() -> None:
     run_cmd(f"stow --verbose=3 -t {bin_dir} bin", cwd=dest)
 
 
-@step(profile="shell", name="tmux", check="tmux -V", verify="tmux -V")
+@brick(profile="shell", name="tmux", check="tmux -V", verify="tmux -V")
 def install_tmux() -> None:
     dest = clone_gh("tmux", "tmux", _TMUX_TAG)
     run_cmd("sh autogen.sh", cwd=dest)
@@ -138,7 +145,7 @@ def install_tmux() -> None:
     run_cmd("sudo make install", cwd=dest)
 
 
-@step(profile="dev", name="node", check="node --version", verify="node --version")
+@brick(profile="dev", name="node", check="node --version", verify="node --version")
 def install_node() -> None:
     run_cmd(
         "sh -c 'curl https://raw.githubusercontent.com/creationix/nvm/master/install.sh | bash'"

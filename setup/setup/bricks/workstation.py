@@ -4,7 +4,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from setup.runner import step
+from setup.runner import brick
 from setup.util import apt_install, run_cmd, write_system_file, ONSET_PATH
 from setup.versions import get as _v
 
@@ -53,7 +53,7 @@ _FIREFOX_CHECK = (
 )
 
 
-@step(profile="screen-apps", name="firefox-apt", check=_FIREFOX_CHECK)
+@brick(profile=("screen-apps", "media"), name="firefox-apt", check=_FIREFOX_CHECK)
 def setup_firefox_apt() -> None:
     run_cmd("sudo install -d -m 0755 /etc/apt/keyrings")
     run_cmd(
@@ -79,7 +79,7 @@ def setup_firefox_apt() -> None:
     apt_install(["firefox"])
 
 
-@step(profile="screen-apps", name="logseq", check=f"test -L ~/.local/bin/Logseq")
+@brick(profile="screen-apps", name="logseq", check=f"test -L ~/.local/bin/Logseq")
 def install_logseq() -> None:
     zip_name = f"Logseq-linux-x64-{_LOGSEQ_VERSION}.zip"
     url = f"https://github.com/logseq/logseq/releases/download/{_LOGSEQ_VERSION}/{zip_name}"
@@ -93,7 +93,13 @@ def install_logseq() -> None:
     link.symlink_to(app)
 
 
-@step(profile="screen-apps", name="bluetooth-autoenable")
+_BT_CHECK = (
+    "grep -q '^AutoEnable=true' /etc/bluetooth/main.conf"
+    " && systemctl is-enabled -q rfkill-unblock.service"
+)
+
+
+@brick(profile="screen-apps", name="bluetooth-autoenable", check=_BT_CHECK, verify=_BT_CHECK)
 def configure_bluetooth() -> None:
     bt_conf = Path("/etc/bluetooth/main.conf")
     if bt_conf.exists():
@@ -111,7 +117,18 @@ def configure_bluetooth() -> None:
     )
 
 
-@step(profile="screen-apps", name="autologin")
+_AUTOLOGIN_CHECK = (
+    "grep -q autologin /etc/systemd/system/getty@tty1.service.d/override.conf"
+    " 2>/dev/null"
+)
+
+
+@brick(
+    profile="screen-apps",
+    name="autologin",
+    check=_AUTOLOGIN_CHECK,
+    verify=_AUTOLOGIN_CHECK,
+)
 def configure_autologin() -> None:
     user = os.environ.get("USER", os.getlogin())
     override_dir = Path("/etc/systemd/system/getty@tty1.service.d")
@@ -121,9 +138,20 @@ def configure_autologin() -> None:
     )
 
 
-@step(profile="screen-apps", name="network-nm")
+# wait-online prints "masked" on stderr with exit 1; NetworkManager itself
+# must be enabled. Netplan files must be root-only (0600) or netplan warns.
+_NM_CHECK = (
+    "systemctl is-enabled -q NetworkManager"
+    " && systemctl is-enabled NetworkManager-wait-online.service 2>&1"
+    " | grep -q masked"
+)
+
+
+@brick(profile="screen-apps", name="network-nm", check=_NM_CHECK, verify=_NM_CHECK)
 def configure_network() -> None:
-    write_system_file(Path("/etc/netplan/00-installer-config.yaml"), _NETPLAN)
+    write_system_file(
+        Path("/etc/netplan/00-installer-config.yaml"), _NETPLAN, mode="600"
+    )
     run_cmd("sudo netplan apply")
     subprocess.run(
         ["sudo", "systemctl", "disable", "--now", "NetworkManager-wait-online.service"]

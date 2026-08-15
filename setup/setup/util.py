@@ -50,14 +50,14 @@ def clone_gh(owner: str, repo: str, tag: str) -> Path:
     return dest
 
 
-def write_system_file(path: Path, content: str) -> None:
+def write_system_file(path: Path, content: str, mode: str = "644") -> None:
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=path.suffix) as f:
         f.write(content)
         tmp = Path(f.name)
     try:
         # install, not cp: the tempfile's 600 must not become the target mode
         subprocess.run(
-            ["sudo", "install", "-m", "644", str(tmp), str(path)], check=True
+            ["sudo", "install", "-m", mode, str(tmp), str(path)], check=True
         )
     finally:
         tmp.unlink(missing_ok=True)

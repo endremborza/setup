@@ -15,6 +15,8 @@ fi
 export PATH="$HOME/.elan/bin:$PATH"
 export ONSET_PATH="$HOME/onset-src"
 
-if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
+# NO_STARTX (set in ~/.local-vars) keeps tty1 logins in the console on
+# machines whose session is not X/leftwm (media boxes, headless stations).
+if [ -z "$NO_STARTX" ] && [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
     exec startx
 fi

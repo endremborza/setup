@@ -21,51 +21,50 @@ Only generalizable, public-safe content. Anything referencing personal paths, se
 
 ## Setup architecture
 
-`setup/setup/` is a small profile registry + runner. Each install is a `@step`-decorated function declaring its profile, an idempotency `check`, and a `verify` smoke test.
+`setup/setup/` is a small profile registry + runner. Each install is a `@brick`-decorated function declaring its profile, an idempotency `check`, and a `verify` smoke test.
 
 ```
 setup/setup/
 ├── __main__.py      # argparse: run | list | verify
-├── runner.py        # @step decorator, REGISTRY, run/verify
+├── runner.py        # @brick decorator, REGISTRY, run/verify
 ├── util.py          # run_cmd, apt_install, cargo_install, clone_gh, …
 ├── versions.py      # load/dump versions.toml; fetch latest from upstream
-└── steps/
+└── bricks/
     ├── base.py          # apt-base, restow, rust, rclone
-    ├── dev.py           # shell + dev profile steps
+    ├── dev.py           # shell + dev profile bricks
     ├── desktop.py       # screen profile
-    ├── workstation.py   # screen-apps profile
-    └── hub.py           # fleet git-server provisioning
+    └── workstation.py   # screen-apps profile
 ```
 
-### Adding a step
+### Adding a brick
 
 ```python
-from setup.runner import step
+from setup.runner import brick
 from setup.util import apt_install
 
-@step(
+@brick(
     profile="shell",
     name="my-tool",
-    check="my-tool --version",   # passes → step is skipped
+    check="my-tool --version",   # passes → brick is skipped
     verify="my-tool --version",  # used by `setup verify`
 )
 def install_my_tool() -> None:
     apt_install(["my-tool"])
 ```
 
-Then import the module from `setup/steps/__init__.py` so the decorator runs at import.
+Then import the module from `setup/bricks/__init__.py` so the decorator runs at import.
 
 Rules:
 - One home per tool. No duplication between `dotfiles/`, `setup/`, `dienpy/`.
-- Steps must be idempotent (the `check` exists so reruns are cheap).
+- Bricks must be idempotent (the `check` exists so reruns are cheap).
 - A package never vendors a file that's already stowed from `dotfiles/`. Read the stowed path instead (`~/rclone_filter.txt`, etc.).
-- Step names must be unique across all profiles — `dienpy versions` keys off the name.
+- Brick names must be unique across all profiles — `dienpy versions` keys off the name.
 
 ### Versions
 
-Pinned tags live in `setup/versions.toml`. The toml is the source of truth — `setup/setup/versions.py` does load/dump round-trip (no line-level patching). Step modules import `from setup.versions import get as _v` and read tags at module-load time.
+Pinned tags live in `setup/versions.toml`. The toml is the source of truth — `setup/setup/versions.py` does load/dump round-trip (no line-level patching). Brick modules import `from setup.versions import get as _v` and read tags at module-load time.
 
-`dienpy versions` (in `dienpy/dienpy/versions/`) is the management front end: list, check upstream, bump, dry-run upgrade, live upgrade. It composes the step registry — version ownership lives in dienpy, not setup.
+`dienpy versions` (in `dienpy/dienpy/versions/`) is the management front end: list, check upstream, bump, dry-run upgrade, live upgrade. It composes the brick registry — version ownership lives in dienpy, not setup.
 
 ## Stow integration
 

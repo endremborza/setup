@@ -5,29 +5,37 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Callable
 
-REGISTRY: list[Step] = []
+REGISTRY: list[Brick] = []
 
 BASE_PROFILE = "base"
 
 
 @dataclass
-class Step:
+class Brick:
     fn: Callable[[], None]
     name: str
-    profile: str
+    profile: str | tuple[str, ...]
     check: str | None = None
     verify: str | None = None
 
+    @property
+    def profiles(self) -> tuple[str, ...]:
+        return (self.profile,) if isinstance(self.profile, str) else self.profile
 
-def step(
-    profile: str,
+    @property
+    def profile_label(self) -> str:
+        return "/".join(self.profiles)
+
+
+def brick(
+    profile: str | tuple[str, ...],
     name: str,
     check: str | None = None,
     verify: str | None = None,
 ) -> Callable:
     def decorator(fn: Callable[[], None]) -> Callable[[], None]:
         REGISTRY.append(
-            Step(fn=fn, name=name, profile=profile, check=check, verify=verify)
+            Brick(fn=fn, name=name, profile=profile, check=check, verify=verify)
         )
         return fn
 
@@ -47,52 +55,52 @@ def _resolve_profiles(profiles: Iterable[str] | None) -> set[str]:
     return {BASE_PROFILE, *(profiles or ())}
 
 
-def _steps_for(profiles: Iterable[str] | None, step_name: str | None) -> list[Step]:
-    if step_name is not None:
-        matched = [s for s in REGISTRY if s.name == step_name]
+def _bricks_for(profiles: Iterable[str] | None, brick_name: str | None) -> list[Brick]:
+    if brick_name is not None:
+        matched = [b for b in REGISTRY if b.name == brick_name]
         if not matched:
-            raise SystemExit(f"No step named {step_name!r}")
+            raise SystemExit(f"No brick named {brick_name!r}")
         return matched
     wanted = _resolve_profiles(profiles)
-    return [s for s in REGISTRY if s.profile in wanted]
+    return [b for b in REGISTRY if wanted & set(b.profiles)]
 
 
-def _invoke(s: Step) -> None:
+def _invoke(b: Brick) -> None:
     try:
-        s.fn()
-        print(f"[ ok ] {s.name}")
+        b.fn()
+        print(f"[ ok ] {b.name}")
     except Exception as e:
-        print(f"[FAIL] {s.name}: {e}")
+        print(f"[FAIL] {b.name}: {e}")
 
 
 def run(
     profiles: Iterable[str] | None,
     dry_run: bool = False,
-    step_name: str | None = None,
+    brick_name: str | None = None,
     force: bool = False,
 ) -> None:
-    for s in _steps_for(profiles, step_name):
+    for b in _bricks_for(profiles, brick_name):
         if dry_run:
-            print(f"[dry ] {s.name}")
-        elif not force and s.check and check_passes(s.check):
-            print(f"[skip] {s.name}")
+            print(f"[dry ] {b.name}")
+        elif not force and b.check and check_passes(b.check):
+            print(f"[skip] {b.name}")
         else:
-            _invoke(s)
+            _invoke(b)
 
 
-def verify(profiles: Iterable[str] | None, step_name: str | None = None) -> bool:
-    steps = [s for s in _steps_for(profiles, step_name) if s.verify]
-    if not steps:
+def verify(profiles: Iterable[str] | None, brick_name: str | None = None) -> bool:
+    bricks = [b for b in _bricks_for(profiles, brick_name) if b.verify]
+    if not bricks:
         print("No verify commands registered for this profile set.")
         return True
     all_ok = True
-    for s in steps:
-        ok, output = run_check(s.verify)
+    for b in bricks:
+        ok, output = run_check(b.verify)
         if ok:
             summary = output.splitlines()[0] if output else ""
-            print(f"[ ok ] {s.name}  {summary}")
+            print(f"[ ok ] {b.name}  {summary}")
         else:
-            print(f"[FAIL] {s.name}  cmd={s.verify!r}")
+            print(f"[FAIL] {b.name}  cmd={b.verify!r}")
             for line in output.splitlines()[:8]:
                 print(f"       {line}")
             all_ok = False

@@ -40,19 +40,20 @@ A profile is an independent feature group. `base` is always implicit; layer othe
 | `dev`          | tectonic, node                                                    |
 | `screen`       | xorg, leftwm, alacritty, nerd-fonts, X11 config                   |
 | `screen-apps`  | firefox-apt, logseq, bluetooth, autologin, network-nm             |
-| `hub`          | sshd, bare git repos for fleet                                    |
 | `wg`           | wireguard (interface config is the enroller's job)                |
+| `web`          | caddy (Caddyfile + service state are the fleet controller's job)  |
 | `edge`         | nftables default-deny input, unattended-upgrades                  |
+| `media`        | HWE kernel, mpv, gamescope, cage, firefox — HDR playback box      |
 
 ```bash
 setup run                                # base only
 setup run -p shell -p dev                # base + shell + dev
-setup verify -p shell                    # check installed steps respond
-setup list                               # all registered steps
+setup verify -p shell                    # check installed bricks respond
+setup list                               # all registered bricks
 SETUP_PROFILES="shell dev" setup run     # env-driven equivalent
 ```
 
-Steps are idempotent: if a step's `check` command passes, it's skipped. Use `--force` to rerun anyway. Full profile reference, env propagation, and testing recipes live in [SETUP.md](SETUP.md).
+Bricks are idempotent: if a brick's `check` command passes, it's skipped. Use `--force` to rerun anyway. Full profile reference, env propagation, and testing recipes live in [SETUP.md](SETUP.md).
 
 ## Makefile
 
@@ -60,8 +61,8 @@ Steps are idempotent: if a step's `check` command passes, it's skipped. Use `--f
 |--------|-------------|
 | `make install`              | Install `dienpy` as a uv tool (drags in `setup` editable) |
 | `make setup-run`            | `uv run setup run` for `$PROFILES` (default: `shell`)     |
-| `make setup-verify`         | Verify steps in `$PROFILES`                               |
-| `make setup-list`           | List all registered steps                                 |
+| `make setup-verify`         | Verify bricks in `$PROFILES`                               |
+| `make setup-list`           | List all registered bricks                                 |
 | `make test`                 | Pytest suite for the `setup` package                      |
 | `make docker-ci`            | Fast CI gate: base real + shell/dev dry-run               |
 | `make docker-test`          | Full real build + verify (~30 min)                        |
@@ -91,5 +92,5 @@ dienpy ai commit               # AI-assisted commit message
 
 ## Further reading
 
-- [AGENTS.md](AGENTS.md) — repo conventions, how to add a setup step, nvim internals
-- [SETUP.md](SETUP.md) — full profile reference, bootstrap tiers, environment propagation, testing
+- [AGENTS.md](AGENTS.md) — repo conventions, how to add a brick, nvim internals
+- [SETUP.md](SETUP.md) — full profile reference, bootstrap, environment propagation, testing
