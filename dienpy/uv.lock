@@ -275,6 +275,7 @@ dependencies = [
     { name = "anthropic" },
     { name = "google-genai" },
     { name = "kokoro-onnx" },
+    { name = "protocli" },
     { name = "requests" },
     { name = "rich" },
     { name = "setup" },
@@ -287,6 +288,7 @@ requires-dist = [
     { name = "anthropic", specifier = ">=0.86.0" },
     { name = "google-genai", specifier = ">=1.68.0" },
     { name = "kokoro-onnx", specifier = ">=0.5.0" },
+    { name = "protocli", specifier = ">=0.1.0" },
     { name = "requests" },
     { name = "rich" },
     { name = "setup", editable = "../setup" },
@@ -716,6 +718,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/85/29/64de04a0ac142fb685fd09999bc3d337943fb386f3a0ec57f92fd8203f97/protobuf-7.34.1-cp310-abi3-win32.whl", hash = "sha256:34b84ce27680df7cca9f231043ada0daa55d0c44a2ddfaa58ec1d0d89d8bf60a", size = 426628, upload-time = "2026-03-20T17:34:42.536Z" },
     { url = "https://files.pythonhosted.org/packages/4d/87/cb5e585192a22b8bd457df5a2c16a75ea0db9674c3a0a39fc9347d84e075/protobuf-7.34.1-cp310-abi3-win_amd64.whl", hash = "sha256:e97b55646e6ce5cbb0954a8c28cd39a5869b59090dfaa7df4598a7fba869468c", size = 437901, upload-time = "2026-03-20T17:34:44.112Z" },
     { url = "https://files.pythonhosted.org/packages/88/95/608f665226bca68b736b79e457fded9a2a38c4f4379a4a7614303d9db3bc/protobuf-7.34.1-py3-none-any.whl", hash = "sha256:bb3812cd53aefea2b028ef42bd780f5b96407247f20c6ef7c679807e9d188f11", size = 170715, upload-time = "2026-03-20T17:34:45.384Z" },
+]
+
+[[package]]
+name = "protocli"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/03/1f/65fe942b36a3834534aa0cd82ff80c4a0036823c5547032e254890397b19/protocli-0.1.0.tar.gz", hash = "sha256:79931ae9a41aac398d0c9014890f7e9309b4eadb8e9f4cabfd5d64b6d3d19c83", size = 8185, upload-time = "2026-08-12T11:33:32.134Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1c/b2/66d8a04899fa6a5f0c2cbf044a926433ac9dfdb500f96a95b9280ea57d58/protocli-0.1.0-py3-none-any.whl", hash = "sha256:eb4c5043ceb25c50ef2a48828de5adcd782758e6855c770e6add0591b2881818", size = 8506, upload-time = "2026-08-12T11:33:31.157Z" },
 ]
 
 [[package]]

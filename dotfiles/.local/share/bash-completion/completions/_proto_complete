@@ -1,6 +1,6 @@
 # Protocol-based completion for tools supporting --complete.
 # Tool contract: `<tool> --complete [args...]` outputs newline-separated candidates.
-# A lone candidate of $'\eFILES' (dienpy.cli.FILE_COMPLETION) defers to readline's
+# A lone candidate of $'\eFILES' (protocli.FILE_COMPLETION) defers to readline's
 # native pathname completion (~, /, $VAR, absolute/relative).
 # Usage: source this file, then: complete -F _proto_complete <tool>
 

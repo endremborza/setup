@@ -2,7 +2,7 @@
 
 Public, generalizable CLI toolkit — one entry point (`dienpy <module> [args...]`) that dispatches to focused Python modules. No personal paths, secrets, or machine-specific config.
 
-`dienpy.cli.Dispatcher` is the canonical CLI dispatcher for the whole ecosystem — `cril` and `hyppy` use it the same way. The rest of this doc is the authoritative spec for that pattern.
+The CLI dispatcher is [`protocli`](https://pypi.org/project/protocli/) (split out of dienpy, now a PyPI dependency) — `cril`, `hyppy`, `fleet` and `rankless` use it the same way. protocli's README/docstring is the authoritative spec; the rest of this doc shows how dienpy applies the pattern.
 
 ## Architecture
 
@@ -28,6 +28,7 @@ Run `dienpy --help-all` for a full recursive listing: all dispatcher levels expa
    - `*, flag: bool = False` → `--flag` (`store_true`); bools must be keyword-only with default `False`
    - `*, n: int = 5` → `--n N` with default
    - `*, m: Literal["a","b"]` → `--m` restricted to choices
+   - `*, xs: list[float] = []` → `--xs 1.5,3.5` (comma-separated; keyword-only)
    - `*, x: T | None = None` → optional `--x` flag
 
    Reach for `argparse` directly only when the signature model can't express what you need (e.g. mutually exclusive groups, custom argument actions). For zero-arg leaves (`def main() -> None`), the dispatcher prints `Usage: ...` + the docstring on `--help`.
@@ -41,7 +42,7 @@ Run `dienpy --help-all` for a full recursive listing: all dispatcher levels expa
 Create `<pkg>/<group>/__init__.py` with:
 
 ```python
-from dienpy.cli import Dispatcher
+from protocli import Dispatcher
 
 _dispatcher = Dispatcher.from_package("<pkg>.<group>", prog="<pkg> <group>")
 ```

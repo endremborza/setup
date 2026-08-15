@@ -9,7 +9,7 @@ import signal
 import sys
 import time
 
-from dienpy.cli import Dispatcher
+from protocli import Dispatcher
 
 from ._core import (
     DEFAULT_VOICE,

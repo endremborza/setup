@@ -2,6 +2,7 @@
 name = "dienpy"
 dynamic = ["version", "description"]
 dependencies = [
+    "protocli>=0.1.0",
     "requests",
     "rich",
     "tabulate",

@@ -1,6 +1,6 @@
 """Pinned tool version management (check, bump, list, upgrade-system)."""
 
-from dienpy.cli import Dispatcher
+from protocli import Dispatcher
 
 _dispatcher = Dispatcher(
     prog="dienpy versions",
