@@ -46,11 +46,14 @@ def install_tectonic() -> None:
     run_cmd(f"sh -c 'curl -fsSL {_TECTONIC_URL} | tar -xz -C {dest} tectonic'")
 
 
+_CARGO_TOOLS_CHECK = " && ".join(cmd for _, cmd in _CARGO_TOOLS)
+
+
 @brick(
     profile="shell",
     name="cargo-tools",
-    check="rg --version",
-    verify=" && ".join(cmd for _, cmd in _CARGO_TOOLS),
+    check=_CARGO_TOOLS_CHECK,
+    verify=_CARGO_TOOLS_CHECK,
 )
 def install_cargo_tools() -> None:
     cargo_install([crate for crate, _ in _CARGO_TOOLS])
