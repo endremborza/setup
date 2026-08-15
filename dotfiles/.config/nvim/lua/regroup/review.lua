@@ -10,7 +10,21 @@ function M.active()
       and vim.api.nvim_win_is_valid(right)
 end
 
+local function in_base(file)
+  if file == '' then return false end
+  local res = vim.system({ 'git', '-C', vim.fs.dirname(file), 'rev-parse', '--show-toplevel' }, { text = true }):wait()
+  if res.code ~= 0 then return false end
+  local root = vim.trim(res.stdout)
+  local rel = file:sub(#root + 2)
+  return vim.system({ 'git', '-C', root, 'cat-file', '-e', M.base .. ':' .. rel }):wait().code == 0
+end
+
 local function split_current()
+  -- no M.base version (untracked/new file) -> plain buffer, no diff split
+  if not in_base(vim.api.nvim_buf_get_name(0)) then
+    left, right = nil, nil
+    return
+  end
   local before = {}
   for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do before[w] = true end
   local file_win = vim.api.nvim_get_current_win()

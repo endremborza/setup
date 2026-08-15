@@ -19,6 +19,8 @@ function M.root()
   return vim.trim(res.stdout)
 end
 
+M.git = git
+
 local function file_path(header)
   for _, l in ipairs(header) do
     local p = l:match('^%+%+%+ b/(.+)$')
@@ -177,6 +179,44 @@ function M.stage(parse, ids)
   if #adds > 0 then
     local res = git(parse.root, vim.list_extend({ 'add', '--' }, adds))
     assert(res.code == 0, 'git add failed:\n' .. (res.stderr or ''))
+  end
+end
+
+function M.revert(parse, ids)
+  local cachedp = M.parse(parse.root, { cached = true })
+  local staged, patch_ids, restore, clean, seen = {}, {}, {}, {}, {}
+  local function add_path(list, p)
+    if p and not seen[p] then
+      seen[p] = true
+      table.insert(list, p)
+    end
+  end
+  for _, id in ipairs(ids) do
+    local rec = parse.by_id[id]
+    assert(rec, 'unknown hunk id: ' .. id)
+    if cachedp.by_id[id] then table.insert(staged, id) end
+    if rec.kind == 'hunk' then
+      table.insert(patch_ids, id)
+    elseif rec.kind == 'untracked' then
+      add_path(clean, rec.path)
+    else
+      add_path(restore, rec.path)
+      add_path(restore, rename_source(rec))
+    end
+  end
+  if #staged > 0 then M.unstage(cachedp, staged) end
+  local patch = select(1, split_actions(parse, patch_ids))
+  if patch then
+    local res = git(parse.root, { 'apply', '--reverse', '--whitespace=nowarn', '-' }, { stdin = patch })
+    assert(res.code == 0, 'git apply --reverse failed:\n' .. (res.stderr or ''))
+  end
+  if #restore > 0 then
+    local res = git(parse.root, vim.list_extend({ 'restore', '--source=HEAD', '--staged', '--worktree', '--' }, restore))
+    assert(res.code == 0, 'git restore failed:\n' .. (res.stderr or ''))
+  end
+  if #clean > 0 then
+    local res = git(parse.root, vim.list_extend({ 'clean', '-f', '--' }, clean))
+    assert(res.code == 0, 'git clean failed:\n' .. (res.stderr or ''))
   end
 end
 

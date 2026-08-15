@@ -87,6 +87,8 @@ Full boot-to-desktop propagation flow (including tmux/dbus/import-environment go
 
 Lives at `dotfiles/.config/nvim/init.lua`. Uses lazy.nvim + mason + mason-lspconfig (v2 API, Neovim 0.11+).
 
+`lua/regroup/` — AI change-group review UI (browse / stage / unstage / revert / commit per group or hunk; bury a group to the graveyard = `regroup:`-tagged git stash, `:RegroupGraveyard` to restore); cheatsheet at `:h regroup` (`doc/regroup.txt`). Analysis runs in the shell via **`dienpy hunks`** (`run|list|drift`, tab-completed) which owns `.git/regroup-cache.json`; nvim only reads the cache (picking an uncached config yanks the engine command instead of running it). The engine groups hunks semantically via `claude -p --json-schema` — the model only references content-hash hunk IDs, never writes patch bytes — across three config dimensions (granularity loose/normal/granular, model, context bare/agents/explore), with incremental updates for new hunks. Hunk-ID parity between `dienpy/hunks/_hunks.py` and `regroup/diff.lua` is pinned by `dienpy/tests/test_hunks_parity.py` — change both together. The claude subprocess drops `ANTHROPIC_API_KEY` to run on claude.ai login auth (`--auth env` keeps it). `regroup/review.lua` owns the review-mode diff windows, shared with `<leader>gf/gr/gb`.
+
 ### Key decisions
 
 - **LSP config**: `vim.lsp.config('server', {...})` per-server + `automatic_enable = true`.

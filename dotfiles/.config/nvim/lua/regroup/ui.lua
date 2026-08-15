@@ -40,7 +40,7 @@ end
 
 local function check_drift(live, missing)
   if #missing > 0 and #live > 0 then
-    error(('%d hunk(s) missing from the current diff (edited since analysis?): %s — :Regroup! to re-analyze')
+    error(('%d hunk(s) missing from the current diff (edited or committed since analysis?): %s — dienpy hunks run to reconcile, :Regroup! to re-analyze')
       :format(#missing, table.concat(missing, ', ')), 0)
   end
 end
@@ -66,7 +66,7 @@ function M.goto_hunk(g, idx)
   state.refresh(st)
   local live = live_recs(st, g)
   if #live == 0 then
-    return notify('group has no remaining hunks (already committed)', vim.log.levels.WARN)
+    return notify('group has no remaining hunks (committed or discarded)', vim.log.levels.WARN)
   end
   idx = ((idx - 1) % #live) + 1
   st.pos = { group = g, idx = idx }
@@ -84,13 +84,46 @@ function M.nav(dir)
   M.goto_hunk(st.pos.group, st.pos.idx + dir)
 end
 
+local function same_group(a, b)
+  return a == b or (a and b and a.stray and b.stray) or false
+end
+
+function M.nav_group(dir)
+  local st = state.current
+  if not st or not st.pos then
+    return notify('no active change group — run :Regroup', vim.log.levels.WARN)
+  end
+  state.refresh(st)
+  local live = {}
+  for _, g in ipairs(display_groups(st)) do
+    if #live_recs(st, g) > 0 then table.insert(live, g) end
+  end
+  if #live == 0 then
+    return notify('no groups with remaining hunks', vim.log.levels.WARN)
+  end
+  local cur = 1
+  for i, g in ipairs(live) do
+    if same_group(g, st.pos.group) then cur = i end
+  end
+  local nxt = live[((cur - 1 + dir) % #live) + 1]
+  M.goto_hunk(nxt, 1)
+end
+
+function M.reopen()
+  local st = state.current
+  if not st then
+    return notify('no regroup analysis — run :Regroup', vim.log.levels.WARN)
+  end
+  M.pick_groups({ select = st.pos and st.pos.group })
+end
+
 function M.stage_group(g)
   local st = state.current
   local ok, err = pcall(function()
     state.refresh(st)
     local live, missing = split_live(st, g)
     check_drift(live, missing)
-    if #live == 0 then error('group already committed', 0) end
+    if #live == 0 then error('group has no remaining hunks (committed or discarded)', 0) end
     local cachedp = diff.parse(st.parse.root, { cached = true })
     local to_stage = {}
     for _, id in ipairs(live) do
@@ -122,6 +155,81 @@ function M.unstage_group(g)
   if not ok then notify(err, vim.log.levels.ERROR) end
 end
 
+function M.stage_hunk(h)
+  local st = state.current
+  local ok, err = pcall(function()
+    state.refresh(st)
+    if not st.parse.by_id[h.id] then error('hunk no longer in the diff (edited or committed?)', 0) end
+    local cachedp = diff.parse(st.parse.root, { cached = true })
+    if cachedp.by_id[h.id] then error('hunk already staged', 0) end
+    diff.stage(st.parse, { h.id })
+    refresh_signs()
+    notify(('staged %s:%d'):format(h.path, h.new_start))
+  end)
+  if not ok then notify(err, vim.log.levels.ERROR) end
+end
+
+function M.unstage_hunk(h)
+  local ok, err = pcall(function()
+    local st = state.current
+    local cachedp = diff.parse(st.parse.root, { cached = true })
+    if not cachedp.by_id[h.id] then error('hunk is not staged', 0) end
+    diff.unstage(cachedp, { h.id })
+    refresh_signs()
+    notify(('unstaged %s:%d'):format(h.path, h.new_start))
+  end)
+  if not ok then notify(err, vim.log.levels.ERROR) end
+end
+
+local function after_revert(st)
+  state.refresh(st)
+  refresh_signs()
+  vim.cmd('checktime')
+end
+
+function M.revert_group(g)
+  local st = state.current
+  local ok, err = pcall(function()
+    local approx = #split_live(st, g)
+    if approx == 0 then error('group has no remaining hunks', 0) end
+    if vim.fn.confirm(('Revert %d hunk(s) of "%s" to HEAD? This discards those changes.')
+          :format(approx, g.title), '&Yes\n&No', 2) ~= 1 then
+      return
+    end
+    state.refresh(st)
+    local live = split_live(st, g)
+    if #live == 0 then error('group has no remaining hunks', 0) end
+    diff.revert(st.parse, live)
+    after_revert(st)
+    state.mark_group(st, g, { dropped = true })
+    notify(('reverted %d hunk(s): %s'):format(#live, g.title))
+  end)
+  if not ok then notify(err, vim.log.levels.ERROR) end
+end
+
+function M.revert_hunk(h)
+  local st = state.current
+  local ok, err = pcall(function()
+    if vim.fn.confirm(('Revert %s:%d to HEAD? This discards the change.')
+          :format(h.path, h.new_start), '&Yes\n&No', 2) ~= 1 then
+      return
+    end
+    state.refresh(st)
+    if not st.parse.by_id[h.id] then error('hunk no longer in the diff (edited or committed?)', 0) end
+    diff.revert(st.parse, { h.id })
+    after_revert(st)
+    for _, g in ipairs(st.groups) do
+      for _, id in ipairs(g.hunks) do
+        if id == h.id and #live_recs(st, g) == 0 and not g.committed then
+          state.mark_group(st, g, { dropped = true })
+        end
+      end
+    end
+    notify(('reverted %s:%d'):format(h.path, h.new_start))
+  end)
+  if not ok then notify(err, vim.log.levels.ERROR) end
+end
+
 local function check_foreign(st, g, cachedp)
   local gset = {}
   for _, id in ipairs(g.hunks) do gset[id] = true end
@@ -131,6 +239,34 @@ local function check_foreign(st, g, cachedp)
         :format(h.id, h.path), 0)
     end
   end
+end
+
+function M.bury_group(g)
+  local st = state.current
+  local ok, err = pcall(function()
+    local approx = #split_live(st, g)
+    if approx == 0 then error('group has no remaining hunks', 0) end
+    if vim.fn.confirm(('Bury %d hunk(s) of "%s" to the graveyard (git stash)?')
+          :format(approx, g.title), '&Yes\n&No', 1) ~= 1 then
+      return
+    end
+    state.refresh(st)
+    local live, missing = split_live(st, g)
+    check_drift(live, missing)
+    if #live == 0 then error('group has no remaining hunks', 0) end
+    local cachedp = diff.parse(st.parse.root, { cached = true })
+    check_foreign(st, g, cachedp)
+    local to_stage = {}
+    for _, id in ipairs(live) do
+      if not cachedp.by_id[id] then table.insert(to_stage, id) end
+    end
+    if #to_stage > 0 then diff.stage(st.parse, to_stage) end
+    require('regroup.graveyard').bury(st.parse.root, g.title)
+    after_revert(st)
+    state.mark_group(st, g, { buried = true })
+    notify(('⚰ buried %d hunk(s): %s'):format(#live, g.title))
+  end)
+  if not ok then notify(err, vim.log.levels.ERROR) end
 end
 
 local function open_commit_buffer(g, hunk_lines, on_write)
@@ -187,7 +323,7 @@ function M.commit_group(g)
     check_drift(live, missing)
     local cachedp = diff.parse(st.parse.root, { cached = true })
     check_foreign(st, g, cachedp)
-    if #live == 0 and #cachedp.hunks == 0 then error('group already committed', 0) end
+    if #live == 0 and #cachedp.hunks == 0 then error('nothing left to commit in this group', 0) end
   end)
   if not ok then return notify(err, vim.log.levels.ERROR) end
 
@@ -212,6 +348,7 @@ function M.commit_group(g)
     state.refresh(st)
     refresh_signs()
     local short = vim.trim(vim.system({ 'git', 'rev-parse', '--short', 'HEAD' }, { text = true, cwd = st.parse.root }):wait().stdout)
+    state.mark_group(st, g, { committed = short })
     notify(('✓ %s %s'):format(short, msg:match('^[^\n]*')))
   end)
 end
@@ -238,7 +375,46 @@ local function group_preview(st, g, bufnr)
   vim.bo[bufnr].filetype = 'diff'
 end
 
-function M.pick_groups()
+local function rel_age(t)
+  if not t then return '?' end
+  local d = os.time() - t
+  if d < 90 then return d .. 's' end
+  if d < 5400 then return math.floor(d / 60 + 0.5) .. 'm' end
+  if d < 129600 then return math.floor(d / 3600 + 0.5) .. 'h' end
+  return math.floor(d / 86400 + 0.5) .. 'd'
+end
+
+local function picker_tools(prompt_bufnr, map, make_finder)
+  local action_state = require('telescope.actions.state')
+  local tools = {}
+
+  function tools.selected()
+    local entry = action_state.get_selected_entry()
+    return entry and entry.value
+  end
+
+  function tools.refresh()
+    local p = action_state.get_current_picker(prompt_bufnr)
+    local row = p:get_selection_row()
+    local callbacks = { unpack(p._completion_callbacks) }
+    p:register_completion_callback(function(self)
+      self:set_selection(row)
+      self._completion_callbacks = callbacks
+    end)
+    p:refresh(make_finder(), { reset_prompt = false })
+  end
+
+  function tools.bind(key, desc, fn)
+    for _, mode in ipairs({ 'i', 'n' }) do
+      map(mode, key, fn, { desc = desc })
+    end
+  end
+
+  return tools
+end
+
+function M.pick_groups(opts)
+  opts = opts or {}
   local st = state.current
   if not st then
     return notify('no regroup analysis — run :Regroup', vim.log.levels.WARN)
@@ -248,31 +424,49 @@ function M.pick_groups()
   local conf = require('telescope.config').values
   local previewers = require('telescope.previewers')
   local actions = require('telescope.actions')
-  local action_state = require('telescope.actions.state')
+
+  local function entry_maker(g)
+    local n = #live_recs(st, g)
+    local tag
+    if n == 0 then
+      if g.committed then
+        tag = '✓ ' .. tostring(g.committed):sub(1, 7)
+      elseif g.dropped then
+        tag = '✗ dropped'
+      elseif g.buried then
+        tag = '⚰ buried'
+      else
+        tag = '· gone'
+      end
+    elseif g.stray then
+      tag = '? new'
+    elseif g.staged then
+      tag = '● staged'
+    else
+      tag = n .. ' hunk' .. (n == 1 and '' or 's')
+    end
+    return {
+      value = g,
+      display = ('%-9s %s'):format(tag, g.title),
+      ordinal = g.title .. ' ' .. (g.message or ''),
+    }
+  end
+
+  local function make_finder()
+    return finders.new_table { results = display_groups(st), entry_maker = entry_maker }
+  end
+
+  local select_index
+  if opts.select then
+    for i, g in ipairs(display_groups(st)) do
+      if same_group(g, opts.select) then select_index = i end
+    end
+  end
 
   pickers.new({}, {
-    prompt_title = ('change groups [%s]  <cr> browse | <c-h> hunks | ◀ ▶ un/stage | <c-y> commit'):format(st.granularity),
-    finder = finders.new_table {
-      results = display_groups(st),
-      entry_maker = function(g)
-        local n = #live_recs(st, g)
-        local tag
-        if n == 0 then
-          tag = '✓ done'
-        elseif g.stray then
-          tag = '? new'
-        elseif g.staged then
-          tag = '● staged'
-        else
-          tag = n .. ' hunk' .. (n == 1 and '' or 's')
-        end
-        return {
-          value = g,
-          display = ('%-9s %s'):format(tag, g.title),
-          ordinal = g.title .. ' ' .. (g.message or ''),
-        }
-      end,
-    },
+    prompt_title = ('%s · groups [%s] — ? for keys'):format(vim.fs.basename(st.parse.root), state.key(st.config)),
+    default_selection_index = select_index,
+    finder = make_finder(),
     sorter = conf.generic_sorter({}),
     previewer = previewers.new_buffer_previewer {
       title = 'group',
@@ -281,25 +475,53 @@ function M.pick_groups()
       end,
     },
     attach_mappings = function(prompt_bufnr, map)
-      local function with_sel(fn)
-        return function()
-          local entry = action_state.get_selected_entry()
-          if not entry then return end
-          actions.close(prompt_bufnr)
-          fn(entry.value)
-        end
-      end
-      local mappings = {
-        ['<CR>'] = with_sel(function(g) M.goto_hunk(g, 1) end),
-        ['<C-h>'] = with_sel(function(g) M.pick_hunks(g) end),
-        ['<Right>'] = with_sel(M.stage_group),
-        ['<Left>'] = with_sel(M.unstage_group),
-        ['<C-y>'] = with_sel(M.commit_group),
-      }
-      for key, fn in pairs(mappings) do
-        map('i', key, fn)
-        map('n', key, fn)
-      end
+      local t = picker_tools(prompt_bufnr, map, make_finder)
+      t.bind('<CR>', 'browse group (then ]g/[g)', function()
+        local g = t.selected()
+        if not g then return end
+        actions.close(prompt_bufnr)
+        M.goto_hunk(g, 1)
+      end)
+      t.bind('<C-h>', 'hunks of group', function()
+        local g = t.selected()
+        if not g then return end
+        actions.close(prompt_bufnr)
+        M.pick_hunks(g)
+      end)
+      t.bind('<C-s>', 'stage group', function()
+        local g = t.selected()
+        if not g then return end
+        M.stage_group(g)
+        t.refresh()
+      end)
+      t.bind('<C-u>', 'unstage group', function()
+        local g = t.selected()
+        if not g then return end
+        M.unstage_group(g)
+        t.refresh()
+      end)
+      t.bind('<C-d>', 'revert group (discard changes)', function()
+        local g = t.selected()
+        if not g then return end
+        M.revert_group(g)
+        t.refresh()
+      end)
+      t.bind('<C-y>', 'commit group', function()
+        local g = t.selected()
+        if not g then return end
+        actions.close(prompt_bufnr)
+        M.commit_group(g)
+      end)
+      t.bind('<C-t>', 'bury group (stash to graveyard)', function()
+        local g = t.selected()
+        if not g then return end
+        M.bury_group(g)
+        t.refresh()
+      end)
+      t.bind('<C-e>', 'config menu (re-analyze / switch config)', function()
+        actions.close(prompt_bufnr)
+        require('regroup').run {}
+      end)
       return true
     end,
   }):find()
@@ -312,34 +534,40 @@ function M.pick_hunks(g)
   local conf = require('telescope.config').values
   local previewers = require('telescope.previewers')
   local actions = require('telescope.actions')
-  local action_state = require('telescope.actions.state')
 
-  local results = {}
-  for i, h in ipairs(live_recs(st, g)) do
-    table.insert(results, { i = i, h = h })
+  local function make_results()
+    local cachedp = diff.parse(st.parse.root, { cached = true })
+    local out = {}
+    for i, h in ipairs(live_recs(st, g)) do
+      table.insert(out, { i = i, h = h, staged = cachedp.by_id[h.id] ~= nil })
+    end
+    return out
+  end
+
+  local function entry_maker(it)
+    local first = ''
+    if it.h.hunk then
+      for _, l in ipairs(it.h.hunk.lines) do
+        if l:match('^[%+%-]') then
+          first = l
+          break
+        end
+      end
+    end
+    return {
+      value = it,
+      display = ('%s %s:%d  %s'):format(it.staged and '●' or ' ', it.h.path, it.h.new_start, first),
+      ordinal = it.h.path .. ' ' .. first,
+    }
+  end
+
+  local function make_finder()
+    return finders.new_table { results = make_results(), entry_maker = entry_maker }
   end
 
   pickers.new({}, {
-    prompt_title = g.title,
-    finder = finders.new_table {
-      results = results,
-      entry_maker = function(it)
-        local first = ''
-        if it.h.hunk then
-          for _, l in ipairs(it.h.hunk.lines) do
-            if l:match('^[%+%-]') then
-              first = l
-              break
-            end
-          end
-        end
-        return {
-          value = it,
-          display = ('%s:%d  %s'):format(it.h.path, it.h.new_start, first),
-          ordinal = it.h.path .. ' ' .. first,
-        }
-      end,
-    },
+    prompt_title = ('%s — <C-g> back'):format(g.title),
+    finder = make_finder(),
     sorter = conf.generic_sorter({}),
     previewer = previewers.new_buffer_previewer {
       title = 'hunk',
@@ -350,14 +578,171 @@ function M.pick_hunks(g)
       end,
     },
     attach_mappings = function(prompt_bufnr, map)
-      local function select()
-        local entry = action_state.get_selected_entry()
-        if not entry then return end
+      local t = picker_tools(prompt_bufnr, map, make_finder)
+      t.bind('<CR>', 'jump to hunk', function()
+        local it = t.selected()
+        if not (it and it.h) then return end
         actions.close(prompt_bufnr)
-        M.goto_hunk(g, entry.value.i)
-      end
-      map('i', '<CR>', select)
-      map('n', '<CR>', select)
+        M.goto_hunk(g, it.i)
+      end)
+      t.bind('<C-g>', 'back to groups', function()
+        actions.close(prompt_bufnr)
+        M.pick_groups({ select = g })
+      end)
+      t.bind('<C-s>', 'stage hunk', function()
+        local it = t.selected()
+        if not (it and it.h) then return end
+        M.stage_hunk(it.h)
+        t.refresh()
+      end)
+      t.bind('<C-u>', 'unstage hunk', function()
+        local it = t.selected()
+        if not (it and it.h) then return end
+        M.unstage_hunk(it.h)
+        t.refresh()
+      end)
+      t.bind('<C-d>', 'revert hunk (discard change)', function()
+        local it = t.selected()
+        if not (it and it.h) then return end
+        M.revert_hunk(it.h)
+        t.refresh()
+      end)
+      return true
+    end,
+  }):find()
+end
+
+function M.pick_graveyard()
+  local ok, root = pcall(diff.root)
+  if not ok then return notify(root, vim.log.levels.ERROR) end
+  local gy = require('regroup.graveyard')
+  if #gy.list(root) == 0 then
+    return notify('graveyard is empty (no regroup stashes)', vim.log.levels.INFO)
+  end
+
+  local pickers = require('telescope.pickers')
+  local finders = require('telescope.finders')
+  local conf = require('telescope.config').values
+  local previewers = require('telescope.previewers')
+  local actions = require('telescope.actions')
+
+  local function make_finder()
+    return finders.new_table {
+      results = gy.list(root),
+      entry_maker = function(e)
+        return {
+          value = e,
+          display = ('%-12s %-16s %s'):format(e.gd, e.age, e.title),
+          ordinal = e.title,
+        }
+      end,
+    }
+  end
+
+  pickers.new({}, {
+    prompt_title = ('%s · graveyard'):format(vim.fs.basename(root)),
+    finder = make_finder(),
+    sorter = conf.generic_sorter({}),
+    previewer = previewers.new_buffer_previewer {
+      title = 'buried changes',
+      define_preview = function(self, entry)
+        vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false,
+          vim.split(gy.show(root, entry.value), '\n', { plain = true }))
+        vim.bo[self.state.bufnr].filetype = 'diff'
+      end,
+    },
+    attach_mappings = function(prompt_bufnr, map)
+      local t = picker_tools(prompt_bufnr, map, make_finder)
+      t.bind('<CR>', 'restore (pop back into worktree)', function()
+        local e = t.selected()
+        if not e then return end
+        actions.close(prompt_bufnr)
+        local ok2, err = pcall(gy.pop, root, e)
+        if not ok2 then return notify(err, vim.log.levels.ERROR) end
+        local st = state.current
+        if st and st.parse.root == root then state.refresh(st) end
+        refresh_signs()
+        vim.cmd('checktime')
+        notify('restored from graveyard: ' .. e.title)
+      end)
+      t.bind('<C-d>', 'delete forever', function()
+        local e = t.selected()
+        if not e then return end
+        if vim.fn.confirm(('Delete "%s" from the graveyard forever?'):format(e.title), '&Yes\n&No', 2) ~= 1 then
+          return
+        end
+        local ok2, err = pcall(gy.drop, root, e)
+        if not ok2 then return notify(err, vim.log.levels.ERROR) end
+        notify('deleted from graveyard: ' .. e.title)
+        t.refresh()
+      end)
+      return true
+    end,
+  }):find()
+end
+
+function M.pick_runs()
+  local ok, root = pcall(diff.root)
+  if not ok then return notify(root, vim.log.levels.ERROR) end
+  local parse = diff.parse(root)
+  local runs = state.runs(root)
+  if #runs == 0 then
+    return notify('no cached regroup runs for this repo', vim.log.levels.WARN)
+  end
+
+  local pickers = require('telescope.pickers')
+  local finders = require('telescope.finders')
+  local conf = require('telescope.config').values
+  local previewers = require('telescope.previewers')
+  local actions = require('telescope.actions')
+
+  for _, run in ipairs(runs) do
+    local known = {}
+    for _, id in ipairs(run.ids) do known[id] = true end
+    run.covered = 0
+    for _, h in ipairs(parse.hunks) do
+      if known[h.id] then run.covered = run.covered + 1 end
+    end
+  end
+
+  pickers.new({}, {
+    prompt_title = ('%s · regroup runs (%d current hunks)'):format(vim.fs.basename(root), #parse.hunks),
+    finder = finders.new_table {
+      results = runs,
+      entry_maker = function(run)
+        return {
+          value = run,
+          display = ('%-30s %d groups  covers %d/%d  %s ago'):format(
+            run.key, #run.groups, run.covered, #parse.hunks, rel_age(run.time)),
+          ordinal = run.key,
+        }
+      end,
+    },
+    sorter = conf.generic_sorter({}),
+    previewer = previewers.new_buffer_previewer {
+      title = 'run',
+      define_preview = function(self, entry)
+        local run = entry.value
+        local lines = {}
+        for _, g in ipairs(run.groups) do
+          local live = 0
+          for _, id in ipairs(g.hunks) do
+            if parse.by_id[id] then live = live + 1 end
+          end
+          table.insert(lines, ('%2d/%-2d %s'):format(live, #g.hunks, g.title))
+        end
+        vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
+      end,
+    },
+    attach_mappings = function(prompt_bufnr, map)
+      local t = picker_tools(prompt_bufnr, map, nil)
+      t.bind('<CR>', 'load run into group picker', function()
+        local run = t.selected()
+        if not run then return end
+        actions.close(prompt_bufnr)
+        state.current = { parse = parse, groups = run.groups, config = run.config }
+        M.pick_groups()
+      end)
       return true
     end,
   }):find()

@@ -1,0 +1,33 @@
+*regroup.txt*   AI change-group review of uncommitted changes       *regroup*
+
+Analysis runs in the shell (tab-completed): >
+    dienpy hunks run [loose|normal|granular] [bare|agents|explore] [model]
+    dienpy hunks list          cached runs + coverage
+    dienpy hunks drift         has the diff moved since a run?
+<
+Results land in .git/regroup-cache.json; nvim only reads it.
+
+GLOBAL                                                         *regroup-keys*
+    <leader>gg    group picker at last position; config menu if no session
+    <leader>gG    previous-runs picker                        :RegroupRuns
+    ]g  [g        next / prev hunk in the current group
+    ]G  [G        next / prev group
+    :Regroup granular sonnet explore    pick a config directly, any order
+
+CONFIG MENU                                                    *regroup-menu*
+    j/k dimension   h/l value   p runs   g graveyard   ? this help   q quit
+    <CR>  open picker — if not cached, yanks the engine command instead
+
+GROUP PICKER                            (? in normal mode lists all keys)
+    <CR>  browse group     <C-h>  hunk list      <C-e>  config menu
+    <C-s> / <C-u> / <C-d>  stage / unstage / discard (revert to HEAD)
+    <C-y>  commit (:w commits, :q aborts)    <C-t>  bury → graveyard
+
+HUNK PICKER
+    <CR>  jump    <C-g>  back    <C-s> / <C-u> / <C-d>  same, per hunk
+
+GRAVEYARD                  (regroup-tagged git stashes)  *regroup-graveyard*
+    :RegroupGraveyard or g in the menu; plain `git stash list` sees them too
+    <CR>  restore (pop)    <C-d>  delete forever
+
+ vim:tw=78:ts=4:ft=help:norl:
