@@ -5,23 +5,24 @@ DIEN_ROOT=${DIEN_ROOT:-$SYNC_ROOT/composites/pkm/diencephalon}
 HYPO_ROOT=${HYPO_ROOT:-$SYNC_ROOT/composites/pkm/hypothalamus}
 SHARE_DIR=${SHARE_DIR:-$SYNC_ROOT/share}
 
+# -R restows: obsolete links from renamed/deleted sources get pruned.
 cd "$DIEN_ROOT"
-stow --no-folding --verbose=1 --ignore=.claude -t ~ dotfiles
+stow -R --no-folding --verbose=1 --ignore=.claude -t ~ dotfiles
 
 if [ -d "$HYPO_ROOT" ]; then
     cd "$HYPO_ROOT"
-    [ -d dotfiles ] && stow --no-folding --verbose=1 -t ~ dotfiles
-    [ -d secrets ] && stow --no-folding --verbose=1 -t ~ secrets
+    [ -d dotfiles ] && stow -R --no-folding --verbose=1 -t ~ dotfiles
+    [ -d secrets ] && stow -R --no-folding --verbose=1 -t ~ secrets
 
     if [ -d "$HYPO_ROOT/local-dotfiles/host-$(hostname)" ]; then
         cd "$HYPO_ROOT/local-dotfiles"
-        stow --no-folding --verbose=1 -t ~ "host-$(hostname)"
+        stow -R --no-folding --verbose=1 -t ~ "host-$(hostname)"
     fi
 fi
 
 if [ -d "$SHARE_DIR" ]; then
     cd "$DIEN_ROOT/dotfiles"
-    stow --no-folding --verbose=1 -t "$SHARE_DIR/.claude" .claude
+    stow -R --no-folding --verbose=1 -t "$SHARE_DIR/.claude" .claude
 fi
 
 # Generate environment.d for systemd user services

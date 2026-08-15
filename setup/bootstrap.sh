@@ -1,49 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Bootstrap a fresh machine.
-# Usage: bash bootstrap.sh [--tier hub|member|guest]
-#
-# Default (no --tier): public-only — clone diencephalon, restow, run profiles.
-# What every leaf and edge machine needs; fleet (hypothalamus) drives it remotely.
+# Bootstrap a fresh machine: clone diencephalon, restow, run profiles.
+# What every leaf and edge machine needs; the private fleet controller
+# (hypothalamus) pushes this script over SSH and places private repos where
+# a machine's identity calls for them.
 #
 # Env:
 #   SYNC_ROOT         (default: $HOME/synced)
 #   PROFILES          (default: empty — base only; space-separated, e.g. "shell dev")
 #   DIENCEPHALON_URL  (default: https://github.com/endremborza/setup)
-#   HUB_USER          (default: $USER — SSH user on the Hub for fleet repos)
-#   HYPOTHALAMUS_URL  (default: derived from PRIMARY_HOSTNAME — override for tests/file:// clones)
-#
-# Tier semantics:
-#   hub    — clones diencephalon only. hypothalamus + logos must be placed out
-#            of band (rclone pull, manual scp, etc.) before `setup run --profile hub`.
-#   member — clones diencephalon + hypothalamus (over SSH from the Hub).
-#            Requires this machine's pubkey in Hub's ~/.ssh/authorized_keys.
-#   guest  — clones diencephalon only. Ledger access via narrow SSH key.
 
-TIER=""
 while [ $# -gt 0 ]; do
     case "$1" in
-        --tier) TIER="$2"; shift 2 ;;
         -h|--help)
-            sed -n '3,18p' "$0" | sed 's/^# \?//'
+            sed -n '4,12p' "$0" | sed 's/^# \?//'
             exit 0
             ;;
         *) echo "Unknown arg: $1" >&2; exit 1 ;;
     esac
 done
 
-case "$TIER" in
-    ""|hub|member|guest) ;;
-    *) echo "Usage: bash bootstrap.sh [--tier hub|member|guest]" >&2; exit 1 ;;
-esac
-
 : "${SYNC_ROOT:=$HOME/synced}"
 : "${PROFILES:=}"
-: "${HUB_USER:=${USER:-$(id -un)}}"
 DIENCEPHALON_URL="${DIENCEPHALON_URL:-https://github.com/endremborza/setup}"
 DIEN_ROOT="$SYNC_ROOT/composites/pkm/diencephalon"
-HYPO_ROOT="$SYNC_ROOT/composites/pkm/hypothalamus"
 
 sudo apt-get update -qq
 sudo apt-get install -y curl git stow make
@@ -56,20 +37,23 @@ fi
 mkdir -p "$(dirname "$DIEN_ROOT")"
 [ -d "$DIEN_ROOT" ] || git clone "$DIENCEPHALON_URL" "$DIEN_ROOT"
 
-if [ "$TIER" = "member" ] && [ ! -d "$HYPO_ROOT" ]; then
-    if [ -z "${HYPOTHALAMUS_URL:-}" ]; then
-        PRIMARY=$(awk -F= '/^export PRIMARY_HOSTNAME=/{gsub(/"/, "", $2); print $2}' "$DIEN_ROOT/dotfiles/.vars")
-        [ -n "$PRIMARY" ] || { echo "PRIMARY_HOSTNAME not found in $DIEN_ROOT/dotfiles/.vars" >&2; exit 1; }
-        HYPOTHALAMUS_URL="$HUB_USER@$PRIMARY:synced/share/git/hypothalamus.git"
-    fi
-    mkdir -p "$(dirname "$HYPO_ROOT")"
-    git clone "$HYPOTHALAMUS_URL" "$HYPO_ROOT"
-fi
-
-# Distro skeleton rc file blocks the stow symlink on fresh machines.
-if [ -f "$HOME/.profile" ] && [ ! -L "$HOME/.profile" ]; then
-    rm "$HOME/.profile"
-fi
+# Anything that would block a stow symlink gets moved aside — backed up under
+# ~/pre-stow-backup, never deleted. That covers real files (distro skeleton,
+# hand-managed configs) AND foreign symlinks (stows from older repo layouts):
+# stow refuses any target it does not own and aborts the whole package.
+BACKUP="$HOME/pre-stow-backup"
+DIEN_CANON=$(readlink -f -- "$DIEN_ROOT")
+(cd "$DIEN_ROOT/dotfiles" && find . -type f ! -path './.claude/*' | sed 's|^\./||') \
+| while read -r f; do
+    target="$HOME/$f"
+    [ -e "$target" ] || [ -L "$target" ] || continue
+    case "$(readlink -f -- "$target" 2>/dev/null)" in
+        "$DIEN_CANON"/*) continue ;;  # already our stow link
+    esac
+    mkdir -p "$BACKUP/$(dirname "$f")"
+    mv "$target" "$BACKUP/$f"
+    echo "moved aside: ~/$f -> ~/pre-stow-backup/$f"
+done
 
 export SYNC_ROOT DIEN_ROOT
 bash "$DIEN_ROOT/dotfiles/.local/bin/restow"

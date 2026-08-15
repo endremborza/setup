@@ -19,7 +19,7 @@ curl -fsSL https://raw.githubusercontent.com/endremborza/setup/main/setup/bootst
 
 Installs `uv`, clones the repo to `$SYNC_ROOT/composites/pkm/diencephalon`, stows dotfiles, runs `setup run` (base profile only).
 
-Bootstrap also takes `--tier {hub,member,guest}` — see [SETUP.md](SETUP.md#bootstrap-tiers). Set `PROFILES="shell dev"` env to push further in one shot.
+Set `PROFILES="shell dev"` env to push further in one shot. Remote machines are normally driven by the private fleet controller, which pushes this script over SSH — see [SETUP.md](SETUP.md#bootstrap).
 
 ### Existing machine
 

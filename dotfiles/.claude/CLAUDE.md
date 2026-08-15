@@ -25,6 +25,11 @@ Invariants:
 - `docs/` never links into `.cril/`; `.cril/` may link into the repo — the repo stays self-contained.
 - When a `.cril/` plan ships, fold its *as-built* description into `docs/` and delete the plan (history lives in git, not stale checklists).
 
+## Writing md
+- One line per paragraph. Never hard-wrap prose at a column -- wrapping is the editor's job, and hard wraps make a one-word edit reflow the whole block in the diff.
+- Same for list items and table rows: one line each, however long.
+- Only real structure gets a linebreak: paragraph, list item, heading, code block.
+
 ## Response Expectations
 - If something is ambiguous, or a plan is too complex with many possible paths, ask precise clarifying questions.
 - Be concise.
