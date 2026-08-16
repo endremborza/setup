@@ -19,9 +19,12 @@ CONFIG MENU                                                    *regroup-menu*
     <CR>  open picker — if not cached, yanks the engine command instead
 
 GROUP PICKER                            (? in normal mode lists all keys)
-    <CR>  browse group     <C-h>  hunk list      <C-e>  config menu
+    <CR>  browse group
+    <C-h>  hunk list
+    <C-e>  config menu
     <C-s> / <C-u> / <C-d>  stage / unstage / discard (revert to HEAD)
-    <C-y>  commit (:w commits, :q aborts)    <C-t>  bury → graveyard
+    <C-y>  commit (:w commits, :q aborts)
+    <C-t>  bury →  graveyard
 
 HUNK PICKER
     <CR>  jump    <C-g>  back    <C-s> / <C-u> / <C-d>  same, per hunk
