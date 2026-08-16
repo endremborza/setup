@@ -124,7 +124,10 @@ def install_scim() -> None:
     link.symlink_to(dest / "src/sc-im")
 
 
-@brick(profile="shell", name="neovim", check="nvim --version", verify="nvim --version")
+_NEOVIM_CHECK = f"nvim --version | grep -qF 'NVIM {_NEOVIM_TAG}'"
+
+
+@brick(profile="shell", name="neovim", check=_NEOVIM_CHECK, verify=_NEOVIM_CHECK)
 def install_neovim() -> None:
     dest = clone_gh("neovim", "neovim", _NEOVIM_TAG)
     run_cmd("make CMAKE_BUILD_TYPE=RelWithDebInfo", cwd=dest)
