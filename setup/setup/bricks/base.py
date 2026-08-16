@@ -48,8 +48,8 @@ _DIENCEPHALON = Path(
 @brick(
     profile="base",
     name="apt-base",
-    check="dpkg -s rsync 2>/dev/null | grep -q 'Status: install ok'",
-    verify="dpkg -s rsync 2>/dev/null | grep -q 'Status: install ok'",
+    check="dpkg -s libclang-dev 2>/dev/null | grep -q 'Status: install ok'",
+    verify="dpkg -s libclang-dev 2>/dev/null | grep -q 'Status: install ok'",
 )
 def install_apt_base() -> None:
     run_cmd("sudo apt-get update")
