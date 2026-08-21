@@ -4,8 +4,23 @@ Analysis runs in the shell (tab-completed): >
     dienpy hunks run [loose|normal|granular] [bare|agents|explore] [model]
     dienpy hunks list          cached runs + coverage
     dienpy hunks drift         has the diff moved since a run?
+    dienpy hunks sync          rebind edited hunks into their groups
 <
-Results land in .git/regroup-cache.json; nvim only reads it.
+Results land in .git/regroup-cache.json; nvim reads it and writes back only
+group marks and manual moves.
+
+EDITING WHILE REVIEWING                                        *regroup-edit*
+Fixing something inside a hunk changes its id, so regroup runs `hunks sync`
+(no model call) whenever the live and grouped hunks disagree: the edited hunk
+is matched back to its group by the HEAD-side range it occupies, and a hunk
+that no longer exists is dropped from its group. Nothing to re-analyze.
+
+An edit that merges two hunks from *different* groups can only land in one of
+them: it goes to the larger overlap, is marked `~` in the pickers and listed
+as REBOUND in the group preview, and committing that group asks first. Fix it
+with <C-o> in the hunk picker. Genuinely new changes still show up under
+"(unassigned new changes)" — <C-o> places them, `dienpy hunks run` asks the
+model to.
 
 GLOBAL                                                         *regroup-keys*
     <leader>gg    group picker at last position; config menu if no session
@@ -28,6 +43,7 @@ GROUP PICKER                            (? in normal mode lists all keys)
 
 HUNK PICKER
     <CR>  jump    <C-g>  back    <C-s> / <C-u> / <C-d>  same, per hunk
+    <C-o>  move this hunk to another group (persisted to the cache)
 
 GRAVEYARD                  (regroup-tagged git stashes)  *regroup-graveyard*
     :RegroupGraveyard or g in the menu; plain `git stash list` sees them too

@@ -1,6 +1,7 @@
 local M = {}
 
 M.current = nil
+M.synced = {}  -- root -> id signature last handed to `dienpy hunks sync`
 
 local function cache_path(root)
   return root .. '/.git/regroup-cache.json'
@@ -15,18 +16,128 @@ local function read_cache(root)
   if not f then return nil end
   local ok, data = pcall(vim.json.decode, f:read('*a'))
   f:close()
-  if not ok or type(data) ~= 'table' or data.version ~= 2 then return nil end
+  -- v2 entries predate the rebind anchors; the engine adds those on its next write
+  if not ok or type(data) ~= 'table' or (data.version ~= 3 and data.version ~= 2) then return nil end
   return data
 end
 
 local function write_cache(root, data)
+  data.version = 3
   local f = assert(io.open(cache_path(root), 'w'))
   f:write(vim.json.encode(data))
   f:close()
 end
 
+local function id_delta(st)
+  local live, grouped = {}, {}
+  local d = { stray = {}, missing = {} }
+  for _, h in ipairs(st.parse.hunks) do live[h.id] = true end
+  for _, g in ipairs(st.groups) do
+    for _, id in ipairs(g.hunks) do
+      grouped[id] = true
+      if not live[id] then table.insert(d.missing, id) end
+    end
+  end
+  for _, h in ipairs(st.parse.hunks) do
+    if not grouped[h.id] then table.insert(d.stray, h.id) end
+  end
+  d.sig = table.concat(d.stray, ',') .. '|' .. table.concat(d.missing, ',')
+  return d
+end
+
+local function drop_missing(st, missing)
+  local dead = {}
+  for _, id in ipairs(missing) do dead[id] = true end
+  for _, g in ipairs(st.groups) do
+    g.hunks = vim.tbl_filter(function(id) return not dead[id] end, g.hunks)
+  end
+end
+
+-- Group tables are held by open pickers and st.pos, so carry the engine's result
+-- into the existing tables instead of swapping them out.
+local function adopt(st, groups)
+  local same = #groups == #st.groups
+  for i, g in ipairs(groups) do
+    if same and g.title ~= st.groups[i].title then same = false end
+  end
+  if not same then
+    st.groups = groups
+    return
+  end
+  for i, g in ipairs(groups) do
+    st.groups[i].hunks = g.hunks
+    st.groups[i].mixed = g.mixed
+    st.groups[i].ambiguous = g.ambiguous
+  end
+end
+
+local function run_sync(root)
+  local res = vim.system({ 'dienpy', 'hunks', 'sync' }, { text = true, cwd = root }):wait()
+  if res.code == 0 then return true end
+  vim.notify('regroup: dienpy hunks sync failed\n' ..
+    vim.trim((res.stderr or '') .. (res.stdout or '')), vim.log.levels.WARN)
+  return false
+end
+
+-- Reconcile every cached run before the menu reports coverage, so an edited hunk
+-- reads as cached rather than as a new one needing the model.
+function M.sync_cache(root, parse)
+  local data = read_cache(root)
+  if not data or not data.analyses then return end
+  local live, ids = {}, {}
+  for _, h in ipairs(parse.hunks) do
+    live[h.id] = true
+    table.insert(ids, h.id)
+  end
+  local drift, known = false, {}
+  for _, entry in pairs(data.analyses) do
+    for _, id in ipairs(entry.ids) do
+      known[id] = true
+      table.insert(ids, id)
+      if not live[id] then drift = true end
+    end
+  end
+  for _, h in ipairs(parse.hunks) do
+    if not known[h.id] then drift = true end
+  end
+  table.sort(ids)  -- pairs() over analyses is unordered; the memo needs a stable signature
+  local sig = table.concat(ids, ',')
+  if not drift or M.synced[root] == sig then return end
+  M.synced[root] = sig
+  run_sync(root)
+end
+
+-- Edits mint new hunk ids; `dienpy hunks sync` rebinds them to their groups by
+-- HEAD-side anchor. Runs only when the live and grouped id sets disagree.
+function M.reconcile(st)
+  local d = id_delta(st)
+  if d.sig == '|' then return end
+  if #d.stray == 0 then
+    -- committed / buried / reverted: nothing to rebind, just forget the dead ids
+    -- (the cache sheds them on the next engine run)
+    return drop_missing(st, d.missing)
+  end
+  local function adopt_cache()
+    local entry = M.entry(st.parse.root, st.config)
+    if entry then adopt(st, entry.groups) end
+  end
+  adopt_cache()  -- someone (sync_cache, a shell `hunks run`) may have done the work already
+  d = id_delta(st)
+  if d.sig == '|' or st.reconciled == d.sig then return end
+  st.reconciled = d.sig
+  if not run_sync(st.parse.root) then return end
+  adopt_cache()
+  local after = id_delta(st)
+  st.reconciled = after.sig
+  local carried = #d.stray - #after.stray
+  if carried > 0 then
+    vim.notify(('regroup: carried %d edited hunk(s) into their groups'):format(carried))
+  end
+end
+
 function M.refresh(st)
   st.parse = require('regroup.diff').parse(st.parse.root)
+  M.reconcile(st)
 end
 
 function M.last_config(root)
@@ -86,6 +197,21 @@ function M.mark_group(st, g, marks)
     for k, v in pairs(marks) do eg[k] = v end
     write_cache(st.parse.root, data)
   end
+end
+
+-- Persist manual hunk moves. Refuses if the cached run drifted from the session
+-- (someone re-ran the engine meanwhile) rather than clobbering it.
+function M.write_groups(st)
+  local data = read_cache(st.parse.root)
+  local entry = data and data.analyses and data.analyses[M.key(st.config)]
+  if not entry or #entry.groups ~= #st.groups then return false end
+  for i, g in ipairs(st.groups) do
+    if entry.groups[i].title ~= g.title then return false end
+    entry.groups[i].hunks = g.hunks
+    entry.groups[i].ambiguous = g.ambiguous
+  end
+  write_cache(st.parse.root, data)
+  return true
 end
 
 function M.touch_last(root, config)

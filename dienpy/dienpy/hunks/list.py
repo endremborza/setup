@@ -7,8 +7,9 @@ from . import _cache, _hunks
 
 def main() -> None:
     root = _hunks.git_root()
-    current = {h.id for h in _hunks.parse(root)}
-    _cache.prune(root, current)
+    hunks = _hunks.parse(root)
+    current = {h.id for h in hunks}
+    _cache.prune(root, hunks, _hunks.head_sha(root))
     data = _cache.load(root)
     if not data or not data.get("analyses"):
         print("no cached regroup runs")

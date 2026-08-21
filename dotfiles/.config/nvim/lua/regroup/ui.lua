@@ -40,9 +40,17 @@ end
 
 local function check_drift(live, missing)
   if #missing > 0 and #live > 0 then
-    error(('%d hunk(s) missing from the current diff (edited or committed since analysis?): %s — dienpy hunks run to reconcile, :Regroup! to re-analyze')
+    error(('%d hunk(s) missing from the current diff and not rebindable: %s — dienpy hunks sync, or :Regroup! to re-analyze')
       :format(#missing, table.concat(missing, ', ')), 0)
   end
+end
+
+local function ambiguous_set(st, g)
+  local out = {}
+  for _, id in ipairs(g.ambiguous or {}) do
+    if st.parse.by_id[id] then out[id] = true end
+  end
+  return out
 end
 
 local function display_groups(st)
@@ -327,6 +335,13 @@ function M.commit_group(g)
   end)
   if not ok then return notify(err, vim.log.levels.ERROR) end
 
+  local amb = vim.tbl_keys(ambiguous_set(st, g))
+  if #amb > 0 and vim.fn.confirm(
+        ('%d hunk(s) landed here by rebind across group boundaries (%s). Commit anyway?')
+        :format(#amb, table.concat(amb, ', ')), '&Yes\n&No', 2) ~= 1 then
+    return
+  end
+
   local hunk_lines = {}
   for _, h in ipairs(live_recs(st, g)) do
     table.insert(hunk_lines, ('#   %s (%s)'):format(h.path, h.id))
@@ -364,9 +379,16 @@ local function group_preview(st, g, bufnr)
       table.insert(lines, ('# MIXED %s: %s'):format(m.hunk, m.note))
     end
   end
+  local amb = ambiguous_set(st, g)
+  if next(amb) then
+    table.insert(lines, '')
+    for id in pairs(amb) do
+      table.insert(lines, ('# REBOUND %s: edit spanned group boundaries — <C-h> then <C-m> to move'):format(id))
+    end
+  end
   for _, h in ipairs(live_recs(st, g)) do
     table.insert(lines, '')
-    table.insert(lines, ('# [%s] %s'):format(h.id, h.path))
+    table.insert(lines, ('# [%s]%s %s'):format(h.id, amb[h.id] and ' ~' or '', h.path))
     for _, l in ipairs(vim.split(diff.hunk_text(h), '\n', { plain = true })) do
       table.insert(lines, l)
     end
@@ -413,6 +435,69 @@ local function picker_tools(prompt_bufnr, map, make_finder)
   return tools
 end
 
+local function assign(st, h, from, target)
+  local function drop(g)
+    if not g then return end
+    g.hunks = vim.tbl_filter(function(id) return id ~= h.id end, g.hunks)
+    if g.ambiguous then
+      local keep = vim.tbl_filter(function(id) return id ~= h.id end, g.ambiguous)
+      g.ambiguous = #keep > 0 and keep or nil
+    end
+  end
+  for _, g in ipairs(st.groups) do drop(g) end
+  drop(from)  -- may be the synthetic "unassigned" group, which is not in st.groups
+  table.insert(target.hunks, h.id)
+  return state.write_groups(st)
+end
+
+function M.move_hunk(h, from)
+  local st = state.current
+  local targets = vim.tbl_filter(function(g) return g ~= from end, st.groups)
+  if #targets == 0 then return notify('no other group to move into', vim.log.levels.WARN) end
+  local pickers = require('telescope.pickers')
+  local finders = require('telescope.finders')
+  local conf = require('telescope.config').values
+  local previewers = require('telescope.previewers')
+  local actions = require('telescope.actions')
+
+  pickers.new({}, {
+    prompt_title = ('move %s:%d →'):format(h.path, h.new_start),
+    finder = finders.new_table {
+      results = targets,
+      entry_maker = function(g)
+        return {
+          value = g,
+          display = ('%2d hunks  %s'):format(#live_recs(st, g), g.title),
+          ordinal = g.title .. ' ' .. (g.message or ''),
+        }
+      end,
+    },
+    sorter = conf.generic_sorter({}),
+    previewer = previewers.new_buffer_previewer {
+      title = 'group',
+      define_preview = function(self, entry)
+        group_preview(st, entry.value, self.state.bufnr)
+      end,
+    },
+    attach_mappings = function(prompt_bufnr, map)
+      local t = picker_tools(prompt_bufnr, map, nil)
+      t.bind('<CR>', 'move hunk here', function()
+        local g = t.selected()
+        if not g then return end
+        actions.close(prompt_bufnr)
+        if assign(st, h, from, g) then
+          notify(('moved %s:%d → %s'):format(h.path, h.new_start, g.title))
+        else
+          notify('moved in this session only — the cached run drifted, re-run dienpy hunks run to persist',
+            vim.log.levels.WARN)
+        end
+        M.pick_hunks(from)
+      end)
+      return true
+    end,
+  }):find()
+end
+
 function M.pick_groups(opts)
   opts = opts or {}
   local st = state.current
@@ -447,7 +532,7 @@ function M.pick_groups(opts)
     end
     return {
       value = g,
-      display = ('%-9s %s'):format(tag, g.title),
+      display = ('%-9s %s%s'):format(tag, next(ambiguous_set(st, g)) and '~ ' or '', g.title),
       ordinal = g.title .. ' ' .. (g.message or ''),
     }
   end
@@ -537,9 +622,10 @@ function M.pick_hunks(g)
 
   local function make_results()
     local cachedp = diff.parse(st.parse.root, { cached = true })
+    local amb = ambiguous_set(st, g)
     local out = {}
     for i, h in ipairs(live_recs(st, g)) do
-      table.insert(out, { i = i, h = h, staged = cachedp.by_id[h.id] ~= nil })
+      table.insert(out, { i = i, h = h, staged = cachedp.by_id[h.id] ~= nil, amb = amb[h.id] })
     end
     return out
   end
@@ -556,7 +642,8 @@ function M.pick_hunks(g)
     end
     return {
       value = it,
-      display = ('%s %s:%d  %s'):format(it.staged and '●' or ' ', it.h.path, it.h.new_start, first),
+      display = ('%s%s %s:%d  %s'):format(
+        it.staged and '●' or ' ', it.amb and '~' or ' ', it.h.path, it.h.new_start, first),
       ordinal = it.h.path .. ' ' .. first,
     }
   end
@@ -588,6 +675,12 @@ function M.pick_hunks(g)
       t.bind('<C-g>', 'back to groups', function()
         actions.close(prompt_bufnr)
         M.pick_groups({ select = g })
+      end)
+      t.bind('<C-o>', 'move hunk to another group', function()
+        local it = t.selected()
+        if not (it and it.h) then return end
+        actions.close(prompt_bufnr)
+        M.move_hunk(it.h, g)
       end)
       t.bind('<C-s>', 'stage hunk', function()
         local it = t.selected()
@@ -685,6 +778,7 @@ function M.pick_runs()
   local ok, root = pcall(diff.root)
   if not ok then return notify(root, vim.log.levels.ERROR) end
   local parse = diff.parse(root)
+  state.sync_cache(root, parse)
   local runs = state.runs(root)
   if #runs == 0 then
     return notify('no cached regroup runs for this repo', vim.log.levels.WARN)

@@ -6,9 +6,13 @@ duplicates in parse order, whole-file entries hash their header minus `index `
 lines. Change both implementations together; tests/test_group_parity.py pins
 this. A mismatch is safe but visible: the nvim side reads the cache as fully
 stale.
+
+The HEAD-side range (`@@ -start,count`) rides along as the edit-stable anchor
+`_rebind` matches on; it is python-only, not part of the parity contract.
 """
 
 import hashlib
+import re
 import subprocess
 from dataclasses import dataclass
 
@@ -28,6 +32,9 @@ class Hunk:
     path: str
     kind: str  # hunk | file | untracked
     text: str
+    # `@@ -start,count`; count 0 (new/binary file) means the path is the anchor
+    head_start: int
+    head_count: int
 
 
 def git_root() -> str:
@@ -46,6 +53,17 @@ def _git(root: str, args: list[str], ok_codes: tuple[int, ...] = (0,)) -> str:
     if res.returncode not in ok_codes:
         raise SystemExit(f"git {' '.join(args)} failed: {res.stderr.strip()}")
     return res.stdout
+
+
+def head_sha(root: str) -> str:
+    return _git(root, ["rev-parse", "HEAD"], ok_codes=(0, 128)).strip()
+
+
+def _head_range(header: str) -> tuple[int, int]:
+    m = re.match(r"^@@ -(\d+)(?:,(\d+))?", header)
+    if not m:
+        return 0, 0
+    return int(m[1]), 1 if m[2] is None else int(m[2])
 
 
 def _file_path(header: list[str]) -> str | None:
@@ -89,6 +107,14 @@ def _parse_diff(text: str) -> list[dict]:
     return files
 
 
+def under(hunks: list[Hunk], path: str) -> list[Hunk]:
+    """Hunks touching `path` — a repo-relative file or directory; `""` means everything."""
+    prefix = path.strip("/")
+    if not prefix:
+        return hunks
+    return [h for h in hunks if h.path == prefix or h.path.startswith(prefix + "/")]
+
+
 def parse(root: str) -> list[Hunk]:
     files = _parse_diff(_git(root, ["diff", "--no-ext-diff", "--no-color", "HEAD"]))
     for path in _git(root, ["ls-files", "--others", "--exclude-standard"]).splitlines():
@@ -108,13 +134,15 @@ def parse(root: str) -> list[Hunk]:
     hunks: list[Hunk] = []
     counts: dict[str, int] = {}
 
-    def register(path: str, kind: str, body: list[str], text: str) -> None:
+    def register(
+        path: str, kind: str, body: list[str], text: str, anchor: tuple[int, int]
+    ) -> None:
         base = hashlib.sha256(
             (path + "\x1f" + "\n".join(body)).encode()
         ).hexdigest()[:12]
         n = counts.get(base, 0) + 1
         counts[base] = n
-        hunks.append(Hunk(base if n == 1 else f"{base}~{n}", path, kind, text))
+        hunks.append(Hunk(base if n == 1 else f"{base}~{n}", path, kind, text, *anchor))
 
     for f in files:
         path = f["path"]
@@ -125,9 +153,15 @@ def parse(root: str) -> list[Hunk]:
         if not f["hunks"]:
             body = [ln for ln in f["header"] if not ln.startswith("index ")]
             kind = "untracked" if f["untracked"] else "file"
-            register(path, kind, body, "\n".join(f["header"]))
+            register(path, kind, body, "\n".join(f["header"]), (0, 0))
         else:
             kind = "untracked" if f["untracked"] else "hunk"
             for h in f["hunks"]:
-                register(path, kind, h["body"], h["header"] + "\n" + "\n".join(h["body"]))
+                register(
+                    path,
+                    kind,
+                    h["body"],
+                    h["header"] + "\n" + "\n".join(h["body"]),
+                    _head_range(h["header"]),
+                )
     return hunks

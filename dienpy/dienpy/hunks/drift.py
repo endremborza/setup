@@ -1,8 +1,8 @@
-"""Drift between the current diff and a cached run: kept/gone/new (exit 1 = drifted, 2 = no run)."""
+"""Drift between the current diff and a cached run: kept/rebound/gone/new (exit 1 = drifted, 2 = no run)."""
 
 import sys
 
-from . import _cache, _config, _hunks
+from . import _cache, _config, _hunks, _rebind
 
 
 def get_completions(args: list[str]) -> list[str]:
@@ -11,20 +11,19 @@ def get_completions(args: list[str]) -> list[str]:
 
 def main(*dims: str) -> None:
     root = _hunks.git_root()
-    current = [h.id for h in _hunks.parse(root)]
-    _cache.prune(root, set(current))
+    hunks = _hunks.parse(root)
+    head = _hunks.head_sha(root)
+    _cache.prune(root, hunks, head)
     config = _config.resolve(dims, _cache.last_config(root))
     e = _cache.entry(root, config)
     if not e:
         print(f"no cached run for [{config.key}]")
         sys.exit(2)
-    known = set(e["ids"])
-    cur_set = set(current)
-    kept = sum(1 for i in current if i in known)
-    new = len(current) - kept
-    gone = sum(1 for i in e["ids"] if i not in cur_set)
+    res = _rebind.rebind(hunks, e, head)
+    kept = len(hunks) - len(res.new) - len(res.rebound)
     print(
-        f"[{config.key}] kept {kept} / gone {gone} / new {new} — "
-        f"coverage {kept}/{len(current)}"
+        f"[{config.key}] kept {kept} / rebound {len(res.rebound)} / gone "
+        f"{len(res.gone)} / new {len(res.new)} — coverage "
+        f"{kept + len(res.rebound)}/{len(hunks)}"
     )
-    sys.exit(0 if new == 0 else 1)
+    sys.exit(1 if res.new else 0)

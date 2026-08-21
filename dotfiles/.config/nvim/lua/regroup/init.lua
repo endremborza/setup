@@ -43,6 +43,7 @@ function M.proceed(root, parse, config, force)
     local st = state.current
     if st and st.parse.root == root and state.key(st.config) == state.key(config) then
       st.parse = parse
+      state.reconcile(st)
       return ui.pick_groups()
     end
     local cached = state.load_cache(root, parse, config)
@@ -69,6 +70,7 @@ function M.run(opts)
   if #parse.hunks == 0 then
     return vim.notify('no uncommitted changes in ' .. vim.fs.basename(root), vim.log.levels.INFO)
   end
+  state.sync_cache(root, parse)
 
   local initial = vim.tbl_extend('force',
     M.opts.default,
