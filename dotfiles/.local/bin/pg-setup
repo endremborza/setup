@@ -12,6 +12,3 @@ docker run --name postgresql-container \
     --mount type=volume,source=my-postgres-data,target=/var/lib/postgresql/data \
     --rm \
     borza-postgres
-
-# docker volume rm my-postgres-data
-# if mount needed -v /local/path/test-data:/var/lib/postgresql/data:Z \
