@@ -2,13 +2,13 @@
 
 def main [f: string --local --socket] {
     let prefix = if $local {$"local-dotfiles/host-(hostname)"} else {"dotfiles"};
-    let fdir = $"($env.SETUP_REPO)/($prefix)/.config/systemd/user"
+    let fdir = $"($env.DIEN_ROOT)/($prefix)/.config/systemd/user"
     let filepath = $"($fdir)/($f).service"
-    cp $"($env.SETUP_REPO)/util/service-template" $filepath
+    cp $"($env.DIEN_ROOT)/util/service-template" $filepath
     nvim $filepath;
     if $socket {
         let socket_filepath = $"($fdir)/($f).socket"
-        cp $"($env.SETUP_REPO)/util/socket-template" $socket_filepath
+        cp $"($env.DIEN_ROOT)/util/socket-template" $socket_filepath
         nvim $socket_filepath;
     }
     restow;
