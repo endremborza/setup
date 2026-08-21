@@ -3,10 +3,7 @@ from setup.util import apt_install, run_cmd
 
 # Media playback box: mpv (vo=gpu-next) for HDR playback, cage as the kiosk
 # compositor for the fullscreen browser, ALSA for HDMI bitstream passthrough.
-# The HWE kernel carries the AMD colour-management pipeline the HDR path
-# needs. HDR bench entry point is compositor-less mpv (--gpu-context=drm);
-# gamescope is NOT in the Ubuntu archive — source-build it only if the drm
-# path disappoints. Bench sequence lives in the homelab plan.
+# The HWE kernel carries the AMD colour-management pipeline the HDR path needs.
 _APT_MEDIA = ["mpv", "cage", "alsa-utils", "wayland-utils"]
 
 _HWE = "linux-generic-hwe-24.04"
