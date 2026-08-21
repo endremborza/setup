@@ -1,5 +1,5 @@
 #!/bin/bash
-# TODO: this is repeated from .vars
+# Defaults mirror .vars: restow runs before ~/.vars is stowed on a fresh machine.
 : "${SYNC_ROOT:=$HOME/synced}"
 DIEN_ROOT=${DIEN_ROOT:-$SYNC_ROOT/composites/pkm/diencephalon}
 HYPO_ROOT=${HYPO_ROOT:-$SYNC_ROOT/composites/pkm/hypothalamus}
