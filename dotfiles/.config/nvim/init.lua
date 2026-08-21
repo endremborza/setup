@@ -570,9 +570,6 @@ require('lazy').setup({
 
     dependencies = {
       'nvim-lua/plenary.nvim',
-      -- optional dependencies:
-      -- a completion engine
-      --    hrsh7th/nvim-cmp or Saghen/blink.cmp are popular choices
     },
     ---@type lean.Config
     opts = {
