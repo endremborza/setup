@@ -8,11 +8,7 @@ moves under a session.
 from . import _cache, _config, _groups, _hunks, _rebind
 
 
-def get_completions(args: list[str]) -> list[str]:
-    return [*_config.GRANULARITIES, *_config.CONTEXTS, *_config.MODELS]
-
-
-def main(*dims: str) -> None:
+def main(*dims: _config.Dim) -> None:
     root = _hunks.git_root()
     hunks = _hunks.parse(root)
     head = _hunks.head_sha(root)

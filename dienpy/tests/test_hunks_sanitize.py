@@ -28,13 +28,33 @@ def test_merges_same_titled_groups() -> None:
 
 def test_mixed_pruned_and_merged() -> None:
     groups = [
-        {"title": "a", "message": "", "hunks": ["x"], "mixed": [{"hunk": "x", "note": "n1"}, {"hunk": "dead", "note": "n2"}]},
-        {"title": "a", "message": "", "hunks": ["y"], "mixed": [{"hunk": "y", "note": "n3"}]},
-        {"title": "b", "message": "", "hunks": ["z"], "mixed": [{"hunk": "dead", "note": "n4"}]},
+        {
+            "title": "a",
+            "message": "",
+            "hunks": ["x"],
+            "mixed": [{"hunk": "x", "note": "n1"}, {"hunk": "dead", "note": "n2"}],
+        },
+        {
+            "title": "a",
+            "message": "",
+            "hunks": ["y"],
+            "mixed": [{"hunk": "y", "note": "n3"}],
+        },
+        {
+            "title": "b",
+            "message": "",
+            "hunks": ["z"],
+            "mixed": [{"hunk": "dead", "note": "n4"}],
+        },
     ]
     out = sanitize(groups, {"x", "y", "z"})
     assert out == [
-        {"title": "a", "message": "", "hunks": ["x", "y"], "mixed": [{"hunk": "x", "note": "n1"}, {"hunk": "y", "note": "n3"}]},
+        {
+            "title": "a",
+            "message": "",
+            "hunks": ["x", "y"],
+            "mixed": [{"hunk": "x", "note": "n1"}, {"hunk": "y", "note": "n3"}],
+        },
         {"title": "b", "message": "", "hunks": ["z"]},
     ]
 

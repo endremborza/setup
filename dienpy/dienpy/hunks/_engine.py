@@ -1,15 +1,16 @@
-"""Prompt assembly, claude CLI invocation, validation, and incremental merge."""
+"""Prompt assembly, backend invocation, validation, and incremental merge."""
 
 import copy
-import json
-import os
-import subprocess
-from pathlib import Path
+import dataclasses
 
+from .. import ai
 from ._config import GRANULARITIES, Config
 from ._hunks import Hunk
+from ._prompt import project_context, subjects
 
 MAX_PROMPT_CHARS = 300000
+
+_TOOLS = ("Read", "Grep", "Glob")
 
 _GROUP_PROPS = {
     "title": {"type": "string"},
@@ -46,41 +47,24 @@ Rules:
 - Do not restate hunks that are already grouped."""
 
 
-def _schema(incremental: bool) -> str:
+def _schema(incremental: bool) -> dict:
     props = dict(_GROUP_PROPS)
     if incremental:
         props["extends"] = {"type": "integer"}
-    return json.dumps(
-        {
-            "type": "object",
-            "properties": {
-                "groups": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": props,
-                        "required": ["title", "message", "hunks"],
-                    },
-                }
-            },
-            "required": ["groups"],
-        }
-    )
-
-
-def _project_context(root: str) -> tuple[str, str] | None:
-    for name in ("AGENTS.md", "CLAUDE.md"):
-        p = Path(root) / name
-        if p.exists():
-            return name, p.read_text()
-    return None
-
-
-def _subjects(root: str) -> str:
-    res = subprocess.run(
-        ["git", "log", "--format=%s", "-15"], capture_output=True, text=True, cwd=root
-    )
-    return res.stdout.strip()
+    return {
+        "type": "object",
+        "properties": {
+            "groups": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": props,
+                    "required": ["title", "message", "hunks"],
+                },
+            }
+        },
+        "required": ["groups"],
+    }
 
 
 def _prompt_head(root: str, config: Config, rules: str) -> list[str]:
@@ -96,10 +80,10 @@ def _prompt_head(root: str, config: Config, rules: str) -> list[str]:
             "changes before grouping.",
         ]
     if config.context != "bare":
-        ctx = _project_context(root)
+        ctx = project_context(root)
         if ctx:
             parts += ["", f"Project context ({ctx[0]}):", ctx[1]]
-    parts += ["", "Recent commit subjects for style:", _subjects(root)]
+    parts += ["", "Recent commit subjects for style:", subjects(root)]
     return parts
 
 
@@ -139,79 +123,39 @@ def build_incremental_prompt(
     return "\n".join(parts)
 
 
-def _failure_report(res: subprocess.CompletedProcess) -> str:
-    parts = []
-    try:
-        outer = json.loads(res.stdout or "")
-        if isinstance(outer.get("result"), str):
-            parts.append(outer["result"])
-    except json.JSONDecodeError:
-        if res.stdout and res.stdout.strip():
-            parts.append(res.stdout.strip()[-400:])
-    if res.stderr and res.stderr.strip():
-        parts.append(res.stderr.strip()[-400:])
-    return "\n".join(parts) or f"exit code {res.returncode}"
+def _need(config: Config) -> ai.Need:
+    return ai.Need(
+        schema=True,
+        tools=_TOOLS if config.context == "explore" else (),
+        timeout=1200 if config.context == "explore" else 900,
+    )
 
 
-def _call(
-    root: str,
-    prompt: str,
-    config: Config,
-    auth: str,
-    incremental: bool,
-    timeout: int,
-) -> list[dict]:
+def backend_for(config: Config, auth: str | None) -> ai.Backend:
+    """Resolve before any cache mutation, so a capability mismatch changes nothing."""
+    backend = ai.resolve("hunks", _need(config), profile=config.model)
+    if auth:
+        if not isinstance(backend, ai.Cli):
+            raise SystemExit(
+                f"--auth applies to cli profiles only, not '{config.model}'"
+            )
+        backend = dataclasses.replace(backend, auth=auth)
+    return backend
+
+
+def _call(root: str, prompt: str, backend: ai.Backend, incremental: bool) -> list[dict]:
     if len(prompt) > MAX_PROMPT_CHARS:
         raise SystemExit(
             f"diff too large for one analysis: {len(prompt)} chars "
             f"(limit {MAX_PROMPT_CHARS})"
         )
-    cmd = [
-        "claude",
-        "-p",
-        "--output-format",
-        "json",
-        "--json-schema",
-        _schema(incremental),
-        "--model",
-        config.model,
-        "--tools",
-        "Read,Grep,Glob" if config.context == "explore" else "",
-    ]
-    env = os.environ.copy()
-    if auth == "login":
-        env.pop("ANTHROPIC_API_KEY", None)
-        env.pop("ANTHROPIC_AUTH_TOKEN", None)
-    try:
-        res = subprocess.run(
-            cmd,
-            input=prompt,
-            capture_output=True,
-            text=True,
-            cwd=root,
-            env=env,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired:
-        raise SystemExit(f"claude timed out after {timeout}s")
-    if res.returncode != 0:
-        raise SystemExit("claude failed: " + _failure_report(res))
-    outer = json.loads(res.stdout)
-    if outer.get("is_error"):
-        raise SystemExit(f"claude error: {outer.get('result')}")
-    payload = outer.get("structured_output")
-    if payload is None and isinstance(outer.get("result"), str):
-        try:
-            payload = json.loads(outer["result"])
-        except json.JSONDecodeError:
-            payload = None
-    if not isinstance(payload, dict) or not isinstance(payload.get("groups"), list):
-        raise SystemExit("no structured groups in claude output")
-    return payload["groups"]
-
-
-def _timeout(config: Config) -> int:
-    return 1200 if config.context == "explore" else 900
+    payload = ai.send(
+        backend, "", prompt, schema=_schema(incremental), max_tokens=8192, cwd=root
+    )
+    groups = payload.get("groups") if isinstance(payload, dict) else None
+    if not isinstance(groups, list):
+        raise SystemExit("no groups in model output")
+    return groups
 
 
 def _validate_full(hunks: list[Hunk], groups: list[dict]) -> str | None:
@@ -251,16 +195,18 @@ def _validate_incremental(
     return "\n".join(problems) or None
 
 
-_RETRY = "Your previous grouping was invalid:\n{}\nProduce a corrected, complete grouping."
+_RETRY = (
+    "Your previous grouping was invalid:\n{}\nProduce a corrected, complete grouping."
+)
 
 
 def analyze_full(
-    root: str, hunks: list[Hunk], config: Config, auth: str
+    root: str, hunks: list[Hunk], config: Config, backend: ai.Backend
 ) -> list[dict]:
     feedback = None
     for _ in range(2):
         prompt = build_full_prompt(root, hunks, config, feedback)
-        groups = _call(root, prompt, config, auth, False, _timeout(config))
+        groups = _call(root, prompt, backend, False)
         problems = _validate_full(hunks, groups)
         if not problems:
             return groups
@@ -273,13 +219,13 @@ def analyze_incremental(
     existing: list[dict],
     new_hunks: list[Hunk],
     config: Config,
-    auth: str,
+    backend: ai.Backend,
 ) -> list[dict]:
     new_ids = {h.id for h in new_hunks}
     feedback = None
     for _ in range(2):
         prompt = build_incremental_prompt(root, existing, new_hunks, config, feedback)
-        groups = _call(root, prompt, config, auth, True, _timeout(config))
+        groups = _call(root, prompt, backend, True)
         problems = _validate_incremental(new_ids, len(existing), groups)
         if not problems:
             merged = copy.deepcopy(existing)
@@ -289,7 +235,9 @@ def analyze_incremental(
                     target = merged[ext - 1]
                     target["hunks"] = list(target["hunks"]) + list(g["hunks"])
                     if g.get("mixed"):
-                        target["mixed"] = list(target.get("mixed") or []) + list(g["mixed"])
+                        target["mixed"] = list(target.get("mixed") or []) + list(
+                            g["mixed"]
+                        )
                 else:
                     merged.append(g)
             return merged

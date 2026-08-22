@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from typing import Annotated
+
+from protocli import Complete
 
 from ._core import (
     ALL_VOICES,
@@ -15,15 +18,11 @@ from ._core import (
     to_plain,
 )
 
-
-def get_completions(args: list[str]) -> list[str]:
-    if args and args[-1] == "--voice":
-        return ALL_VOICES
-    return ["--voice", "--speed", "--no-markdown"]
+Voice = Annotated[str, Complete(ALL_VOICES)]
 
 
 def main(
-    *, voice: str = DEFAULT_VOICE, speed: float = 1.0, no_markdown: bool = False
+    *, voice: Voice = DEFAULT_VOICE, speed: float = 1.0, no_markdown: bool = False
 ) -> None:
     """Speak text piped via stdin."""
     if voice not in ALL_VOICES:

@@ -1,7 +1,7 @@
 *regroup.txt*   AI change-group review of uncommitted changes       *regroup*
 
 Analysis runs in the shell (tab-completed): >
-    dienpy hunks run [loose|normal|granular] [bare|agents|explore] [model]
+    dienpy hunks run [loose|normal|granular] [bare|agents|explore] [profile]
     dienpy hunks list          cached runs + coverage
     dienpy hunks drift         has the diff moved since a run?
     dienpy hunks sync          rebind edited hunks into their groups

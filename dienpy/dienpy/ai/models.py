@@ -1,26 +1,21 @@
-"""dienpy ai models — list and refresh cached AI model IDs across providers."""
+"""List and refresh cached AI model IDs across API providers."""
 
 import sys
 from typing import Literal
 
-from . import _cache, _client
+from . import _cache, _transport
 
-_PROVIDERS: dict[str, _client.Client] = {
-    "anthropic": _client.AnthropicClient(),
-    "google": _client.GoogleClient(),
-}
+_PROVIDERS = ("anthropic", "google")
 
 
 def main(
     *, refresh: bool = False, provider: Literal["anthropic", "google"] | None = None
 ) -> None:
     """List available AI models; --refresh forces a re-fetch."""
-    targets = [provider] if provider else list(_PROVIDERS)
-
-    for prov in targets:
+    for prov in [provider] if provider else list(_PROVIDERS):
         if refresh or _cache.needs_refresh(prov):
             try:
-                models = _PROVIDERS[prov].fetch_models()
+                models = _transport.fetch_models(prov)
                 _cache.save(prov, models)
                 print(f"[{prov}] {len(models)} models cached.", file=sys.stderr)
             except SystemExit as e:

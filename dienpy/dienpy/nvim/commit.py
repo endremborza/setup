@@ -4,11 +4,10 @@ import json
 import subprocess
 from pathlib import Path
 
-from ..constants import COMPOSITES_DIR
+from ..constants import DIENCEPHALON_ROOT
 from ._shared import LAZY_LOCK, nvim_version
 
-_DOTFILES_ROOT = COMPOSITES_DIR / "pkm" / "diencephalon"
-_DOTFILES_NVIM = _DOTFILES_ROOT / "dotfiles" / ".config" / "nvim"
+_DOTFILES_NVIM = DIENCEPHALON_ROOT / "dotfiles" / ".config" / "nvim"
 
 
 def _git(args: list[str], cwd: Path) -> str:
@@ -35,8 +34,8 @@ def main(*, message: str = "", dry_run: bool = False, all: bool = False) -> None
     """Commit nvim config with plugin version snapshot."""
     if not LAZY_LOCK.exists():
         raise SystemExit(f"lazy-lock.json not found at {LAZY_LOCK}")
-    if not _DOTFILES_ROOT.exists():
-        raise SystemExit(f"Dotfiles root not found: {_DOTFILES_ROOT}")
+    if not DIENCEPHALON_ROOT.exists():
+        raise SystemExit(f"Dotfiles root not found: {DIENCEPHALON_ROOT}")
 
     lock = json.loads(LAZY_LOCK.read_text())
     prefix = (message + "\n\n") if message else ""
@@ -52,28 +51,30 @@ def main(*, message: str = "", dry_run: bool = False, all: bool = False) -> None
         print(commit_msg)
         return
 
-    changed = _changed_nvim_files(_DOTFILES_ROOT)
+    changed = _changed_nvim_files(DIENCEPHALON_ROOT)
     if not changed:
         raise SystemExit("No changes to nvim config found in dotfiles.")
 
     if all:
-        _git(["add", "--", "dotfiles/.config/nvim/"], cwd=_DOTFILES_ROOT)
+        _git(["add", "--", "dotfiles/.config/nvim/"], cwd=DIENCEPHALON_ROOT)
         print("Staged all changes under dotfiles/.config/nvim/")
     else:
-        _git(["add", "--", "dotfiles/.config/nvim/init.lua"], cwd=_DOTFILES_ROOT)
+        _git(["add", "--", "dotfiles/.config/nvim/init.lua"], cwd=DIENCEPHALON_ROOT)
         print("Staged dotfiles/.config/nvim/init.lua")
 
     lock_in_dotfiles = _DOTFILES_NVIM / "lazy-lock.json"
     if lock_in_dotfiles.exists():
-        _git(["add", "--", "dotfiles/.config/nvim/lazy-lock.json"], cwd=_DOTFILES_ROOT)
+        _git(
+            ["add", "--", "dotfiles/.config/nvim/lazy-lock.json"], cwd=DIENCEPHALON_ROOT
+        )
 
     result = subprocess.run(
         ["git", "commit", "-m", commit_msg],
-        cwd=_DOTFILES_ROOT,
+        cwd=DIENCEPHALON_ROOT,
         text=True,
         capture_output=True,
     )
     if result.returncode != 0:
         raise SystemExit(f"git commit failed:\n{result.stderr}")
 
-    print(f"Committed: {_git(['log', '--oneline', '-1'], cwd=_DOTFILES_ROOT)}")
+    print(f"Committed: {_git(['log', '--oneline', '-1'], cwd=DIENCEPHALON_ROOT)}")

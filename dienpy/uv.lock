@@ -288,7 +288,7 @@ requires-dist = [
     { name = "anthropic", specifier = ">=0.86.0" },
     { name = "google-genai", specifier = ">=1.68.0" },
     { name = "kokoro-onnx", specifier = ">=0.5.0" },
-    { name = "protocli", specifier = ">=0.1.0" },
+    { name = "protocli", specifier = ">=0.2.0" },
     { name = "requests" },
     { name = "rich" },
     { name = "setup", editable = "../setup" },
@@ -722,11 +722,11 @@ wheels = [
 
 [[package]]
 name = "protocli"
-version = "0.1.0"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/03/1f/65fe942b36a3834534aa0cd82ff80c4a0036823c5547032e254890397b19/protocli-0.1.0.tar.gz", hash = "sha256:79931ae9a41aac398d0c9014890f7e9309b4eadb8e9f4cabfd5d64b6d3d19c83", size = 8185, upload-time = "2026-08-12T11:33:32.134Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5d/9c/da95130b7a49bb58519956161fc4a484402d690db7493a3962aff91a12ff/protocli-0.2.0.tar.gz", hash = "sha256:a428192c400e74e4f8dcf3c94be518ce6b56449cc4a01cfcca3fd760abb02cfc", size = 10752, upload-time = "2026-08-22T10:23:26.379Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1c/b2/66d8a04899fa6a5f0c2cbf044a926433ac9dfdb500f96a95b9280ea57d58/protocli-0.1.0-py3-none-any.whl", hash = "sha256:eb4c5043ceb25c50ef2a48828de5adcd782758e6855c770e6add0591b2881818", size = 8506, upload-time = "2026-08-12T11:33:31.157Z" },
+    { url = "https://files.pythonhosted.org/packages/b2/94/81edc1027d67d6c8ac7071574b1f3aab6be46c3808732951bad77defde9b/protocli-0.2.0-py3-none-any.whl", hash = "sha256:e7a718faf9153cca3cb72a41c6d9a41e71bd9858396c560099481e37a05f76a8", size = 11288, upload-time = "2026-08-22T10:23:25.572Z" },
 ]
 
 [[package]]

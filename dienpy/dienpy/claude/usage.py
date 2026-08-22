@@ -105,7 +105,3 @@ def main(*, watch: bool = False, interval: int = 300) -> None:
     else:
         update_values()
         console.print(render())
-
-
-def get_completions(args: list[str]) -> list[str]:
-    return ["--watch", "--interval"]

@@ -115,9 +115,16 @@ def under(hunks: list[Hunk], path: str) -> list[Hunk]:
     return [h for h in hunks if h.path == prefix or h.path.startswith(prefix + "/")]
 
 
-def parse(root: str) -> list[Hunk]:
-    files = _parse_diff(_git(root, ["diff", "--no-ext-diff", "--no-color", "HEAD"]))
-    for path in _git(root, ["ls-files", "--others", "--exclude-standard"]).splitlines():
+def parse(root: str, staged: bool = False) -> list[Hunk]:
+    """Worktree+index hunks vs HEAD; `staged` parses the index alone (no untracked scan)."""
+    target = "--cached" if staged else "HEAD"
+    files = _parse_diff(_git(root, ["diff", "--no-ext-diff", "--no-color", target]))
+    untracked = (
+        []
+        if staged
+        else _git(root, ["ls-files", "--others", "--exclude-standard"]).splitlines()
+    )
+    for path in untracked:
         if not path:
             continue
         d = _git(
@@ -137,9 +144,9 @@ def parse(root: str) -> list[Hunk]:
     def register(
         path: str, kind: str, body: list[str], text: str, anchor: tuple[int, int]
     ) -> None:
-        base = hashlib.sha256(
-            (path + "\x1f" + "\n".join(body)).encode()
-        ).hexdigest()[:12]
+        base = hashlib.sha256((path + "\x1f" + "\n".join(body)).encode()).hexdigest()[
+            :12
+        ]
         n = counts.get(base, 0) + 1
         counts[base] = n
         hunks.append(Hunk(base if n == 1 else f"{base}~{n}", path, kind, text, *anchor))

@@ -3,38 +3,44 @@
 `--path <dir|file>` scopes the analysis to one subtree: only those hunks reach the model,
 groups covering the rest of the diff are left untouched, and the entry records the partial
 coverage — so the remaining hunks land incrementally on the next unscoped run.
+`--staged` analyzes the index instead and prints full messages without touching the cache —
+the "message for what I'm about to commit" path.
 """
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from protocli import FILE_COMPLETION
+from protocli import FILES
 
 from . import _cache, _config, _engine, _groups, _hunks, _rebind
 
 _INCR_MIN_COVERAGE = 0.5
 
 
-def get_completions(args: list[str]) -> list[str]:
-    if args and args[-1] == "--path":
-        return [FILE_COMPLETION]
-    return [
-        *_config.GRANULARITIES,
-        *_config.CONTEXTS,
-        *_config.MODELS,
-        "--force",
-        "--full",
-        "--auth",
-        "--path",
-    ]
+def _run_staged(dims: tuple[str, ...], auth: str | None, path: str) -> None:
+    root = _hunks.git_root()
+    hunks = _hunks.under(_hunks.parse(root, staged=True), path)
+    if not hunks:
+        raise SystemExit(f"no staged changes{f' under {path}' if path else ''}")
+    config = _config.resolve(dims, _cache.last_config(root))
+    backend = _engine.backend_for(config, auth)
+    print(f"regroup: {len(hunks)} staged hunks [{config.key}]")
+    for g in _engine.analyze_full(root, hunks, config, backend):
+        print(f"\n{len(g['hunks']):2d} hunks  {g['title']}")
+        if g.get("message"):
+            print(g["message"])
 
 
 def main(
-    *dims: str,
+    *dims: _config.Dim,
     force: bool = False,
     full: bool = False,
-    auth: Literal["login", "env"] = "login",
-    path: str = "",
+    auth: Literal["login", "env"] | None = None,
+    path: Annotated[str, FILES] = "",
+    staged: bool = False,
 ) -> None:
+    if staged:
+        _run_staged(dims, auth, path)
+        return
     root = _hunks.git_root()
     all_hunks = _hunks.parse(root)
     head = _hunks.head_sha(root)
@@ -47,6 +53,7 @@ def main(
         print(f"no uncommitted changes under {path}")
         return
     config = _config.resolve(dims, _cache.last_config(root))
+    backend = _engine.backend_for(config, auth)
     # groups are sanitized against the whole diff so a scoped run never evicts
     # out-of-scope groups; only in-scope hunks are handed to the model
     live = {h.id for h in all_hunks}
@@ -79,14 +86,15 @@ def main(
         )
         new_hunks = [h for h in hunks if h.id in new_ids]
         groups = _groups.sanitize(
-            _engine.analyze_incremental(root, existing, new_hunks, config, auth), live
+            _engine.analyze_incremental(root, existing, new_hunks, config, backend),
+            live,
         )
     else:
         print(f"analyzing {len(hunks)} hunks...")
         # out-of-scope groups keep their hunks: a scoped run rewrites only its own part
         kept_groups = _groups.sanitize(existing, live - scope) if path else []
         groups = _groups.sanitize(
-            kept_groups + _engine.analyze_full(root, hunks, config, auth), live
+            kept_groups + _engine.analyze_full(root, hunks, config, backend), live
         )
 
     _cache.set_entry(root, config, all_hunks, groups, head)

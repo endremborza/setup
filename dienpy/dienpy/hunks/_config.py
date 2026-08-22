@@ -1,6 +1,11 @@
 """Shared config vocabulary: the three analysis dimensions and token classification."""
 
 from dataclasses import dataclass
+from typing import Annotated
+
+from protocli import Complete
+
+from .. import ai
 
 GRANULARITIES = {
     "loose": "broad thematic groups; a feature together with its tests, docs and "
@@ -17,20 +22,27 @@ CONTEXTS = {
     "explore": "AGENTS.md included, agent may read repo files before grouping",
 }
 
-MODELS = ["haiku", "sonnet", "opus", "fable"]
-
-DEFAULT = {"granularity": "normal", "model": "sonnet", "context": "bare"}
+DEFAULT = {"granularity": "normal", "context": "bare"}
 
 
 @dataclass(frozen=True)
 class Config:
     granularity: str
-    model: str
+    model: (
+        str  # an ai profile name; unknown names fall through as bare claude CLI models
+    )
     context: str
 
     @property
     def key(self) -> str:
         return f"{self.granularity}|{self.model}|{self.context}"
+
+
+def tokens() -> list[str]:
+    return [*GRANULARITIES, *CONTEXTS, *ai.profile_names()]
+
+
+Dim = Annotated[str, Complete(tokens)]
 
 
 def classify(dims: tuple[str, ...]) -> dict[str, str]:
@@ -46,7 +58,12 @@ def classify(dims: tuple[str, ...]) -> dict[str, str]:
 
 
 def resolve(dims: tuple[str, ...], last: dict | None) -> Config:
-    merged = {**DEFAULT, **(last or {}), **classify(dims)}
+    merged = {
+        **DEFAULT,
+        "model": ai.profile_for_tool("hunks"),
+        **(last or {}),
+        **classify(dims),
+    }
     config = Config(merged["granularity"], merged["model"], merged["context"])
     if config.granularity not in GRANULARITIES or config.context not in CONTEXTS:
         raise SystemExit(f"invalid config: {config.key}")
