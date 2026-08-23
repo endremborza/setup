@@ -29,6 +29,8 @@ def send(
     if isinstance(backend, Openai):
         return _send_openai(backend, system, user, schema, max_tokens, temperature)
     if isinstance(backend, Api):
+        if schema is not None:
+            raise SystemExit("schema output not implemented for api backends")
         return _send_api(backend, system, user, max_tokens, temperature)
     return _send_cli(backend, system, user, schema, cwd)
 
