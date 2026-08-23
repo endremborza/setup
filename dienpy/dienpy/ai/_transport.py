@@ -90,7 +90,9 @@ def _send_openai(
         raise SystemExit(f"endpoint {backend.url} unreachable: {e}")
     if not r.ok:
         raise SystemExit(f"endpoint error {r.status_code}: {_openai_error(r)}")
-    content = r.json()["choices"][0]["message"]["content"].strip()
+    content = (r.json()["choices"][0]["message"].get("content") or "").strip()
+    if not content:
+        raise SystemExit("empty reply from endpoint")
     if schema is None:
         return content
     try:
@@ -225,7 +227,12 @@ def _send_cli(
         raise SystemExit("claude CLI not found on PATH")
     if res.returncode != 0:
         raise SystemExit("claude failed: " + _cli_failure(res))
-    outer = json.loads(res.stdout)
+    try:
+        outer = json.loads(res.stdout)
+    except json.JSONDecodeError:
+        raise SystemExit(
+            f"claude returned non-JSON output: {res.stdout.strip()[-400:]}"
+        )
     if outer.get("is_error"):
         raise SystemExit(f"claude error: {outer.get('result')}")
     if schema is None:
