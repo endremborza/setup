@@ -1,7 +1,5 @@
 """Rewrite a past commit's message with AI (prints; does not amend)."""
 
-from typing import Literal
-
 from .. import ai
 from . import _hunks, _prompt
 
@@ -20,7 +18,7 @@ def main(
     hash: str,
     *,
     profile: ai.ProfileName = "",
-    effort: Literal["none", "low", "medium", "high"] = "none",
+    effort: ai.Effort = "",
     max_diff_chars: int = 0,
 ) -> None:
     root = _hunks.git_root()

@@ -11,14 +11,7 @@ import os
 import subprocess
 from typing import Any
 
-from ._backend import Api, Backend, Cli, Openai
-
-EFFORT_BUDGETS: dict[str, int | None] = {
-    "none": None,
-    "low": 2048,
-    "medium": 8192,
-    "high": 32768,
-}
+from ._backend import EFFORT_BUDGETS, Api, Backend, Cli, Openai
 
 _ANTHROPIC_THINKING_BETA = "interleaved-thinking-2025-05-14"
 
@@ -114,7 +107,7 @@ def _openai_error(r) -> str:
 def _send_api(
     backend: Api, system: str, user: str, max_tokens: int, temperature: float
 ) -> str:
-    budget = EFFORT_BUDGETS[backend.effort]
+    budget = EFFORT_BUDGETS[backend.effort] if backend.effort else None
     if backend.model.startswith("claude"):
         return _send_anthropic(backend, system, user, max_tokens, budget, temperature)
     if backend.model.startswith("gemini"):
@@ -205,6 +198,8 @@ def _send_cli(
         "--tools",
         ",".join(backend.tools),
     ]
+    if backend.effort:
+        cmd += ["--effort", backend.effort]
     if schema is not None:
         cmd += ["--json-schema", json.dumps(schema)]
     env = os.environ.copy()

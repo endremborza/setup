@@ -2,7 +2,7 @@
 
 from protocli import Dispatcher
 
-from ._backend import EFFORTS, Api, Backend, Cli, Need, Openai, resolve
+from ._backend import EFFORTS, Api, Backend, Cli, Effort, Need, Openai, resolve
 from ._profiles import ProfileName
 from ._profiles import for_tool as profile_for_tool
 from ._profiles import names as profile_names
@@ -13,6 +13,7 @@ __all__ = [
     "Api",
     "Backend",
     "Cli",
+    "Effort",
     "Need",
     "Openai",
     "profile_for_tool",

@@ -76,6 +76,9 @@ def test_resolve_builds_each_kind() -> None:
         assert resolve("hunks", Need(schema=True, timeout=900)) == Cli(
             model="opus", timeout=1800
         )
+        assert resolve("x", Need(effort="xhigh"), profile="slow") == Cli(
+            model="opus", effort="xhigh", timeout=1800
+        )
 
 
 def test_unknown_profile_is_bare_cli_model() -> None:
@@ -93,10 +96,10 @@ def test_capability_mismatches_refuse_loudly() -> None:
         assert "tunnel" in msg and "Read" in msg
         msg = _refused(lambda: resolve("x", Need(schema=True), profile="deep"))
         assert "schema" in msg
-        msg = _refused(lambda: resolve("x", Need(effort="high"), profile="slow"))
-        assert "effort" in msg
         msg = _refused(lambda: resolve("x", Need(effort="high"), profile="tunnel"))
         assert "effort" in msg
+        msg = _refused(lambda: resolve("x", Need(effort="ultracode"), profile="slow"))
+        assert "invalid effort" in msg
 
 
 def test_bad_specs_refuse_loudly() -> None:
@@ -106,6 +109,8 @@ def test_bad_specs_refuse_loudly() -> None:
         assert "kind" in _refused(lambda: resolve("x", Need(), profile="p"))
     with _with_config('[profile.p]\nkind = "cli"\nauth = "oauth"\n'):
         assert "auth" in _refused(lambda: resolve("x", Need(), profile="p"))
+    with _with_config('[profile.p]\nkind = "cli"\neffort = "extreme"\n'):
+        assert "invalid effort" in _refused(lambda: resolve("x", Need(), profile="p"))
 
 
 if __name__ == "__main__":

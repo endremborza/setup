@@ -6,11 +6,19 @@ cannot serve the need — the mismatch surfaces before any tokens are spent.
 """
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Annotated, Any
+
+from protocli import Complete
 
 from . import _profiles
 
-EFFORTS = ("none", "low", "medium", "high")
+# one vocabulary, interpreted per backend: api maps it to a thinking budget
+# (x4 ladder), cli passes it to `claude --effort`, openai refuses it.
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+EFFORT_BUDGETS = dict(zip(EFFORTS, (2048, 8192, 32768, 131072, 262144)))
+
+# advisory, not enforced: the backend validates and names the valid set itself
+Effort = Annotated[str, Complete(EFFORTS)]
 _AUTHS = ("login", "env")
 
 
@@ -18,7 +26,7 @@ _AUTHS = ("login", "env")
 class Need:
     schema: bool = False
     tools: tuple[str, ...] = ()
-    effort: str = "none"
+    effort: str = ""  # "" = the backend's default, no thinking config passed
     timeout: int = 300
 
 
@@ -36,7 +44,7 @@ class Api:
     """Direct SDK call with an API key; provider inferred from the model prefix."""
 
     model: str
-    effort: str = "none"
+    effort: str = ""
     timeout: int = 300
 
 
@@ -49,6 +57,7 @@ class Cli:
         "login"  # env keeps ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN in the environment
     )
     tools: tuple[str, ...] = ()
+    effort: str = ""
     timeout: int = 300
 
 
@@ -62,10 +71,12 @@ def resolve(tool: str, need: Need, profile: str = "") -> Backend:
         name, {"kind": "cli", "model": name}
     )
     kind = spec.get("kind")
-    if need.effort not in EFFORTS:
+    effort = need.effort or str(spec.get("effort", ""))
+    if effort and effort not in EFFORTS:
         raise SystemExit(
-            f"invalid effort '{need.effort}' (one of: {', '.join(EFFORTS)})"
+            f"profile '{name}': invalid effort '{effort}' (one of: {', '.join(EFFORTS)})"
         )
+    # profile timeout (deployment knowledge) beats the caller's workload default
     timeout = int(spec.get("timeout", need.timeout))
 
     def refuse(what: str) -> SystemExit:
@@ -74,8 +85,8 @@ def resolve(tool: str, need: Need, profile: str = "") -> Backend:
     if kind == "openai":
         if need.tools:
             raise refuse(f"no repo tool access ({', '.join(need.tools)} requested)")
-        if need.effort != "none":
-            raise refuse("thinking effort is an api-only knob")
+        if effort:
+            raise refuse("no effort control on an openai endpoint")
         url = spec.get("url")
         if not url:
             raise SystemExit(f"profile '{name}': openai backend needs a url")
@@ -88,19 +99,18 @@ def resolve(tool: str, need: Need, profile: str = "") -> Backend:
         model = spec.get("model")
         if not model:
             raise SystemExit(f"profile '{name}': api backend needs a model")
-        effort = need.effort if need.effort != "none" else spec.get("effort", "none")
         return Api(model=model, effort=effort, timeout=timeout)
     if kind == "cli":
-        if need.effort != "none":
-            raise refuse(
-                "thinking effort is an api-only knob; pick a stronger model instead"
-            )
         auth = spec.get("auth", "login")
         if auth not in _AUTHS:
             raise SystemExit(
                 f"profile '{name}': invalid auth '{auth}' (one of: {', '.join(_AUTHS)})"
             )
         return Cli(
-            model=spec.get("model", name), auth=auth, tools=need.tools, timeout=timeout
+            model=spec.get("model", name),
+            auth=auth,
+            tools=need.tools,
+            effort=effort,
+            timeout=timeout,
         )
     raise SystemExit(f"profile '{name}': unknown backend kind '{kind}'")
