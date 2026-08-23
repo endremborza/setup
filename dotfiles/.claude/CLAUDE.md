@@ -60,7 +60,6 @@ Invariants:
 - A comment describes a mechanism that is not evident from reading the code, or a constraint that still holds. Present tense, about the thing, not about the work that produced it.
 - Never write the story: no incident, outage, debugging session, review remark, or request ("as requested", "you asked for", "after the report"), no dates, no commit/PR/issue references, no "changed from / used to / previously / for now / until we". Git holds the history and `.cril/` holds the writeups, todos and plans — code holds neither.
 - Deciding what to keep: strip every reference to the episode and see what is left. Nothing left → delete the comment. A permanent constraint left → keep only that, as a fact ("the snap shim's epoch outranks any Mozilla version"), never as a war story ("unattended-upgrades swapped firefox on me").
-- No TODO/FIXME/HACK markers in code — they belong in `.cril/todo.md`, where I actually look for them. No commented-out code, no "alternative kept for later", no one-off setup recipes for a machine or an account.
 - Same rule for docstrings, config files, systemd units and scripts. The only exception is a file whose entire purpose is to be a note (`archive/`, scratch dirs).
 
 ## Performance Mindset
