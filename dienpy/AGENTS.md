@@ -53,6 +53,45 @@ That's it. The parent Dispatcher detects the nested `_dispatcher` attribute and 
 
 Dispatcher also accepts a plain dict of `{name: callable_or_module_path}` for cases where auto-discovery isn't the right shape (e.g. registering a couple of bound functions). See `dienpy.versions` and `dienpy.tts.server` for examples.
 
+## The `ai` package
+
+`dienpy/ai/` is the backend layer every AI-calling tool goes through — kept plugin-shaped (nothing under `ai/` imports the rest of dienpy) so extraction to its own repo stays mechanical.
+
+A backend is a tagged union of kinds, because backends differ in capability, not just in fields:
+
+| kind | transport | auth | schema output | repo tools | thinking effort |
+|---|---|---|---|---|---|
+| `openai` | HTTP chat-completions (llama-server, vLLM, an SSH-tunneled remote) | none | `response_format` json_schema | no | no |
+| `api` | anthropic / google SDK by model prefix | `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` | not yet | no | thinking budget |
+| `cli` | `claude -p` subprocess | `login` (the claude command's own claude.ai credentials; the subprocess drops `ANTHROPIC_*` vars) or `env` | `--json-schema` | `--tools` | `--effort` |
+
+Effort is one open vocabulary (`low|medium|high|xhigh|max`, empty = backend default), interpreted per kind: api maps it to a thinking budget, cli passes it to `claude --effort`, openai refuses it. It comes from the caller's `Need` or the profile's `effort` field, and completion is advisory — an invalid value is refused at resolution with the valid set.
+
+Callers declare a `Need(schema, tools, effort, timeout)` and call `ai.resolve(tool, need, profile=...)`; resolution is capability-checked and refuses loudly before any tokens are spent or state is written. `ai.send(backend, system, user, *, schema=..., cwd=...)` is the whole call surface — with a schema it returns the parsed object, without one the reply text.
+
+Profiles live in `~/.config/dienpy/ai.toml`; a missing file is a working config (builtin profiles: `haiku|sonnet|opus|fable` as cli-login, `local` as openai on `localhost:8081`). `default` names the fallback profile, `[tool]` binds tool keys (`hunks`, `commit`) to profiles, and an unknown profile name resolves as a bare claude CLI model so ad-hoc model ids keep working.
+
+```toml
+default = "sonnet"
+
+[profile.tunnel]
+kind = "openai"
+url = "http://localhost:8081/v1/chat/completions"
+
+[profile.deep]
+kind = "cli"
+model = "opus"
+effort = "xhigh"
+
+[tool]
+hunks = "fable"
+commit = "tunnel"
+```
+
+- `dienpy ai profiles` — list profiles: kind, config, default marker, tool bindings.
+- `dienpy ai check [profile]` — smoke test: endpoint reachable, key present, claude installed and logged in.
+- `dienpy ai models` — cached model-id listing per API provider (completion source).
+
 ## Shared State
 
 - `constants.py` holds canonical paths under `/mnt/data/synced/` — use these, don't hardcode paths

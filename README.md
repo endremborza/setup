@@ -19,7 +19,7 @@ curl -fsSL https://raw.githubusercontent.com/endremborza/setup/main/setup/bootst
 
 Installs `uv`, clones the repo to `$SYNC_ROOT/composites/pkm/diencephalon`, stows dotfiles, runs `setup run` (base profile only).
 
-Set `PROFILES="shell dev"` env to push further in one shot. Remote machines are normally driven by the private fleet controller, which pushes this script over SSH — see [SETUP.md](SETUP.md#bootstrap).
+Set `PROFILES="shell dev"` env to push further in one shot. Remote machines are normally driven by the private fleet controller, which pushes this script over SSH — see [docs/setup.md](docs/setup.md#bootstrap).
 
 ### Existing machine
 
@@ -53,7 +53,7 @@ setup list                               # all registered bricks
 SETUP_PROFILES="shell dev" setup run     # env-driven equivalent
 ```
 
-Bricks are idempotent: if a brick's `check` command passes, it's skipped. Use `--force` to rerun anyway. Full profile reference, env propagation, and testing recipes live in [SETUP.md](SETUP.md).
+Bricks are idempotent: if a brick's `check` command passes, it's skipped. Use `--force` to rerun anyway. Full profile reference, env propagation, and testing recipes live in [docs/setup.md](docs/setup.md).
 
 ## Makefile
 
@@ -87,10 +87,11 @@ See [`dienpy/AGENTS.md`](dienpy/AGENTS.md) for the full module list.
 ```bash
 dienpy nvim release_notes      # plugin changelog digest
 dienpy nvim verify --perf      # headless LSP health check
-dienpy ai commit               # AI-assisted commit message
+dienpy hunks run               # group the diff into AI change groups
 ```
 
 ## Further reading
 
 - [AGENTS.md](AGENTS.md) — repo conventions, how to add a brick, nvim internals
-- [SETUP.md](SETUP.md) — full profile reference, bootstrap, environment propagation, testing
+- [docs/regroup.md](docs/regroup.md) — AI change-group review (`dienpy hunks` + nvim `:Regroup`)
+- [docs/setup.md](docs/setup.md) — full profile reference, bootstrap, environment propagation, testing

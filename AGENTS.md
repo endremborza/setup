@@ -2,7 +2,7 @@
 
 Public dotfiles, scripts, and tooling. Config files in `dotfiles/` are symlinked to `~` via GNU stow (`dotfiles/.local/bin/restow`). **Public repo** — no secrets, no personal paths.
 
-User-facing docs: [README.md](README.md). Deep reference (profiles, env, testing): [SETUP.md](SETUP.md).
+User-facing docs: [README.md](README.md). Deep reference (profiles, env, testing): [docs/setup.md](docs/setup.md).
 
 ## Repo layout
 
@@ -80,13 +80,13 @@ Pinned tags live in `setup/versions.toml`. The toml is the source of truth — `
 
 Each layer can reference earlier ones. `.profile` and `.xinitrc` source them in order. `restow` regenerates `~/.config/environment.d/{10,20,30}-*.conf` so systemd user services see the same env.
 
-Full boot-to-desktop propagation flow (including tmux/dbus/import-environment gotchas) is in [SETUP.md](SETUP.md#environment-propagation).
+Full boot-to-desktop propagation flow (including tmux/dbus/import-environment gotchas) is in [docs/setup.md](docs/setup.md#environment-propagation).
 
 ## nvim config
 
 Lives at `dotfiles/.config/nvim/init.lua`. Uses lazy.nvim + mason + mason-lspconfig (v2 API, Neovim 0.11+).
 
-`lua/regroup/` — AI change-group review UI (browse / stage / unstage / revert / commit per group or hunk; move a hunk to another group with `<C-o>`; bury a group to the graveyard = `regroup:`-tagged git stash, `:RegroupGraveyard` to restore); cheatsheet at `:h regroup` (`doc/regroup.txt`). Analysis runs in the shell via **`dienpy hunks`** (`run|list|drift|sync`, tab-completed) which owns `.git/regroup-cache.json`; nvim reads the cache and writes back only group marks and manual moves (picking an uncached config yanks the engine command instead of running it). The engine groups hunks semantically via `claude -p --json-schema` — the model only references content-hash hunk IDs, never writes patch bytes — across three config dimensions (granularity loose/normal/granular, model, context bare/agents/explore), with incremental updates for new hunks. `dienpy hunks run --path <dir|file>` scopes a run to one subtree: only those hunks reach the model, groups covering the rest of the diff survive untouched, and the entry's `ids` record just the coverage the groups have, so the remaining hunks land incrementally on the next unscoped run (`cril housekeeping --hunks` uses this to pre-group logos' `data/stock/cril` notes). Editing a hunk mid-review mints a new id; `dienpy hunks sync` rebinds it to its group by HEAD-side anchor (`@@ -start,count`, cached per id in the v3 entry next to the `head` sha — see `dienpy/hunks/_rebind.py`), and nvim calls it whenever the live and grouped id sets disagree, so an edit is no longer a re-analysis. Hunk-ID parity between `dienpy/hunks/_hunks.py` and `regroup/diff.lua` is pinned by `dienpy/tests/test_hunks_parity.py` — change both together. The claude subprocess drops `ANTHROPIC_API_KEY` to run on claude.ai login auth (`--auth env` keeps it). `regroup/review.lua` owns the review-mode diff windows, shared with `<leader>gf/gr/gb`.
+`lua/regroup/` — AI change-group review UI over the `dienpy hunks` engine; architecture, commands and cache schema in [docs/regroup.md](docs/regroup.md), keybinding cheatsheet at `:h regroup` (`doc/regroup.txt`). What an agent editing this repo must not break: hunk-ID parity between `dienpy/hunks/_hunks.py` and `regroup/diff.lua` (pinned by `dienpy/tests/test_hunks_parity.py` — change both together); dienpy owns `.git/regroup-cache.json` and nvim writes back only group marks and manual moves; nvim never invokes the engine (an uncached config yanks the command instead); the claude subprocess drops `ANTHROPIC_API_KEY` to run on claude.ai login auth. `regroup/review.lua` owns the review-mode diff windows, shared with `<leader>gf/gr/gb`.
 
 ### Key decisions
 
