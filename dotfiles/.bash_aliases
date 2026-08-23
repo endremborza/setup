@@ -21,5 +21,5 @@ unset CLAUDE_OPUS CLAUDE_SONNET CLAUDE_HAIKU CLAUDE_FABLE
 alias gwc="watch -n 1 -c git -c color.status=always status"
 alias datefmt="date +%Y-%m-%d-%H-%M-%S"
 alias dcuw="dienpy claude usage --w"
-alias daic="dienpy ai commit"
+alias dhs="dienpy hunks run --staged"
 alias speak="dienpy tts speak"
