@@ -20,14 +20,18 @@ def subjects(root: str) -> str:
     return _hunks._git(root, ["log", "--format=%s", "-15"]).strip()
 
 
-def message_context(root: str) -> str:
-    """Project context + recent subjects — the preamble every message-writing prompt shares."""
+def context_lines(root: str, project: bool = True) -> list[str]:
+    """Project context (optional) + recent subjects — the preamble every prompt shares."""
     parts = []
-    ctx = project_context(root)
+    ctx = project_context(root) if project else None
     if ctx:
         parts += [f"Project context ({ctx[0]}):", ctx[1], ""]
     parts += ["Recent commit subjects for style:", subjects(root)]
-    return "\n".join(parts)
+    return parts
+
+
+def message_context(root: str) -> str:
+    return "\n".join(context_lines(root))
 
 
 def commit_entry(root: str, hash: str, max_diff_chars: int = 0) -> str:

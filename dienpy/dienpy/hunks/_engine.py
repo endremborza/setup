@@ -6,7 +6,7 @@ import dataclasses
 from .. import ai
 from ._config import GRANULARITIES, Config
 from ._hunks import Hunk
-from ._prompt import project_context, subjects
+from ._prompt import context_lines
 
 MAX_PROMPT_CHARS = 300000
 
@@ -79,12 +79,7 @@ def _prompt_head(root: str, config: Config, rules: str) -> list[str]:
             "You may read files in this repository (read-only) to understand the "
             "changes before grouping.",
         ]
-    if config.context != "bare":
-        ctx = project_context(root)
-        if ctx:
-            parts += ["", f"Project context ({ctx[0]}):", ctx[1]]
-    parts += ["", "Recent commit subjects for style:", subjects(root)]
-    return parts
+    return parts + ["", *context_lines(root, project=config.context != "bare")]
 
 
 def _hunk_block(hunks: list[Hunk]) -> list[str]:
