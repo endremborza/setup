@@ -27,7 +27,7 @@ Editing a hunk mid-review mints a new ID. Each cache entry therefore stores the 
 Analyses are keyed by three dimensions, given as bare tokens in any order (missing ones fall back to the last run, then defaults):
 
 - **granularity** — `loose` (broad themes) | `normal` (atomic commits) | `granular` (smallest self-consistent units)
-- **model** — an AI profile name (below); the builtin profiles `haiku|sonnet|opus|fable` map to the claude CLI, and an unknown token passes through as a bare claude model id
+- **model** — an AI profile name (below); the builtin profiles `haiku|sonnet|opus|fable` map to the claude CLI, and an unknown token passes through as a bare claude model id. The nvim picker lists `dienpy ai profiles` (override with `setup { models = {...} }`)
 - **context** — `bare` (hunks only) | `agents` (AGENTS.md in the prompt) | `explore` (agent may also read repo files — needs a backend with tool access)
 
 ## AI backends

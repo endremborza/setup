@@ -1,17 +1,37 @@
 local M = {}
 
 M.opts = {
-  models = { 'haiku', 'sonnet', 'opus', 'fable' },
+  -- model dimension = ai profile names; nil reads them from `dienpy ai profiles`
+  models = nil,
   default = { granularity = 'normal', model = 'sonnet', context = 'bare' },
 }
 
 local GRANULARITIES = { loose = true, normal = true, granular = true }
 local CONTEXTS = { bare = true, agents = true, explore = true }
+local BUILTIN_MODELS = { 'haiku', 'sonnet', 'opus', 'fable' }
+
+local profiles_cache
+
+-- profile names, first column of `dienpy ai profiles`; builtins if dienpy is unavailable
+function M.models()
+  if M.opts.models then return M.opts.models end
+  if profiles_cache then return profiles_cache end
+  local res = vim.system({ 'dienpy', 'ai', 'profiles' }, { text = true }):wait()
+  local names = {}
+  if res.code == 0 then
+    for line in (res.stdout or ''):gmatch('[^\n]+') do
+      local name = line:match('^(%S+)')
+      if name then names[#names + 1] = name end
+    end
+  end
+  profiles_cache = #names > 0 and names or BUILTIN_MODELS
+  return profiles_cache
+end
 
 local function dim_values()
   return {
     granularity = { 'loose', 'normal', 'granular' },
-    model = M.opts.models,
+    model = M.models(),
     context = { 'bare', 'agents', 'explore' },
   }
 end
@@ -143,7 +163,7 @@ function M.setup(opts)
     bang = true,
     complete = function()
       local vals = { 'loose', 'normal', 'granular', 'bare', 'agents', 'explore' }
-      return vim.list_extend(vals, M.opts.models)
+      return vim.list_extend(vals, M.models())
     end,
   })
 
