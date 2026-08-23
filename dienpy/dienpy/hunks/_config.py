@@ -28,9 +28,8 @@ DEFAULT = {"granularity": "normal", "context": "bare"}
 @dataclass(frozen=True)
 class Config:
     granularity: str
-    model: (
-        str  # an ai profile name; unknown names fall through as bare claude CLI models
-    )
+    # an ai profile name; unknown names fall through as bare claude CLI models
+    model: str
     context: str
 
     @property
