@@ -53,9 +53,8 @@ class Cli:
     """`claude -p` subprocess; login auth is the claude command's own claude.ai credentials."""
 
     model: str
-    auth: str = (
-        "login"  # env keeps ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN in the environment
-    )
+    # env keeps ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN in the environment
+    auth: str = "login"
     tools: tuple[str, ...] = ()
     effort: str = ""
     timeout: int = 300
