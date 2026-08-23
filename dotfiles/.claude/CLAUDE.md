@@ -5,8 +5,8 @@
 
 ## Commit Splitting -- dienpy hunks
 - When discussing how to split/commit uncommitted changes, `dienpy hunks` is the shared vocabulary: reference its change groups by title instead of re-deriving a grouping.
-- `dienpy hunks run [loose|normal|granular] [bare|agents|explore] [haiku|sonnet|opus|fable]` analyzes the repo's uncommitted diff into commit groups (cached, incremental); `dienpy hunks list` shows cached runs with coverage against the current diff; `dienpy hunks drift` reports kept/gone/new (exit 1 = drifted, 2 = no run).
-- The cache is `.git/regroup-cache.json`: `analyses` keyed by `granularity|model|context`, each entry holding `ids` (hunk ids) and `groups` (`[{title, message, hunks, ...}]`) -- readable directly when you need group contents.
+- `dienpy hunks run [loose|normal|granular] [bare|agents|explore] [haiku|sonnet|opus|fable]` analyzes the repo's uncommitted diff into commit groups (cached, incremental); `dienpy hunks list` shows cached runs with coverage against the current diff; `dienpy hunks drift` reports kept/rebound/gone/new (exit 1 = drifted, 2 = no run); `dienpy hunks sync` rebinds hunks edited since the analysis back into their groups without calling a model.
+- The cache is `.git/regroup-cache.json`: `analyses` keyed by `granularity|model|context`, each entry holding `ids` (hunk ids), `anchors`/`head` (HEAD-side ranges `sync` rebinds on) and `groups` (`[{title, message, hunks, ...}]`) -- readable directly when you need group contents.
 - nvim's `:Regroup` picker reads the same cache, so a grouping agreed in conversation is what I see there; every hunks command auto-prunes cached runs that no longer cover any current hunk.
 
 ## Planning Flow
