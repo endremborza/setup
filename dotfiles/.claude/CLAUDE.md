@@ -24,6 +24,7 @@
 Invariants:
 - `docs/` never links into `.cril/`; `.cril/` may link into the repo — the repo stays self-contained.
 - When a `.cril/` plan ships, fold its *as-built* description into `docs/` and delete the plan (history lives in git, not stale checklists).
+- An incident, a debugging session, a one-off request and whatever it taught go to `.cril/writeups/`, todos to `.cril/todo.md` — never into the code as comments (see *Comments*).
 
 ## Writing md
 - One line per paragraph. Never hard-wrap prose at a column -- wrapping is the editor's job, and hard wraps make a one-word edit reflow the whole block in the diff.
@@ -54,6 +55,13 @@ Invariants:
 - Elegant, maintainable code over clever tricks
 - Prefer composition and small, focused functions
 - If a new feature supersedes or subsumes a previous one, the previous one should be replaced and deleted unless performance is harmed, but in all cases deletion should be brought up and considered
+
+## Comments
+- A comment describes a mechanism that is not evident from reading the code, or a constraint that still holds. Present tense, about the thing, not about the work that produced it.
+- Never write the story: no incident, outage, debugging session, review remark, or request ("as requested", "you asked for", "after the report"), no dates, no commit/PR/issue references, no "changed from / used to / previously / for now / until we". Git holds the history and `.cril/` holds the writeups, todos and plans — code holds neither.
+- Deciding what to keep: strip every reference to the episode and see what is left. Nothing left → delete the comment. A permanent constraint left → keep only that, as a fact ("the snap shim's epoch outranks any Mozilla version"), never as a war story ("unattended-upgrades swapped firefox on me").
+- No TODO/FIXME/HACK markers in code — they belong in `.cril/todo.md`, where I actually look for them. No commented-out code, no "alternative kept for later", no one-off setup recipes for a machine or an account.
+- Same rule for docstrings, config files, systemd units and scripts. The only exception is a file whose entire purpose is to be a note (`archive/`, scratch dirs).
 
 ## Performance Mindset
 - Consider algorithmic complexity.
