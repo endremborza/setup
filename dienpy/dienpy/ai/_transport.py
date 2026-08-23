@@ -11,9 +11,7 @@ import os
 import subprocess
 from typing import Any
 
-from ._backend import EFFORT_BUDGETS, Api, Backend, Cli, Openai
-
-_ANTHROPIC_THINKING_BETA = "interleaved-thinking-2025-05-14"
+from ._backend import GEMINI_BUDGETS, Api, Backend, Cli, Openai
 
 
 def send(
@@ -109,38 +107,34 @@ def _openai_error(r) -> str:
 def _send_api(
     backend: Api, system: str, user: str, max_tokens: int, temperature: float
 ) -> str:
-    budget = EFFORT_BUDGETS[backend.effort] if backend.effort else None
     if backend.model.startswith("claude"):
-        return _send_anthropic(backend, system, user, max_tokens, budget, temperature)
+        return _send_anthropic(backend, system, user, max_tokens)
     if backend.model.startswith("gemini"):
+        budget = GEMINI_BUDGETS[backend.effort] if backend.effort else None
         return _send_google(backend, system, user, max_tokens, budget, temperature)
     raise SystemExit(
         f"cannot infer provider for model '{backend.model}' (expected claude-* or gemini-*)"
     )
 
 
-def _send_anthropic(
-    backend: Api,
-    system: str,
-    user: str,
-    max_tokens: int,
-    budget: int | None,
-    temperature: float,
-) -> str:
+def _send_anthropic(backend: Api, system: str, user: str, max_tokens: int) -> str:
+    """Adaptive thinking throughout, effort steering its depth; current models refuse
+    sampling knobs next to thinking, so temperature never reaches this transport."""
     import anthropic
 
     _require("ANTHROPIC_API_KEY")
     kwargs: dict[str, Any] = {
         "model": backend.model,
-        "max_tokens": max(max_tokens, budget + 1024) if budget else max_tokens,
+        "max_tokens": max_tokens,
         "system": system,
         "messages": [{"role": "user", "content": user}],
-        "temperature": temperature,
+        "thinking": {"type": "adaptive"},
     }
-    if budget:
-        kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}
-        kwargs["extra_headers"] = {"anthropic-beta": _ANTHROPIC_THINKING_BETA}
+    if backend.effort:
+        kwargs["output_config"] = {"effort": backend.effort}
     msg = anthropic.Anthropic().messages.create(**kwargs)
+    if msg.stop_reason == "refusal":
+        raise SystemExit("model refused the request")
     for block in msg.content:
         if block.type == "text":
             return block.text.strip()

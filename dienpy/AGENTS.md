@@ -64,10 +64,10 @@ A backend is a tagged union of kinds, because backends differ in capability, not
 | kind | transport | auth | schema output | repo tools | thinking effort |
 |---|---|---|---|---|---|
 | `openai` | HTTP chat-completions (llama-server, vLLM, an SSH-tunneled remote) | none | `response_format` json_schema | no | no |
-| `api` | anthropic / google SDK by model prefix | `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` | not yet | no | thinking budget |
+| `api` | anthropic / google SDK by model prefix | `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` | not yet | no | `output_config.effort` under adaptive thinking (anthropic), thinking budget (gemini) |
 | `cli` | `claude -p` subprocess | `login` (the claude command's own claude.ai credentials; the subprocess drops `ANTHROPIC_*` vars) or `env` | `--json-schema` | `--tools` | `--effort` |
 
-Effort is one open vocabulary (`low|medium|high|xhigh|max`, empty = backend default), interpreted per kind: api maps it to a thinking budget, cli passes it to `claude --effort`, openai refuses it. It comes from the caller's `Need` or the profile's `effort` field, and completion is advisory — an invalid value is refused at resolution with the valid set.
+Effort is one open vocabulary (`low|medium|high|xhigh|max`, empty = backend default), interpreted per kind: anthropic api sends it as `output_config.effort` under adaptive thinking, gemini api maps it to a thinking budget, cli passes it to `claude --effort`, openai refuses it. It comes from the caller's `Need` or the profile's `effort` field, and completion is advisory — an invalid value is refused at resolution with the valid set.
 
 Callers declare a `Need(schema, tools, effort, timeout)` and call `ai.resolve(tool, need, profile=...)`; resolution is capability-checked and refuses loudly before any tokens are spent or state is written. `ai.send(backend, system, user, *, schema=..., cwd=...)` is the whole call surface — with a schema it returns the parsed object, without one the reply text.
 

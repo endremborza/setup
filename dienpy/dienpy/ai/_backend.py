@@ -12,10 +12,11 @@ from protocli import Complete
 
 from . import _profiles
 
-# one vocabulary, interpreted per backend: api maps it to a thinking budget
-# (x4 ladder), cli passes it to `claude --effort`, openai refuses it.
+# one vocabulary, interpreted per backend: anthropic takes it as `output_config.effort`
+# under adaptive thinking, gemini as a thinking budget (x4 ladder), the claude CLI as
+# `--effort`; openai endpoints refuse it.
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
-EFFORT_BUDGETS = dict(zip(EFFORTS, (2048, 8192, 32768, 131072, 262144)))
+GEMINI_BUDGETS = dict(zip(EFFORTS, (1024, 4096, 16384, 24576, 32768)))
 
 # advisory, not enforced: the backend validates and names the valid set itself
 Effort = Annotated[str, Complete(EFFORTS)]
