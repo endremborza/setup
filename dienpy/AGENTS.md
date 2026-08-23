@@ -8,13 +8,13 @@ The CLI dispatcher is [`protocli`](https://pypi.org/project/protocli/) (split ou
 
 - **Entry point**: `dienpy/__main__.py` calls `_dispatcher.run()`.
 - **Dispatcher**: `dienpy/__init__.py` does `_dispatcher = Dispatcher.from_package("dienpy")`. `Dispatcher.from_package` scans the package with `pkgutil.iter_modules` and binds each non-private submodule as a command.
-- **Shell completion**: `dotfiles/.local/share/bash-completion/completions/dienpy` calls `dienpy --complete [args...]`, which the Dispatcher answers via `get_completions`.
+- **Shell completion**: `dotfiles/.local/share/bash-completion/completions/dienpy` calls `dienpy --complete [args...]`, which the Dispatcher answers from `main`'s signature — a `get_completions` hook only where the signature can't say it.
 
 ## Discovering Commands
 
 Run `dienpy --help` to list all commands with one-line descriptions (sourced from each module's `__doc__`).
 Run `dienpy <cmd> --help` for per-command usage.
-Run `dienpy --help-all` for a full recursive listing: all dispatcher levels expanded, plus full argparse help for each signature-dispatched leaf (and a completions line for any leaf that defines `get_completions`).
+Run `dienpy --help-all` for a full recursive listing: all dispatcher levels expanded, plus full argparse help for each signature-dispatched leaf (and a completions line for any leaf that defines `get_completions`). Completers declared in the signature are never called here — `--help-all` walks every leaf, so resolving them would load the world.
 
 ## Adding a Command (canonical pattern — applies to dienpy, cril, hyppy)
 
@@ -30,12 +30,14 @@ Run `dienpy --help-all` for a full recursive listing: all dispatcher levels expa
    - `*, m: Literal["a","b"]` → `--m` restricted to choices
    - `*, xs: list[float] = []` → `--xs 1.5,3.5` (comma-separated; keyword-only)
    - `*, x: T | None = None` → optional `--x` flag
+   - `Annotated[str, Complete(f)]` → shell candidates from `f()`, on any parameter
 
    Reach for `argparse` directly only when the signature model can't express what you need (e.g. mutually exclusive groups, custom argument actions). For zero-arg leaves (`def main() -> None`), the dispatcher prints `Usage: ...` + the docstring on `--help`.
-3. Optionally expose `get_completions(args: list[str]) -> list[str]` if the auto-derived completions (flag names + `Literal` choices) aren't enough — e.g. dynamic value lists like `dienpy tts speak`'s voice catalog.
-4. **No registration needed** — `Dispatcher.from_package` auto-discovers it.
-5. **First-letter rule**: `<name>` must start with a letter distinct from every other sibling so `<pkg> <letter><TAB>` completes in one keystroke.
-6. **Boundary check (dienpy only)**: if the module references personal paths, secrets, or `$HOME`-specific files, it belongs in `hyppy`, not here.
+3. **Completions belong on the parameter.** `Literal` fixes a closed set argparse enforces; `Complete` carries candidates computed only when the shell asks, and never enforced — an unknown value reaches `main` and is rejected there, with `main`'s own error. Export the alias next to the function it completes from (`ai.ProfileName`, `_config.Dim`, `_inventory.MachineName`) so every leaf spells it the same way; `Annotated[str, FILES]` requests native pathname completion.
+4. Fall back to `get_completions(args: list[str]) -> list[str]` only when candidates depend on *more than one* argument, or the leaf parses `sys.argv` itself — `hyppy vid night`'s subcommand state machine, not a value list.
+5. **No registration needed** — `Dispatcher.from_package` auto-discovers it.
+6. **First-letter rule**: `<name>` must start with a letter distinct from every other sibling so `<pkg> <letter><TAB>` completes in one keystroke.
+7. **Boundary check (dienpy only)**: if the module references personal paths, secrets, or `$HOME`-specific files, it belongs in `hyppy`, not here.
 
 ### Grouped commands (package as a subcommand)
 

@@ -2,7 +2,9 @@
 
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Annotated
+
+from protocli import FILES
 
 from .. import ai
 from . import _hunks, _prompt
@@ -21,9 +23,9 @@ def main(
     *hashes: str,
     since: str = "",
     profile: ai.ProfileName = "",
-    effort: Literal["none", "low", "medium", "high"] = "none",
+    effort: ai.Effort = "",
     max_diff_chars: int = 0,
-    out: str = "",
+    out: Annotated[str, FILES] = "",
 ) -> None:
     root = _hunks.git_root()
     if since and hashes:
