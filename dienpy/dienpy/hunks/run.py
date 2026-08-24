@@ -3,6 +3,9 @@
 `--path <dir|file>` scopes the analysis to one subtree: only those hunks reach the model,
 groups covering the rest of the diff are left untouched, and the entry records the partial
 coverage — so the remaining hunks land incrementally on the next unscoped run.
+`--extend` brings one cached run up to date and nothing else: it rebinds edited hunks and
+places only the new ones into the existing groups, refusing rather than re-analyzing — the
+cheap, predictable update nvim's :Regroup binds to a key.
 `--staged` analyzes the index instead and prints full messages without touching the cache —
 the "message for what I'm about to commit" path.
 """
@@ -34,6 +37,7 @@ def main(
     *dims: _config.Dim,
     force: bool = False,
     full: bool = False,
+    extend: bool = False,
     auth: Literal["login", "env"] | None = None,
     path: Annotated[str, FILES] = "",
     staged: bool = False,
@@ -53,6 +57,14 @@ def main(
         print(f"no uncommitted changes under {path}")
         return
     config = _config.resolve(dims, _cache.last_config(root))
+    entry = None if force else _cache.entry(root, config)
+    if extend:
+        if force or full:
+            raise SystemExit("--extend never re-analyzes: drop --force/--full")
+        if not entry:
+            raise SystemExit(
+                f"no cached run for [{config.key}] — drop --extend to analyze from scratch"
+            )
     backend = _engine.backend_for(config, auth)
     # groups are sanitized against the whole diff so a scoped run never evicts
     # out-of-scope groups; only in-scope hunks are handed to the model
@@ -62,7 +74,6 @@ def main(
     print(f"regroup: {len(hunks)} hunks{extent} [{config.key}]")
     _cache.touch_last(root, config)
 
-    entry = None if force else _cache.entry(root, config)
     existing: list[dict] = []
     new_ids: set[str] = scope
     if entry:
@@ -79,7 +90,8 @@ def main(
         _groups.print_groups(existing, live)
         return
 
-    if existing and not full and kept >= _INCR_MIN_COVERAGE * len(scope) and kept > 0:
+    incremental = extend or (kept >= _INCR_MIN_COVERAGE * len(scope) and kept > 0)
+    if existing and not full and incremental:
         print(
             f"incremental: placing {len(new_ids)} new hunks into "
             f"{len(existing)} existing groups"
@@ -90,6 +102,11 @@ def main(
             live,
         )
     else:
+        if extend:
+            raise SystemExit(
+                f"[{config.key}] no longer covers any of the diff — "
+                "drop --extend to re-analyze"
+            )
         print(f"analyzing {len(hunks)} hunks...")
         # out-of-scope groups keep their hunks: a scoped run rewrites only its own part
         kept_groups = _groups.sanitize(existing, live - scope) if path else []

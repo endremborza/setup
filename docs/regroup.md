@@ -51,7 +51,7 @@ The `cli` profiles run `claude -p --json-schema` on **login auth**: the subproce
 ## Commands
 
 ```
-dienpy hunks run [dims] [--path P] [--staged] [--force|--full] [--auth login|env]
+dienpy hunks run [dims] [--path P] [--staged] [--force|--full|--extend] [--auth login|env]
 dienpy hunks list        cached runs + coverage against the current diff
 dienpy hunks drift       kept/rebound/gone/new (exit 1 = drifted, 2 = no run)
 dienpy hunks sync        rebind edited hunks into their groups, no model call
@@ -59,7 +59,7 @@ dienpy hunks improve     rewrite a past commit's message
 dienpy hunks history     describe commits: hashes, or --since 7D / 50h
 ```
 
-`run` is incremental: when a cached entry covers at least half of the current hunks, only the new hunks are sent along with the existing group titles and placed via `extends`; `--force`/`--full` or low coverage re-runs fully. A grouping that drops or duplicates a hunk id is rejected locally and retried once with the violation report; still-invalid output is a hard error.
+`run` is incremental: when a cached entry covers at least half of the current hunks, only the new hunks are sent along with the existing group titles and placed via `extends`; `--force`/`--full` or low coverage re-runs fully. `--extend` pins that incremental path: it requires a cached run, ignores the coverage threshold, and refuses rather than falling back to a full analysis — a bounded, predictable update, which is why it is the one analysis nvim binds to a key. A grouping that drops or duplicates a hunk id is rejected locally and retried once with the violation report; still-invalid output is a hard error.
 
 `--path <dir|file>` scopes a run to one subtree: only those hunks reach the model, groups covering the rest of the diff survive untouched, and the entry records the partial coverage, so the remaining hunks land incrementally on the next unscoped run.
 
