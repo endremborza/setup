@@ -71,6 +71,29 @@ local function adopt(st, groups)
   end
 end
 
+local inflight = {}
+
+-- Bring a run up to date: rebind edited hunks and let the model place the ones the run
+-- has never seen. The config comes from the cache entry, so nvim only ever forwards it.
+function M.extend(root, config, cb)
+  if inflight[root] then
+    return vim.notify('regroup: an update is already running here', vim.log.levels.WARN)
+  end
+  inflight[root] = true
+  vim.notify(('regroup: extending [%s] — placing the unassigned hunks...'):format(M.key(config)))
+  vim.system({ 'dienpy', 'hunks', 'run', '--extend',
+    config.granularity, config.model, config.context },
+    { text = true, cwd = root },
+    vim.schedule_wrap(function(res)
+      inflight[root] = nil
+      if res.code ~= 0 then
+        return vim.notify('regroup: extend failed\n' ..
+          vim.trim((res.stderr or '') .. (res.stdout or '')), vim.log.levels.ERROR)
+      end
+      cb()
+    end))
+end
+
 local function run_sync(root)
   local res = vim.system({ 'dienpy', 'hunks', 'sync' }, { text = true, cwd = root }):wait()
   if res.code == 0 then return true end
@@ -150,15 +173,22 @@ function M.entry(root, config)
   return data and data.analyses and data.analyses[M.key(config)] or nil
 end
 
-function M.load_cache(root, parse, config)
+-- Open a cached run, carrying the cache into the live session when it is the same run:
+-- pickers and st.pos hold those group tables. Hunks the run does not cover surface as
+-- "(unassigned new changes)" rather than barring the load.
+function M.load(root, parse, config)
   local entry = M.entry(root, config)
   if not entry then return nil end
-  local known = {}
-  for _, id in ipairs(entry.ids) do known[id] = true end
-  for _, h in ipairs(parse.hunks) do
-    if not known[h.id] then return nil end
+  M.touch_last(root, config)
+  local st = M.current
+  if st and st.parse.root == root and M.key(st.config) == M.key(config) then
+    st.parse = parse
+    adopt(st, entry.groups)
+    M.reconcile(st)
+  else
+    M.current = { parse = parse, groups = entry.groups, config = config }
   end
-  return entry.groups
+  return M.current
 end
 
 function M.runs(root)

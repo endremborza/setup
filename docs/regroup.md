@@ -2,7 +2,9 @@
 
 Regroup turns the uncommitted diff into semantic **change groups** — future commits with titles and messages — and lets you review, stage, and commit them group by group.
 
-Two components, one interface: the engine (**`dienpy hunks`**, Python) analyzes the diff and owns the cache at `.git/regroup-cache.json`; the UI (**`:Regroup`**, nvim `dotfiles/.config/nvim/lua/regroup/`) reads that cache and acts on the worktree. nvim never invokes the engine — picking an uncached config yanks the `dienpy hunks run` command instead of running it — and writes back only group marks and manual hunk moves.
+Two components, one interface: the engine (**`dienpy hunks`**, Python) analyzes the diff and owns the cache at `.git/regroup-cache.json`; the UI (**`:Regroup`**, nvim `dotfiles/.config/nvim/lua/regroup/`) reads that cache and acts on the worktree, writing back only group marks and manual hunk moves.
+
+The analysis config lives on the engine side alone: nvim picks among *cached runs*, never among dimensions, so the AI vocabulary has one home. Its only engine calls carry a config it read from the cache — `sync` (no model) and `run --extend` (the model places the hunks a run doesn't cover yet). Starting a new analysis is a shell command; with nothing cached, `:Regroup` yanks `dienpy hunks run` instead of running it.
 
 **The model never writes a diff.** It only references hunks by content-addressed ID; diff parsing, patch reconstruction, and application are local and deterministic. A corrupt patch is impossible; a bad grouping is just a bad grouping.
 
@@ -27,7 +29,7 @@ Editing a hunk mid-review mints a new ID. Each cache entry therefore stores the 
 Analyses are keyed by three dimensions, given as bare tokens in any order (missing ones fall back to the last run, then defaults):
 
 - **granularity** — `loose` (broad themes) | `normal` (atomic commits) | `granular` (smallest self-consistent units)
-- **model** — an AI profile name (below); the builtin profiles `haiku|sonnet|opus|fable` map to the claude CLI, and an unknown token passes through as a bare claude model id. The nvim picker lists `dienpy ai profiles` (override with `setup { models = {...} }`)
+- **model** — an AI profile name (below); the builtin profiles `haiku|sonnet|opus|fable` map to the claude CLI, and an unknown token passes through as a bare claude model id
 - **context** — `bare` (hunks only) | `agents` (AGENTS.md in the prompt) | `explore` (agent may also read repo files — needs a backend with tool access)
 
 ## AI backends
@@ -69,7 +71,7 @@ dienpy hunks history     describe commits: hashes, or --since 7D / 50h
 
 ## nvim UI
 
-`<leader>gg` opens the three-dimension config menu, `:Regroup` the group picker; `]g`/`[g` navigate hunks within the current group; stage/unstage/revert/commit act per group or hunk; `<C-o>` moves a hunk to another group; burying a group stashes it (`regroup:`-tagged, `:RegroupGraveyard` restores). Cheatsheet: `:h regroup` (`dotfiles/.config/nvim/doc/regroup.txt`).
+`<leader>gg` opens the group picker on the last-used run, `<leader>gG` the run picker; `:Regroup <tokens>` narrows to one cached run, matching tokens against the parts of its cache key (completion comes from the keys themselves). Hunks no run covers collect in a synthetic "(unassigned new changes)" group, reviewable and committable like any other; `<C-e>` extends the run so the model places them instead. `]g`/`[g` navigate hunks within the current group; stage/unstage/revert/commit act per group or hunk; `<C-o>` moves a hunk to another group; burying a group stashes it (`regroup:`-tagged, `:RegroupGraveyard` restores). Cheatsheet: `:h regroup` (`dotfiles/.config/nvim/doc/regroup.txt`).
 
 ## Integrations
 

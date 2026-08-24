@@ -40,7 +40,7 @@ end
 
 local function check_drift(live, missing)
   if #missing > 0 and #live > 0 then
-    error(('%d hunk(s) missing from the current diff and not rebindable: %s — dienpy hunks sync, or :Regroup! to re-analyze')
+    error(('%d hunk(s) missing from the current diff and not rebindable: %s — dienpy hunks run to re-analyze')
       :format(#missing, table.concat(missing, ', ')), 0)
   end
 end
@@ -67,6 +67,25 @@ local function display_groups(st)
     table.insert(out, { title = '(unassigned new changes)', message = '', hunks = stray, stray = true })
   end
   return out
+end
+
+local function unassigned(st)
+  for _, g in ipairs(display_groups(st)) do
+    if g.stray then return #g.hunks end
+  end
+  return 0
+end
+
+-- Hand the run back to the engine to place its unassigned hunks, then reopen on the result.
+function M.extend_run(root, config)
+  state.extend(root, config, function()
+    local st = state.load(root, diff.parse(root), config)
+    if not st then return notify('regroup: run no longer in the cache', vim.log.levels.WARN) end
+    local left = unassigned(st)
+    notify(('regroup: [%s] updated — %d groups%s'):format(state.key(config), #st.groups,
+      left > 0 and (', %d hunk(s) still unassigned'):format(left) or ''))
+    M.pick_groups()
+  end)
 end
 
 function M.goto_hunk(g, idx)
@@ -603,9 +622,9 @@ function M.pick_groups(opts)
         M.bury_group(g)
         t.refresh()
       end)
-      t.bind('<C-e>', 'config menu (re-analyze / switch config)', function()
+      t.bind('<C-e>', 'extend run (place unassigned hunks)', function()
         actions.close(prompt_bufnr)
-        require('regroup').run {}
+        M.extend_run(st.parse.root, st.config)
       end)
       return true
     end,
@@ -774,15 +793,8 @@ function M.pick_graveyard()
   }):find()
 end
 
-function M.pick_runs()
-  local ok, root = pcall(diff.root)
-  if not ok then return notify(root, vim.log.levels.ERROR) end
-  local parse = diff.parse(root)
-  state.sync_cache(root, parse)
-  local runs = state.runs(root)
-  if #runs == 0 then
-    return notify('no cached regroup runs for this repo', vim.log.levels.WARN)
-  end
+function M.pick_runs(ctx)
+  local root, parse, runs = ctx.root, ctx.parse, ctx.runs
 
   local pickers = require('telescope.pickers')
   local finders = require('telescope.finders')
@@ -800,7 +812,8 @@ function M.pick_runs()
   end
 
   pickers.new({}, {
-    prompt_title = ('%s · regroup runs (%d current hunks)'):format(vim.fs.basename(root), #parse.hunks),
+    prompt_title = ('%s · regroup runs (%d current hunks) — ? for keys'):format(
+      vim.fs.basename(root), #parse.hunks),
     finder = finders.new_table {
       results = runs,
       entry_maker = function(run)
@@ -834,8 +847,18 @@ function M.pick_runs()
         local run = t.selected()
         if not run then return end
         actions.close(prompt_bufnr)
-        state.current = { parse = parse, groups = run.groups, config = run.config }
+        state.load(root, parse, run.config)
         M.pick_groups()
+      end)
+      t.bind('<C-e>', 'extend run (place unassigned hunks)', function()
+        local run = t.selected()
+        if not run then return end
+        actions.close(prompt_bufnr)
+        M.extend_run(root, run.config)
+      end)
+      t.bind('<C-t>', 'graveyard', function()
+        actions.close(prompt_bufnr)
+        M.pick_graveyard()
       end)
       return true
     end,

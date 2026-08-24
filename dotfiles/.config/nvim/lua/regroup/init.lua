@@ -1,86 +1,30 @@
 local M = {}
 
-M.opts = {
-  -- model dimension = ai profile names; nil reads them from `dienpy ai profiles`
-  models = nil,
-  default = { granularity = 'normal', model = 'sonnet', context = 'bare' },
-}
+-- The engine and its AI config live in dienpy: nvim reads cached runs, extends the one
+-- it is looking at (`state.extend`), and never composes an analysis config of its own.
+local ENGINE_CMD = 'dienpy hunks run'
 
-local GRANULARITIES = { loose = true, normal = true, granular = true }
-local CONTEXTS = { bare = true, agents = true, explore = true }
-local BUILTIN_MODELS = { 'haiku', 'sonnet', 'opus', 'fable' }
+local function yank_engine_cmd(root, msg)
+  pcall(vim.fn.setreg, '+', ENGINE_CMD)
+  pcall(vim.fn.setreg, '"', ENGINE_CMD)
+  vim.notify(('regroup: %s in %s\nrun in a shell there (yanked):  %s')
+    :format(msg, vim.fs.basename(root), ENGINE_CMD), vim.log.levels.WARN)
+end
 
-local profiles_cache
-
--- profile names, first column of `dienpy ai profiles`; builtins if dienpy is unavailable
-function M.models()
-  if M.opts.models then return M.opts.models end
-  if profiles_cache then return profiles_cache end
-  local res = vim.system({ 'dienpy', 'ai', 'profiles' }, { text = true }):wait()
-  local names = {}
-  if res.code == 0 then
-    for line in (res.stdout or ''):gmatch('[^\n]+') do
-      local name = line:match('^(%S+)')
-      if name then names[#names + 1] = name end
+-- Tokens are matched against the parts of a cached run key, so the vocabulary comes
+-- from the cache rather than from a copy of dienpy's dimensions.
+local function matching(runs, tokens)
+  if #tokens == 0 then return runs end
+  return vim.tbl_filter(function(run)
+    local parts = vim.split(run.key, '|', { plain = true })
+    for _, tok in ipairs(tokens) do
+      if not vim.tbl_contains(parts, tok) then return false end
     end
-  end
-  profiles_cache = #names > 0 and names or BUILTIN_MODELS
-  return profiles_cache
+    return true
+  end, runs)
 end
 
-local function dim_values()
-  return {
-    granularity = { 'loose', 'normal', 'granular' },
-    model = M.models(),
-    context = { 'bare', 'agents', 'explore' },
-  }
-end
-
-function M.classify_args(fargs)
-  local cfg = {}
-  for _, a in ipairs(fargs) do
-    if GRANULARITIES[a] then
-      cfg.granularity = a
-    elseif CONTEXTS[a] then
-      cfg.context = a
-    else
-      cfg.model = a
-    end
-  end
-  return cfg
-end
-
-local function engine_cmd(config, force)
-  return ('dienpy hunks run %s %s %s%s'):format(
-    config.granularity, config.context, config.model, force and ' --force' or '')
-end
-
-function M.proceed(root, parse, config, force)
-  local state = require('regroup.state')
-  local ui = require('regroup.ui')
-  state.touch_last(root, config)
-  if not force then
-    local st = state.current
-    if st and st.parse.root == root and state.key(st.config) == state.key(config) then
-      st.parse = parse
-      state.reconcile(st)
-      return ui.pick_groups()
-    end
-    local cached = state.load_cache(root, parse, config)
-    if cached then
-      state.current = { parse = parse, groups = cached, config = config }
-      return ui.pick_groups()
-    end
-  end
-  local cmd = engine_cmd(config, force)
-  pcall(vim.fn.setreg, '+', cmd)
-  pcall(vim.fn.setreg, '"', cmd)
-  vim.notify(('regroup: no current analysis for [%s] in %s\nrun in a shell there (yanked):  %s')
-    :format(state.key(config), vim.fs.basename(root), cmd), vim.log.levels.WARN)
-end
-
-function M.run(opts)
-  opts = opts or {}
+local function context(tokens)
   local diff = require('regroup.diff')
   local state = require('regroup.state')
 
@@ -92,50 +36,37 @@ function M.run(opts)
   end
   state.sync_cache(root, parse)
 
-  local initial = vim.tbl_extend('force',
-    M.opts.default,
-    state.last_config(root) or {},
-    (state.current and state.current.parse.root == root and state.current.config) or {},
-    opts.config or {})
-
-  if opts.config then
-    return M.proceed(root, parse, initial, opts.force)
+  local all = state.runs(root)
+  if #all == 0 then return yank_engine_cmd(root, 'no cached analysis') end
+  local runs = matching(all, tokens)
+  if #runs == 0 then
+    return yank_engine_cmd(root, ('no cached run matching %s'):format(table.concat(tokens, ' ')))
   end
+  return { root = root, parse = parse, runs = runs }
+end
 
-  require('regroup.menu').open {
-    values = dim_values(),
-    initial = initial,
-    title = (' regroup · %s '):format(vim.fs.basename(root)),
-    info = function(cfg)
-      local st = state.current
-      if st and st.parse.root == root and state.key(st.config) == state.key(cfg) then
-        return ('%d hunks · cached ✓ instant'):format(#parse.hunks)
-      end
-      local entry = state.entry(root, cfg)
-      if not entry then
-        return ('%d hunks · not cached — ⏎ yanks engine cmd'):format(#parse.hunks)
-      end
-      local known = {}
-      for _, id in ipairs(entry.ids) do known[id] = true end
-      local new = 0
-      for _, h in ipairs(parse.hunks) do
-        if not known[h.id] then new = new + 1 end
-      end
-      if new == 0 then
-        return ('%d hunks · cached ✓ instant'):format(#parse.hunks)
-      end
-      return ('%d hunks · +%d new — ⏎ yanks engine cmd'):format(#parse.hunks, new)
-    end,
-    on_confirm = function(cfg, force)
-      M.proceed(root, parse, cfg, force or opts.force)
-    end,
-    on_runs = function()
-      require('regroup.ui').pick_runs()
-    end,
-    on_graveyard = function()
-      require('regroup.ui').pick_graveyard()
-    end,
-  }
+-- Group picker for the run the tokens name; the last-used run when they name several.
+function M.open(tokens)
+  local state = require('regroup.state')
+  local ui = require('regroup.ui')
+
+  local ctx = context(tokens or {})
+  if not ctx then return end
+  local runs = ctx.runs
+  if #runs > 1 then
+    local last = state.last_config(ctx.root)
+    for _, run in ipairs(runs) do
+      if last and state.key(run.config) == state.key(last) then runs = { run } end
+    end
+  end
+  if #runs > 1 then return ui.pick_runs(ctx) end
+  state.load(ctx.root, ctx.parse, runs[1].config)
+  ui.pick_groups()
+end
+
+function M.runs(tokens)
+  local ctx = context(tokens or {})
+  if ctx then require('regroup.ui').pick_runs(ctx) end
 end
 
 local function ensure_helptags()
@@ -148,28 +79,32 @@ local function ensure_helptags()
   end
 end
 
-function M.setup(opts)
-  M.opts = vim.tbl_deep_extend('force', M.opts, opts or {})
+function M.setup()
   ensure_helptags()
 
   vim.api.nvim_create_user_command('Regroup', function(cmd)
-    local cfg = M.classify_args(cmd.fargs)
-    M.run {
-      config = next(cfg) ~= nil and cfg or nil,
-      force = cmd.bang,
-    }
+    M.open(cmd.fargs)
   end, {
     nargs = '*',
-    bang = true,
-    complete = function()
-      local vals = { 'loose', 'normal', 'granular', 'bare', 'agents', 'explore' }
-      return vim.list_extend(vals, M.models())
+    complete = function(arglead)
+      local ok, root = pcall(require('regroup.diff').root)
+      if not ok then return {} end
+      local seen, out = {}, {}
+      for _, run in ipairs(require('regroup.state').runs(root)) do
+        for _, part in ipairs(vim.split(run.key, '|', { plain = true })) do
+          if not seen[part] and part:find(arglead, 1, true) == 1 then
+            seen[part] = true
+            table.insert(out, part)
+          end
+        end
+      end
+      return out
     end,
   })
 
-  vim.api.nvim_create_user_command('RegroupRuns', function()
-    require('regroup.ui').pick_runs()
-  end, {})
+  vim.api.nvim_create_user_command('RegroupRuns', function(cmd)
+    M.runs(cmd.fargs)
+  end, { nargs = '*' })
 
   vim.api.nvim_create_user_command('RegroupGraveyard', function()
     require('regroup.ui').pick_graveyard()
@@ -181,10 +116,9 @@ function M.setup(opts)
     if state.current and ok and state.current.parse.root == root then
       return require('regroup.ui').reopen()
     end
-    M.run {}
-  end, { desc = '[G]it change [G]roups (picker, or config menu when no session)' })
-  vim.keymap.set('n', '<leader>gG', function() require('regroup.ui').pick_runs() end,
-    { desc = '[G]it change [G]roup runs' })
+    M.open {}
+  end, { desc = '[G]it change [G]roups (picker, or run list when no session)' })
+  vim.keymap.set('n', '<leader>gG', function() M.runs {} end, { desc = '[G]it change [G]roup runs' })
   vim.keymap.set('n', ']g', function() require('regroup.ui').nav(1) end, { desc = 'Next hunk in change group' })
   vim.keymap.set('n', '[g', function() require('regroup.ui').nav(-1) end, { desc = 'Prev hunk in change group' })
   vim.keymap.set('n', ']G', function() require('regroup.ui').nav_group(1) end, { desc = 'Next change group' })
