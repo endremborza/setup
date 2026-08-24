@@ -13,8 +13,9 @@ The HEAD-side range (`@@ -start,count`) rides along as the edit-stable anchor
 
 import hashlib
 import re
-import subprocess
 from dataclasses import dataclass
+
+from dienpy._git import Repo, find_root
 
 _GIT_CFG = [
     "-c",
@@ -38,21 +39,11 @@ class Hunk:
 
 
 def git_root() -> str:
-    res = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True
-    )
-    if res.returncode != 0:
-        raise SystemExit("not in a git repository")
-    return res.stdout.strip()
+    return find_root()
 
 
 def _git(root: str, args: list[str], ok_codes: tuple[int, ...] = (0,)) -> str:
-    res = subprocess.run(
-        ["git", *_GIT_CFG, *args], capture_output=True, text=True, cwd=root
-    )
-    if res.returncode not in ok_codes:
-        raise SystemExit(f"git {' '.join(args)} failed: {res.stderr.strip()}")
-    return res.stdout
+    return Repo(root, cfg=_GIT_CFG).raw(*args, ok_codes=ok_codes)
 
 
 def head_sha(root: str) -> str:

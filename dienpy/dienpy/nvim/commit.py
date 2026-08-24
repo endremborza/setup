@@ -1,21 +1,17 @@
 """Commit nvim config with a plugin version snapshot."""
 
 import json
-import subprocess
-from pathlib import Path
 
+from .._git import Repo
 from ..constants import DIENCEPHALON_ROOT
 from ._shared import LAZY_LOCK, nvim_version
 
 _DOTFILES_NVIM = DIENCEPHALON_ROOT / "dotfiles" / ".config" / "nvim"
+_NVIM_PATHSPEC = "dotfiles/.config/nvim/"
 
 
-def _git(args: list[str], cwd: Path) -> str:
-    return subprocess.check_output(["git", *args], cwd=cwd, text=True).strip()
-
-
-def _changed_nvim_files(cwd: Path) -> list[str]:
-    out = _git(["status", "--porcelain", "--", "dotfiles/.config/nvim/"], cwd=cwd)
+def _changed_nvim_files(repo: Repo) -> list[str]:
+    out = repo.out("status", "--porcelain", "--", _NVIM_PATHSPEC)
     return [line[3:] for line in out.splitlines() if line.strip()]
 
 
@@ -51,30 +47,16 @@ def main(*, message: str = "", dry_run: bool = False, all: bool = False) -> None
         print(commit_msg)
         return
 
-    changed = _changed_nvim_files(DIENCEPHALON_ROOT)
-    if not changed:
+    repo = Repo(DIENCEPHALON_ROOT)
+    if not _changed_nvim_files(repo):
         raise SystemExit("No changes to nvim config found in dotfiles.")
 
-    if all:
-        _git(["add", "--", "dotfiles/.config/nvim/"], cwd=DIENCEPHALON_ROOT)
-        print("Staged all changes under dotfiles/.config/nvim/")
-    else:
-        _git(["add", "--", "dotfiles/.config/nvim/init.lua"], cwd=DIENCEPHALON_ROOT)
-        print("Staged dotfiles/.config/nvim/init.lua")
+    staged = _NVIM_PATHSPEC if all else f"{_NVIM_PATHSPEC}init.lua"
+    repo.add("--", staged)
+    print(f"Staged {staged}")
 
-    lock_in_dotfiles = _DOTFILES_NVIM / "lazy-lock.json"
-    if lock_in_dotfiles.exists():
-        _git(
-            ["add", "--", "dotfiles/.config/nvim/lazy-lock.json"], cwd=DIENCEPHALON_ROOT
-        )
+    if (_DOTFILES_NVIM / "lazy-lock.json").exists():
+        repo.add("--", f"{_NVIM_PATHSPEC}lazy-lock.json")
 
-    result = subprocess.run(
-        ["git", "commit", "-m", commit_msg],
-        cwd=DIENCEPHALON_ROOT,
-        text=True,
-        capture_output=True,
-    )
-    if result.returncode != 0:
-        raise SystemExit(f"git commit failed:\n{result.stderr}")
-
-    print(f"Committed: {_git(['log', '--oneline', '-1'], cwd=DIENCEPHALON_ROOT)}")
+    repo.commit(commit_msg)
+    print(f"Committed: {repo.out('log', '--oneline', '-1')}")

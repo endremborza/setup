@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from dienpy._git import Repo
 from dienpy.hunks import _hunks
 
 _NVIM_CFG = Path(__file__).resolve().parents[2] / "dotfiles" / ".config" / "nvim"
@@ -24,13 +25,11 @@ os.exit(0)
 """
 
 
+_IDENT = ("-c", "user.email=t@t", "-c", "user.name=t")
+
+
 def _git(repo: Path, *args: str) -> None:
-    subprocess.run(
-        ["git", "-c", "user.email=t@t", "-c", "user.name=t", *args],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
+    Repo(repo, cfg=_IDENT).out(*args)
 
 
 def _mk_repo(base: Path) -> Path:

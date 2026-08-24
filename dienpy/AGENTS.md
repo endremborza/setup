@@ -97,6 +97,7 @@ commit = "tunnel"
 ## Shared State
 
 - `constants.py` holds canonical paths under `/mnt/data/synced/` — use these, don't hardcode paths
+- `_git.py` holds every git invocation in the ecosystem — `Repo(path)` bound to a repo, module-level `run`/`clone` for the repo-less calls; cril, hyppy and fleet import it rather than reaching for `subprocess`. `setup/` is the exception: it stays dependency-free because it runs before dienpy is installed
 - Per-module state files go under the relevant synced directory or `~/.config/`
 
 ## Environment

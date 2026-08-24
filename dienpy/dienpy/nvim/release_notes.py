@@ -2,13 +2,12 @@
 
 import json
 import os
-import subprocess
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 
 import requests
 
+from .._git import Repo
 from ..constants import LOGS_DIR
 from ._shared import GITHUB_API, LAZY_LOCK, LAZY_PLUGIN_DIR, nvim_version
 
@@ -21,17 +20,6 @@ class _PluginInfo:
     owner: str
     repo: str
     current_commit: str
-
-
-def _git_remote(plugin_dir: Path) -> str | None:
-    try:
-        return subprocess.check_output(
-            ["git", "-C", str(plugin_dir), "remote", "get-url", "origin"],
-            stderr=subprocess.DEVNULL,
-            text=True,
-        ).strip()
-    except subprocess.CalledProcessError:
-        return None
 
 
 def _parse_github_url(url: str) -> tuple[str, str] | None:
@@ -48,7 +36,7 @@ def _collect_plugins(lock: dict[str, dict]) -> list[_PluginInfo]:
         plugin_dir = LAZY_PLUGIN_DIR / name
         if not plugin_dir.exists():
             continue
-        remote = _git_remote(plugin_dir)
+        remote = Repo(plugin_dir).maybe("remote", "get-url", "origin")
         if not remote:
             continue
         parsed = _parse_github_url(remote)
