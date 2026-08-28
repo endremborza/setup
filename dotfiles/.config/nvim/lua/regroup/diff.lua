@@ -139,7 +139,37 @@ local function rename_source(rec)
   end
 end
 
-local function split_actions(parse, ids)
+M.rename_source = rename_source
+
+-- New paths whose move the index already carries.
+function M.staged_renames(cachedp)
+  local out = {}
+  for _, f in ipairs(cachedp.files) do
+    for _, l in ipairs(f.header) do
+      if l:match('^rename from ') then out[f.path] = true end
+    end
+  end
+  return out
+end
+
+-- `git diff HEAD` writes a renamed file's patch against its old path, which the index
+-- no longer has once the move is staged; rewriting the header to the new path makes the
+-- patch apply against that index and leaves the move where it is.
+local function rebase_header(header, path)
+  local out = {}
+  for _, l in ipairs(header) do
+    if l:match('^diff %-%-git ') then
+      table.insert(out, ('diff --git a/%s b/%s'):format(path, path))
+    elseif l:match('^%-%-%- a/') then
+      table.insert(out, '--- a/' .. path)
+    elseif not (l:match('^similarity index ') or l:match('^rename from ') or l:match('^rename to ')) then
+      table.insert(out, l)
+    end
+  end
+  return out
+end
+
+local function split_actions(parse, ids, renamed)
   local sel = {}
   for _, id in ipairs(ids) do
     assert(parse.by_id[id], 'unknown hunk id: ' .. id)
@@ -157,7 +187,8 @@ local function split_actions(parse, ids)
       if rec.kind == 'hunk' then
         if not seen_file[rec.file] then
           seen_file[rec.file] = true
-          vim.list_extend(patch, rec.file.header)
+          vim.list_extend(patch, renamed and renamed[rec.path]
+            and rebase_header(rec.file.header, rec.path) or rec.file.header)
         end
         table.insert(patch, rec.hunk.header)
         vim.list_extend(patch, rec.hunk.lines)
@@ -170,8 +201,8 @@ local function split_actions(parse, ids)
   return #patch > 0 and (table.concat(patch, '\n') .. '\n') or nil, adds
 end
 
-function M.stage(parse, ids)
-  local patch, adds = split_actions(parse, ids)
+function M.stage(parse, ids, renamed)
+  local patch, adds = split_actions(parse, ids, renamed)
   if patch then
     local res = git(parse.root, { 'apply', '--cached', '--whitespace=nowarn', '-' }, { stdin = patch })
     assert(res.code == 0, 'git apply failed:\n' .. (res.stderr or ''))
@@ -205,7 +236,7 @@ function M.revert(parse, ids)
     end
   end
   if #staged > 0 then M.unstage(cachedp, staged) end
-  local patch = select(1, split_actions(parse, patch_ids))
+  local patch = select(1, split_actions(parse, patch_ids, M.staged_renames(cachedp)))
   if patch then
     local res = git(parse.root, { 'apply', '--reverse', '--whitespace=nowarn', '-' }, { stdin = patch })
     assert(res.code == 0, 'git apply --reverse failed:\n' .. (res.stderr or ''))
@@ -220,8 +251,10 @@ function M.revert(parse, ids)
   end
 end
 
+-- `parse` is an index-side parse: rebasing the reverse patch keeps a staged rename in
+-- place while the content it carries goes back to the worktree.
 function M.unstage(parse, ids)
-  local patch, adds = split_actions(parse, ids)
+  local patch, adds = split_actions(parse, ids, M.staged_renames(parse))
   if patch then
     local res = git(parse.root, { 'apply', '--cached', '--reverse', '--whitespace=nowarn', '-' }, { stdin = patch })
     assert(res.code == 0, 'git apply --reverse failed:\n' .. (res.stderr or ''))

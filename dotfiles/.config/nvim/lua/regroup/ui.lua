@@ -171,7 +171,7 @@ function M.stage_group(g)
       if not cachedp.by_id[id] then table.insert(to_stage, id) end
     end
     if #to_stage == 0 then error('group already staged', 0) end
-    diff.stage(st.parse, to_stage)
+    diff.stage(st.parse, to_stage, diff.staged_renames(cachedp))
     g.staged = true
     refresh_signs()
     notify(('staged %d hunk(s): %s'):format(#to_stage, g.title))
@@ -203,7 +203,7 @@ function M.stage_hunk(h)
     if not st.parse.by_id[h.id] then error('hunk no longer in the diff (edited or committed?)', 0) end
     local cachedp = diff.parse(st.parse.root, { cached = true })
     if cachedp.by_id[h.id] then error('hunk already staged', 0) end
-    diff.stage(st.parse, { h.id })
+    diff.stage(st.parse, { h.id }, diff.staged_renames(cachedp))
     refresh_signs()
     notify(('staged %s:%d'):format(h.path, h.new_start))
   end)
@@ -271,11 +271,14 @@ function M.revert_hunk(h)
   if not ok then notify(err, vim.log.levels.ERROR) end
 end
 
+-- A staged `git mv` is index-side noise: it is a whole-file entry there, while the
+-- worktree diff folds the move into the renamed file's content hunks, so it matches no
+-- group and would block every commit.
 local function check_foreign(st, g, cachedp)
   local gset = {}
   for _, id in ipairs(g.hunks) do gset[id] = true end
   for _, h in ipairs(cachedp.hunks) do
-    if not gset[h.id] then
+    if not gset[h.id] and not (h.kind == 'file' and diff.rename_source(h)) then
       error(('index contains changes outside this group (%s %s) — commit or unstage those first')
         :format(h.id, h.path), 0)
     end
@@ -301,7 +304,7 @@ function M.bury_group(g)
     for _, id in ipairs(live) do
       if not cachedp.by_id[id] then table.insert(to_stage, id) end
     end
-    if #to_stage > 0 then diff.stage(st.parse, to_stage) end
+    if #to_stage > 0 then diff.stage(st.parse, to_stage, diff.staged_renames(cachedp)) end
     require('regroup.graveyard').bury(st.parse.root, g.title)
     after_revert(st)
     state.mark_group(st, g, { buried = true })

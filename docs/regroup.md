@@ -10,7 +10,7 @@ The analysis config lives on the engine side alone: nvim picks among *cached run
 
 ## Hunks and IDs
 
-A hunk is the unit of change, parsed locally from `git diff HEAD` (untracked files are diffed against `/dev/null`; new/deleted/renamed/binary files are one whole-file hunk). Its ID is `sha256(path + "\x1f" + body)[:12]`, with a `~n` suffix for duplicates in parse order.
+A hunk is the unit of change, parsed locally from `git diff HEAD` (untracked files are diffed against `/dev/null`; a new, deleted, binary or purely renamed file is one whole-file hunk, while a rename carrying edits appears as content hunks under the new path). Its ID is `sha256(path + "\x1f" + body)[:12]`, with a `~n` suffix for duplicates in parse order.
 
 IDs must match byte-for-byte between `dienpy/dienpy/hunks/_hunks.py` and nvim's `regroup/diff.lua` — pinned by `dienpy/tests/test_hunks_parity.py`; change both together. A mismatch fails safe: the nvim side reads the cache as fully stale.
 
