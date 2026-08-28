@@ -47,6 +47,10 @@ HUNK PICKER
     <CR>  jump    <C-g>  back    <C-s> / <C-u> / <C-d>  same, per hunk
     <C-o>  move this hunk to another group (persisted to the cache)
 
+CHANGED-FILE PICKER                              <leader>gf, review mode
+    <CR>  open in the review diff    <Right> / <Left>  stage / unstage file
+    <C-y>  commit the index, in the same commit buffer as the group picker
+
 GRAVEYARD                  (regroup-tagged git stashes)  *regroup-graveyard*
     :RegroupGraveyard or <C-t> in the run picker; `git stash list` sees them
     <CR>  restore (pop)    <C-d>  delete forever

@@ -3,15 +3,13 @@ local M = {}
 local diff = require('regroup.diff')
 local state = require('regroup.state')
 local review = require('regroup.review')
+local commit = require('regroup.commit')
 
 local function notify(msg, level)
   vim.notify(msg, level or vim.log.levels.INFO)
 end
 
-local function refresh_signs()
-  local gs = package.loaded.gitsigns
-  if gs then pcall(gs.reset_base, true) end
-end
+local refresh_signs = commit.refresh_signs
 
 local function live_recs(st, g)
   local out = {}
@@ -296,52 +294,6 @@ function M.bury_group(g)
   if not ok then notify(err, vim.log.levels.ERROR) end
 end
 
-local function open_commit_buffer(g, hunk_lines, on_write)
-  local existing = vim.fn.bufnr('regroup://commit')
-  if existing ~= -1 then vim.api.nvim_buf_delete(existing, { force = true }) end
-  local buf = vim.api.nvim_create_buf(false, false)
-  vim.api.nvim_buf_set_name(buf, 'regroup://commit')
-
-  local lines = { g.title, '' }
-  for _, l in ipairs(vim.split(g.message or '', '\n', { plain = true })) do
-    table.insert(lines, l)
-  end
-  table.insert(lines, '')
-  table.insert(lines, '# Committing change group. Write (:w) to commit, quit to abort.')
-  vim.list_extend(lines, hunk_lines)
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-
-  vim.bo[buf].buftype = 'acwrite'
-  vim.bo[buf].bufhidden = 'wipe'
-  vim.bo[buf].filetype = 'gitcommit'
-  vim.bo[buf].modified = false
-
-  vim.api.nvim_create_autocmd('BufWriteCmd', {
-    buffer = buf,
-    callback = function()
-      local msg = {}
-      for _, l in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
-        if not l:match('^#') then table.insert(msg, l) end
-      end
-      while #msg > 0 and msg[#msg] == '' do table.remove(msg) end
-      if #msg == 0 then
-        return notify('empty commit message', vim.log.levels.ERROR)
-      end
-      local ok, err = pcall(on_write, table.concat(msg, '\n') .. '\n')
-      if ok then
-        vim.bo[buf].modified = false
-        vim.api.nvim_buf_delete(buf, { force = true })
-      else
-        notify(err, vim.log.levels.ERROR)
-      end
-    end,
-  })
-
-  vim.cmd('botright split')
-  vim.api.nvim_win_set_buf(0, buf)
-  vim.api.nvim_win_set_height(0, math.min(#lines + 2, 15))
-end
-
 function M.commit_group(g)
   local st = state.current
   local ok, err = pcall(function()
@@ -366,7 +318,10 @@ function M.commit_group(g)
     table.insert(hunk_lines, ('#   %s (%s)'):format(h.path, h.id))
   end
 
-  open_commit_buffer(g, hunk_lines, function(msg)
+  local seed = { g.title, '' }
+  vim.list_extend(seed, vim.split(g.message or '', '\n', { plain = true }))
+
+  commit.buffer(seed, hunk_lines, function(msg)
     state.refresh(st)
     local live, missing = split_live(st, g)
     check_drift(live, missing)
@@ -376,12 +331,9 @@ function M.commit_group(g)
     for _, id in ipairs(live) do
       if not cachedp.by_id[id] then table.insert(to_stage, id) end
     end
-    if #to_stage > 0 then diff.stage(st.parse, to_stage) end
-    local res = vim.system({ 'git', 'commit', '-F', '-' }, { text = true, cwd = st.parse.root, stdin = msg }):wait()
-    assert(res.code == 0, 'git commit failed:\n' .. (res.stderr or '') .. (res.stdout or ''))
+    if #to_stage > 0 then diff.stage(st.parse, to_stage, diff.staged_renames(cachedp)) end
+    local short = commit.run(st.parse.root, msg)
     state.refresh(st)
-    refresh_signs()
-    local short = vim.trim(vim.system({ 'git', 'rev-parse', '--short', 'HEAD' }, { text = true, cwd = st.parse.root }):wait().stdout)
     state.mark_group(st, g, { committed = short })
     notify(('✓ %s %s'):format(short, msg:match('^[^\n]*')))
   end)

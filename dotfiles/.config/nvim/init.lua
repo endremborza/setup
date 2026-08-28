@@ -393,12 +393,21 @@ require('lazy').setup({
               refresh()
             end
 
+            local function commit_staged()
+              local p = action_state.get_current_picker(prompt_bufnr)
+              local cwd = p.cwd
+              actions.close(prompt_bufnr)
+              require("regroup.commit").index(cwd)
+            end
+
             map("i", "<CR>", select)
             map("n", "<CR>", select)
             map("i", "<Right>", function() stage(true) end)
             map("n", "<Right>", function() stage(true) end)
             map("i", "<Left>", function() stage(false) end)
             map("n", "<Left>", function() stage(false) end)
+            map("i", "<C-y>", commit_staged)
+            map("n", "<C-y>", commit_staged)
             return true
           end,
         })
