@@ -24,6 +24,22 @@ local function live_recs(st, g)
   return out
 end
 
+-- distinct paths in hunk order, each with the number of hunks it carries
+local function files_of(recs)
+  local seen, out = {}, {}
+  for _, h in ipairs(recs) do
+    local f = seen[h.path]
+    if f then
+      f.n = f.n + 1
+    else
+      f = { path = h.path, n = 1 }
+      seen[h.path] = f
+      table.insert(out, f)
+    end
+  end
+  return out
+end
+
 local function split_live(st, g)
   local live, missing = {}, {}
   for _, id in ipairs(g.hunks) do
@@ -344,6 +360,15 @@ local function group_preview(st, g, bufnr)
   for _, l in ipairs(vim.split(g.message or '', '\n', { plain = true })) do
     table.insert(lines, l)
   end
+  local live = live_recs(st, g)
+  local files = files_of(live)
+  if #files > 1 then  -- one file names itself in every hunk header below
+    table.insert(lines, '')
+    table.insert(lines, ('# %d hunks in %d files'):format(#live, #files))
+    for _, f in ipairs(files) do
+      table.insert(lines, ('#  %2d  %s'):format(f.n, f.path))
+    end
+  end
   if g.mixed and #g.mixed > 0 then
     table.insert(lines, '')
     for _, m in ipairs(g.mixed) do
@@ -357,7 +382,7 @@ local function group_preview(st, g, bufnr)
       table.insert(lines, ('# REBOUND %s: edit spanned group boundaries — <C-h> then <C-m> to move'):format(id))
     end
   end
-  for _, h in ipairs(live_recs(st, g)) do
+  for _, h in ipairs(live) do
     table.insert(lines, '')
     table.insert(lines, ('# [%s]%s %s'):format(h.id, amb[h.id] and ' ~' or '', h.path))
     for _, l in ipairs(vim.split(diff.hunk_text(h), '\n', { plain = true })) do
@@ -482,7 +507,9 @@ function M.pick_groups(opts)
   local actions = require('telescope.actions')
 
   local function entry_maker(g)
-    local n = #live_recs(st, g)
+    local live = live_recs(st, g)
+    local files = files_of(live)
+    local n = #live
     local tag
     if n == 0 then
       if g.committed then
@@ -501,10 +528,14 @@ function M.pick_groups(opts)
     else
       tag = n .. ' hunk' .. (n == 1 and '' or 's')
     end
+    local paths = {}
+    for _, f in ipairs(files) do table.insert(paths, f.path) end
     return {
       value = g,
-      display = ('%-9s %s%s'):format(tag, next(ambiguous_set(st, g)) and '~ ' or '', g.title),
-      ordinal = g.title .. ' ' .. (g.message or ''),
+      display = ('%-9s %-9s %s%s'):format(tag,
+        n > 0 and (#files .. ' file' .. (#files == 1 and '' or 's')) or '',
+        next(ambiguous_set(st, g)) and '~ ' or '', g.title),
+      ordinal = table.concat({ g.title, g.message or '', table.concat(paths, ' ') }, ' '),
     }
   end
 
