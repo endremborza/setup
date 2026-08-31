@@ -15,6 +15,7 @@ A profile is an independent feature group. `base` is always implicit. Profiles c
 | `screen-apps`  | firefox-apt, logseq, bluetooth-autoenable, autologin, network-nm               | full workstation      | (QEMU — not implemented) |
 | `wg`           | wireguard                                                                       | every fleet machine   | Docker (dry)         |
 | `web`          | caddy                                                                           | web-serving machine   | manual (fleet push)  |
+| `docker`       | docker                                                                          | machine hosting fleet apps | manual (fleet update) |
 | `edge`         | nftables-deny, unattended-upgrades                                              | public-facing server  | manual (live VPS)    |
 | `media`        | hwe-kernel, media-stack (mpv/gamescope/cage/alsa), firefox-apt (shared)         | media playback box    | manual (bench)       |
 
