@@ -1,3 +1,4 @@
+import getpass
 from pathlib import Path
 
 from setup.runner import brick
@@ -79,3 +80,20 @@ def install_nftables_deny() -> None:
 def install_unattended_upgrades() -> None:
     apt_install(["unattended-upgrades"])
     write_system_file(Path("/etc/apt/apt.conf.d/20auto-upgrades"), _AUTO_UPGRADES)
+
+
+# Rootful engine with the user in the docker group. The daemon itself is the
+# supervisor — restart policies bring fleet apps back at boot, so no unit
+# wraps them. Distro packages as-is, like caddy; the OS baseline stops at the
+# container boundary. The group applies on the next login, which is when
+# fleet's apps step runs.
+@brick(
+    profile="docker",
+    name="docker",
+    check="dpkg -s docker-compose-v2 2>/dev/null | grep -q 'Status: install ok'"
+    ' && getent group docker | grep -qw "$USER"',
+    verify="docker compose version > /dev/null && docker info > /dev/null",
+)
+def install_docker() -> None:
+    apt_install(["docker.io", "docker-compose-v2", "docker-buildx"])
+    run_cmd(f"sudo usermod -aG docker {getpass.getuser()}")
