@@ -875,6 +875,18 @@ vim.api.nvim_create_autocmd("FileType", {
   end,
 })
 
+-- The markdown highlights query sets `conceal_lines` on code fences. With conceallevel>0
+-- that forces the highlight query to re-run over the whole buffer on every edit, which
+-- costs ~200 ms per keystroke on a few-thousand-line outline. Inline conceal is unaffected.
+do
+  local parts = {}
+  for _, f in ipairs(vim.treesitter.query.get_files('markdown', 'highlights')) do
+    table.insert(parts, table.concat(vim.fn.readfile(f), '\n'))
+  end
+  local src = table.concat(parts, '\n'):gsub('%(#set!%s+conceal_lines%s+""%)', '')
+  vim.treesitter.query.set('markdown', 'highlights', src)
+end
+
 vim.api.nvim_create_autocmd("FileType", {
   pattern = "markdown",
   callback = function()
