@@ -6,7 +6,7 @@
 CLAUDE_OPUS=claude-opus-5
 CLAUDE_SONNET=claude-sonnet-5
 CLAUDE_HAIKU=claude-haiku-4-5
-CLAUDE_FABLE=claude-fable-5
+CLAUDE_FABLE=claude-fable-5-1
 
 alias clhai="claude --model $CLAUDE_HAIKU"
 alias clopuh="claude --model $CLAUDE_OPUS --effort high"
@@ -23,3 +23,7 @@ alias datefmt="date +%Y-%m-%d-%H-%M-%S"
 alias dcuw="dienpy claude usage --w"
 alias dhs="dienpy hunks run --staged"
 alias speak="dienpy tts speak"
+
+_proto=~/.local/share/bash-completion/completions/_proto_complete
+[ -f "$_proto" ] && . "$_proto" && _proto_register_aliases
+unset _proto

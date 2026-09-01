@@ -8,7 +8,7 @@ The CLI dispatcher is [`protocli`](https://pypi.org/project/protocli/) (split ou
 
 - **Entry point**: `dienpy/__main__.py` calls `_dispatcher.run()`.
 - **Dispatcher**: `dienpy/__init__.py` does `_dispatcher = Dispatcher.from_package("dienpy")`. `Dispatcher.from_package` scans the package with `pkgutil.iter_modules` and binds each non-private submodule as a command.
-- **Shell completion**: `dotfiles/.local/share/bash-completion/completions/dienpy` calls `dienpy --complete [args...]`, which the Dispatcher answers from `main`'s signature — a `get_completions` hook only where the signature can't say it.
+- **Shell completion**: `dotfiles/.local/share/bash-completion/completions/dienpy` calls `dienpy --complete [args...]`, which the Dispatcher answers from `main`'s signature — a `get_completions` hook only where the signature can't say it. Aliases onto any protocli tool (`hunks`, `dcuw`, …) complete the same way: `_proto_register_aliases` (run at the end of `.bash_aliases`) expands the alias and prepends its words to the typed args, so nothing per alias is maintained.
 
 ## Discovering Commands
 

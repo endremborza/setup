@@ -3,13 +3,38 @@
 # A lone candidate of $'\eFILES' (protocli.FILE_COMPLETION) defers to readline's
 # native pathname completion (~, /, $VAR, absolute/relative).
 # Usage: source this file, then: complete -F _proto_complete <tool>
+# Aliases onto such tools complete through the same protocol once
+# _proto_register_aliases has run after all aliases are defined.
 
 _proto_complete() {
+    _proto_reply "$1" "${COMP_WORDS[@]:1:COMP_CWORD-1}"
+}
+
+_proto_alias_complete() {
+    local -a words
+    _proto_alias_words "$1" words || return
+    _proto_reply "${words[@]}" "${COMP_WORDS[@]:1:COMP_CWORD-1}"
+}
+
+# Registers alias completion for every alias expanding to one simple command
+# whose tool has a protocol completion file in this directory.
+_proto_register_aliases() {
+    local dir=${BASH_SOURCE%/*} name tool
+    local -a words
+    for name in "${!BASH_ALIASES[@]}"; do
+        _proto_alias_words "$name" words || continue
+        tool=$dir/${words[0]}
+        [[ -f $tool && $(<"$tool") == *_proto_complete* ]] || continue
+        complete -F _proto_alias_complete "$name"
+    done
+}
+
+# $1 = tool, rest = argv before the cursor; the partial word is filtered here.
+_proto_reply() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
-    local args=("${COMP_WORDS[@]:1:$((COMP_CWORD-1))}")
     local IFS=$'\n'
     local -a candidates
-    mapfile -t candidates < <("$1" --complete "${args[@]}" 2>/dev/null)
+    mapfile -t candidates < <("$1" --complete "${@:2}" 2>/dev/null)
     [[ ${#candidates[@]} -eq 0 ]] && return
     if [[ ${#candidates[@]} -eq 1 && "${candidates[0]}" == $'\eFILES' ]]; then
         COMPREPLY=()
@@ -23,4 +48,14 @@ _proto_complete() {
         [[ "$c" == "$cur_plain"* ]] && COMPREPLY+=("$c")
     done
     [[ ${#COMPREPLY[@]} -gt 0 ]] && compopt -o filenames
+}
+
+# Splits alias $1 into shell words in array $2, refusing anything that is not
+# one simple command. Globbing is off so a literal * survives the split.
+_proto_alias_words() {
+    local expansion="${BASH_ALIASES[$1]}"
+    [[ $expansion == *[';|&<>`'$'\n']* || $expansion == *'$('* ]] && return 1
+    local -
+    set -f
+    eval "$2=($expansion)" 2>/dev/null
 }
