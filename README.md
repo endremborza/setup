@@ -43,7 +43,7 @@ A profile is an independent feature group. `base` is always implicit; layer othe
 | `wg`           | wireguard (interface config is the enroller's job)                |
 | `web`          | caddy (Caddyfile + service state are the fleet controller's job)  |
 | `edge`         | nftables default-deny input, unattended-upgrades                  |
-| `media`        | HWE kernel, mpv, gamescope, cage, firefox — HDR playback box      |
+| `media`        | HWE kernel, cage, mpv, firefox, tty1 autologin — TV kiosk box     |
 
 ```bash
 setup run                                # base only

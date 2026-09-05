@@ -123,8 +123,10 @@ _AUTOLOGIN_CHECK = (
 )
 
 
+# A media box is a kiosk: tty1 logs its user in and ~/.profile execs
+# $TTY1_SESSION, so the screen is up from power-on and respawns when it exits.
 @brick(
-    profile="screen-apps",
+    profile=("screen-apps", "media"),
     name="autologin",
     check=_AUTOLOGIN_CHECK,
     verify=_AUTOLOGIN_CHECK,
@@ -136,6 +138,7 @@ def configure_autologin() -> None:
     write_system_file(
         override_dir / "override.conf", _AUTOLOGIN_OVERRIDE.format(user=user)
     )
+    subprocess.run(["sudo", "systemctl", "daemon-reload"], check=True)
 
 
 # wait-online prints "masked" on stderr with exit 1; NetworkManager itself

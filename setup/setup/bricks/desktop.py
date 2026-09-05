@@ -119,8 +119,9 @@ def configure_x11() -> None:
     text = profile.read_text() if profile.exists() else ""
     if "startx" not in text:
         block = (
-            '\nif [ -z "$NO_STARTX" ] && [ -z "$DISPLAY" ]'
-            ' && [ "$(tty)" = "/dev/tty1" ]; then\n    startx\nfi\n'
+            '\nif [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]'
+            ' && [ "${TTY1_SESSION:-startx}" != none ]; then'
+            '\n    exec ${TTY1_SESSION:-startx}\nfi\n'
         )
         profile.write_text(text + block)
 

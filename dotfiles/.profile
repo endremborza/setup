@@ -13,8 +13,9 @@ fi
 
 export PATH="$HOME/.elan/bin:$PATH"
 
-# NO_STARTX (set in ~/.local-vars) keeps tty1 logins in the console on
-# machines whose session is not X/leftwm (media boxes, headless stations).
-if [ -z "$NO_STARTX" ] && [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
-    exec startx
+# TTY1_SESSION (set in ~/.local-vars) is what a tty1 login execs into: unset
+# means startx (X/leftwm), "none" keeps the console for headless stations, a
+# media box names its kiosk launcher ("tv-session").
+if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ] && [ "${TTY1_SESSION:-startx}" != none ]; then
+    exec ${TTY1_SESSION:-startx}
 fi
