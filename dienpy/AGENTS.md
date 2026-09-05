@@ -93,6 +93,42 @@ commit = "tunnel"
 - `dienpy ai profiles` — list profiles: kind, config, default marker, tool bindings.
 - `dienpy ai check [profile]` — smoke test: endpoint reachable, key present, claude installed and logged in.
 - `dienpy ai models` — cached model-id listing per API provider (completion source).
+- `dienpy ai run <profile> [file] [--interactive] [--safe] [--raw TEXT] [--auto] [--unattended] [--commit] [--timeout S]` — the launcher behind every shell shortcut: a prompt from `--raw`, the file (frontmatter stripped, see the feed package), or piped stdin runs non-interactively (auto permissions, 3h timeout) and prints the reply; `--interactive` opens a session instead (a piped prompt becomes its first message); `--unattended` appends the queue rules (`ai.run.unattended_suffix`: no questions, take the recommended default, never commit, final report) and `--commit` lifts their never-commit rule. `pipecl`/`pipeclf` and `cl*` are aliases onto it.
+
+## The `feed` package
+
+`dienpy feed` runs prompts through unattended claude sessions whenever the usage windows have headroom, and closes each with the regroup cache. `dienpy.claude.usage.windows()` parses the oauth payload's `limits` into `session`, `weekly_all` and `weekly_scoped:<Model>` (Fable has its own weekly cap); `dienpy.claude._gate` judges a job against them — the weekly windows against a ceiling, the session window against what the job will consume (`session% + need ≤ 97`).
+
+### The prompt protocol
+
+A repo's queue is `<repo>/.cril/prompts/*.md`. A prompt opts in through a flat `---` fenced frontmatter block (`dienpy.ai._prompt_file`; the model only sees the body):
+
+```markdown
+---
+mode: once            # once | repeat
+unattended: true      # absent/false: never scheduled
+profiles: fabx, opux  # preference order; default from feed.toml, then fabx, opux
+priority: 2           # 1 first … 5 last
+need: 35              # % of the 5h window one run consumes; replaced by the mean of the last three measured runs
+every: 24h            # repeat: minimum gap after an ok run (default 12h); once: re-eligible after it even if the file survives
+commit: true          # lets the unattended suffix allow commits (repos whose agents commit themselves)
+target: …             # unknown keys are ignored — free-form notes ride along with the prompt
+---
+```
+
+Repo defaults sit in `<repo>/.cril/feed.toml`: `hunks` (regroup dims closed after each job; `[]` leaves the cache alone), `profiles`, and `env` (read by the private cril layer only). Run history is machine-written to `<repo>/.cril/prompts/state.toml` — per prompt `last`, `outcome` (ok|failed|limit), `attempts`, `costs` (last three measured session-% deltas), `report` — pruned of prompts that no longer exist. Authored metadata stays in the prompt; the scheduler never rewrites a user file.
+
+Lifecycle (`_queue.lifecycle`): a `once` prompt is eligible until it runs ok — agents delete their own prompt when the section lands, so a surviving one shows `landed?` until the user deletes it or `every` passes; a `repeat` prompt waits `every` after an ok run; a `failed` prompt is retried only after the file's mtime moves past the failed run.
+
+### Commands
+
+- `dienpy feed run` (no arguments) — scheduler over the repo around the cwd (`--repos R…` for several): collect candidates, drop the ineligible (lifecycle, repo lock, headroom for `need`), order by priority then the repo that waited longest then name, run the first, write `state.toml`, repeat; `--once` stops after one job. `--dry-run` prints the listing instead.
+- `dienpy feed run <prompt.md …> [--cmd <shell>] [--repeat]` — explicit mode in this repo, in order, gated the same way with `--need`; `--cmd` runs a command with the gate's choice in `FEED_PROFILE`/`FEED_MODEL` (how uxarr's `make experiment` lets the gate pick its model); `--hunks`/`--profiles` override the repo's `feed.toml` (`--hunks ""` skips the regroup close).
+- `dienpy feed list [repos…] [--offline]` — one line per prompt: mode, priority, need, profiles, last run, and the verdict (`runnable → fabx`, `needs 35 / have 12`, `cooldown until …`, `failed … (edit to retry)`, `landed?`, `not unattended`, `repo busy`).
+
+A job is one `ai.launch` with `unattended_suffix(commit)`, streamed to `$LOGS_DIR/feed/<repo>/<stamp>-<prompt>.jsonl`, its final report to `.md`, one row in `runs.md`; a session that dies on a usage limit is resumed once after that window resets. A repo is locked (`.git/feed.lock`) while its job runs; the close is `hunks run --extend <dims>` (full run when nothing is cached), `hunks messages`, `hunks drift`.
+
+The loop is a library: `feed.schedule(repos: list[RepoQueue], settings, usage=…)` and `feed.run_jobs(repo, jobs, settings, usage=…)`. A `RepoQueue` may carry its own `usage` source and a `wrap` template around `{cmd}` — that is how hypothalamus' `cril queue` runs a sandboxed repo's prompts inside `fleet env <env>` (`dienpy ai run --unattended [--commit] --timeout …`) gated on the sandbox identity's windows, so one loop serves both accounts.
 
 ## Shared State
 
