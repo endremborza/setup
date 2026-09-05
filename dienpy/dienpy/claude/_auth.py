@@ -27,6 +27,9 @@ _BETA_HEADER = "oauth-2025-04-20"
 #   strings $(which claude) | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
 ANTHROPIC_VERSION = "2023-06-01"
 
+# every call here is short; a stalled connection must not hang a long-running loop
+TIMEOUT = 30
+
 
 @functools.cache
 def _binary_content() -> bytes:
@@ -75,6 +78,7 @@ def _refresh(path: Path) -> None:
             "refresh_token": creds["claudeAiOauth"]["refreshToken"],
             "client_id": _CLIENT_ID,
         },
+        timeout=TIMEOUT,
     )
     if not r.ok:
         raise SystemExit(
@@ -117,6 +121,7 @@ def request(
     tokens are written back to whichever file was used.
     """
     path = creds_path or _CREDENTIALS_PATH
+    kwargs.setdefault("timeout", TIMEOUT)
     r = getattr(requests, method)(
         url, headers=_make_headers(path, extra_headers), **kwargs
     )
