@@ -22,7 +22,7 @@ Editing a hunk mid-review mints a new ID. Each cache entry therefore stores the 
 
 ## The cache
 
-`.git/regroup-cache.json` (schema v3, owner `dienpy/dienpy/hunks/_cache.py`): `analyses` keyed by `granularity|model|context`, each entry holding `ids` (the hunks its groups cover), `groups` (`[{title, message, hunks, mixed?, ambiguous?}]`), `anchors` + `head` (the rebind side), `config` and `time`; plus `last`, the most recently used config. Every hunks command prunes entries that no longer describe any part of the current diff.
+`.git/regroup-cache.json` (schema v3, owner `dienpy/dienpy/hunks/_cache.py`): `analyses` keyed by `granularity|model|context`, each entry holding `ids` (the hunks its groups cover), `groups` (`[{title, message, hunks, mixed?, ambiguous?, stale?}]`), `anchors` + `head` (the rebind side), `config` and `time`; plus `last`, the most recently used config. `stale` marks a group whose hunk set changed after its message was written — set by an extend that appended to it or a rebind that carried an edited hunk into it, cleared by `messages`. Every hunks command prunes entries that no longer describe any part of the current diff.
 
 ## Config dimensions
 
@@ -57,11 +57,14 @@ dienpy hunks run [dims] [--path P] [--staged] [--force|--full|--extend] [--auth 
 dienpy hunks list        cached runs + coverage against the current diff
 dienpy hunks drift       kept/rebound/gone/new (exit 1 = drifted, 2 = no run)
 dienpy hunks sync        rebind edited hunks into their groups, no model call
+dienpy hunks messages    rewrite title/message of stale groups (--all: every group)
 dienpy hunks improve     rewrite a past commit's message
 dienpy hunks history     describe commits: hashes, or --since 7D / 50h
 ```
 
 `run` is incremental: when a cached entry covers at least half of the current hunks, only the new hunks are sent along with the existing group titles and placed via `extends`; `--force`/`--full` or low coverage re-runs fully. `--extend` pins that incremental path: it requires a cached run, ignores the coverage threshold, and refuses rather than falling back to a full analysis — a bounded, predictable update, which is why it is the one analysis nvim binds to a key. A grouping that drops or duplicates a hunk id is rejected locally and retried once with the violation report; still-invalid output is a hard error.
+
+`messages` is how an appended-to group gets an accurate message again: an extend never rewrites, so it flags the groups it touched `stale`, and `messages` re-describes each flagged group from all of its current hunks (one schema call per group, persisted after each), keeping the title when it still fits. `dienpy feed` runs it after every unattended session.
 
 `--path <dir|file>` scopes a run to one subtree: only those hunks reach the model, groups covering the rest of the diff survive untouched, and the entry records the partial coverage, so the remaining hunks land incrementally on the next unscoped run.
 
@@ -75,4 +78,4 @@ dienpy hunks history     describe commits: hashes, or --since 7D / 50h
 
 ## Integrations
 
-`cril housekeeping --hunks` shells out to `dienpy hunks run --path` to pre-group one subtree's notes inside a larger diff.
+`cril housekeeping --hunks` shells out to `dienpy hunks run --path` to pre-group one subtree's notes inside a larger diff. `dienpy feed run` closes every unattended session with `run --extend`, `messages` and `drift` on the dims it was given (default `opus normal explore`, the `hunks` alias).

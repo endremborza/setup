@@ -118,6 +118,60 @@ def build_incremental_prompt(
     return "\n".join(parts)
 
 
+_DESCRIBE_RULES = """\
+Rewrite the commit title and message of ONE change group whose hunks changed since it \
+was described. The other groups are listed by title for context only.
+
+Rules:
+- "title": a commit subject line (<= 72 chars) in the style of the recent subjects below; keep the current title when it still describes the group.
+- "message": the commit body, what changed and why; do not restate the title.
+- Describe the group as it is now, from all of its hunks, not the delta since the old message."""
+
+_DESCRIBE_SCHEMA = {
+    "type": "object",
+    "properties": {"title": {"type": "string"}, "message": {"type": "string"}},
+    "required": ["title", "message"],
+}
+
+
+def build_describe_prompt(
+    root: str, groups: list[dict], index: int, hunks: list[Hunk], config: Config
+) -> str:
+    parts = _prompt_head(root, config, _DESCRIBE_RULES) + ["", "All groups:"]
+    for i, g in enumerate(groups):
+        parts.append(f"{'>' if i == index else ' '} {i + 1}. {g['title']}")
+    g = groups[index]
+    parts += ["", "Current message of the marked group:", g.get("message") or "(none)"]
+    parts += ["", "Its hunks:"] + _hunk_block(hunks)
+    return "\n".join(parts)
+
+
+def describe(
+    root: str,
+    groups: list[dict],
+    index: int,
+    hunks: list[Hunk],
+    config: Config,
+    backend: ai.Backend,
+) -> dict:
+    """Fresh title/message for one group; the returned dict is a copy with `stale` cleared."""
+    prompt = build_describe_prompt(root, groups, index, hunks, config)
+    if len(prompt) > MAX_PROMPT_CHARS:
+        raise SystemExit(
+            f"group {index + 1} too large to describe: {len(prompt)} chars "
+            f"(limit {MAX_PROMPT_CHARS})"
+        )
+    payload = ai.send(
+        backend, "", prompt, schema=_DESCRIBE_SCHEMA, max_tokens=2048, cwd=root
+    )
+    if not isinstance(payload, dict) or not payload.get("title"):
+        raise SystemExit("no title in model output")
+    out = {k: v for k, v in groups[index].items() if k != "stale"}
+    out["title"] = str(payload["title"]).strip()
+    out["message"] = str(payload.get("message") or "").strip()
+    return out
+
+
 def _need(config: Config) -> ai.Need:
     return ai.Need(
         schema=True,
@@ -229,6 +283,7 @@ def analyze_incremental(
                 if ext is not None:
                     target = merged[ext - 1]
                     target["hunks"] = list(target["hunks"]) + list(g["hunks"])
+                    target["stale"] = True
                     if g.get("mixed"):
                         target["mixed"] = list(target.get("mixed") or []) + list(
                             g["mixed"]

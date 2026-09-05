@@ -90,6 +90,8 @@ def rebind(hunks: list[Hunk], entry: dict, head: str) -> Result:
                 if out not in seen:
                     seen.add(out)
                     rewritten.append(out)
+        if any(hid not in live for hid in g["hunks"]) and rewritten != g["hunks"]:
+            g["stale"] = True
         g["hunks"] = rewritten
         if g.get("mixed"):
             g["mixed"] = _remap_mixed(g["mixed"], live, succ)
