@@ -1,16 +1,23 @@
-"""One `send` per backend kind, plus provider model listing.
+"""One `send` per backend kind, plus provider model listing and the cli launcher.
 
 `system` and `user` are separate roles on openai/api transports; the cli
 transport concatenates them into the single `-p` prompt. With a schema, the
 return value is the parsed object (each backend using its own mechanism:
 response_format, --json-schema); without one it is the reply text.
+
+`launch` is the other cli shape: a session with inherited stdio (interactive, or
+`-p` streaming to the terminal / a stream-json log) — what a shell shortcut or an
+unattended queue starts, as opposed to the captured call `send` makes.
 """
 
+import dataclasses
 import json
 import os
 import subprocess
-from typing import Any
+import threading
+from typing import IO, Any
 
+from . import _stream
 from ._backend import GEMINI_BUDGETS, Api, Backend, Cli, Openai
 
 
@@ -180,28 +187,118 @@ def _send_google(
     return (response.text or "").strip()
 
 
-def _send_cli(
-    backend: Cli, system: str, user: str, schema: dict | None, cwd: str | None
-) -> str | dict:
-    prompt = f"{system}\n\n{user}" if system else user
-    cmd = [
-        "claude",
-        "-p",
-        "--output-format",
-        "json",
-        "--model",
-        backend.model,
-        "--tools",
-        ",".join(backend.tools),
-    ]
+def cli_argv(backend: Cli) -> list[str]:
+    cmd = ["claude", "--model", backend.model]
     if backend.effort:
         cmd += ["--effort", backend.effort]
-    if schema is not None:
-        cmd += ["--json-schema", json.dumps(schema)]
+    if backend.permission_mode:
+        cmd += ["--permission-mode", backend.permission_mode]
+    return cmd
+
+
+def cli_env(backend: Cli) -> dict[str, str]:
     env = os.environ.copy()
     if backend.auth == "login":
         env.pop("ANTHROPIC_API_KEY", None)
         env.pop("ANTHROPIC_AUTH_TOKEN", None)
+    return env
+
+
+def launch(
+    backend: Cli,
+    prompt: str | None,
+    *,
+    interactive: bool = False,
+    safe: bool = False,
+    system: str = "",
+    resume: str = "",
+    log: IO[str] | None = None,
+    cwd: str | None = None,
+) -> _stream.Outcome:
+    """Start a claude session and wait for it.
+
+    Interactive sessions inherit the terminal (a prompt, if any, arrives on stdin the
+    way a pipe would). Non-interactive ones run `-p` with the prompt on stdin and the
+    permission mode forced to auto unless the profile set one; with `log`, the session
+    streams stream-json into it while progress lines go to stdout, and the outcome
+    carries the session id and final result — otherwise the reply prints as text.
+    """
+    if not interactive and not prompt:
+        raise SystemExit("a non-interactive session needs a prompt")
+    if interactive and (log or resume):
+        raise SystemExit("log/resume apply to non-interactive sessions")
+    if not interactive and not backend.permission_mode:
+        backend = dataclasses.replace(backend, permission_mode="auto")
+    cmd = cli_argv(backend)
+    if safe:
+        cmd.append("--safe-mode")
+    if system:
+        cmd += ["--append-system-prompt", system]
+    if not interactive:
+        cmd.append("-p")
+        if resume:
+            cmd += ["--resume", resume]
+        if log is not None:
+            cmd += ["--output-format", "stream-json", "--verbose"]
+    stdin = subprocess.PIPE if prompt is not None else None
+    stdout = subprocess.PIPE if log is not None else None
+    try:
+        proc = subprocess.Popen(
+            cmd, stdin=stdin, stdout=stdout, text=True, cwd=cwd, env=cli_env(backend)
+        )
+    except FileNotFoundError:
+        raise SystemExit("claude CLI not found on PATH")
+    timed_out = threading.Event()
+
+    def _expire() -> None:
+        # flag before kill, so wait() cannot return with the flag still unset
+        timed_out.set()
+        proc.kill()
+
+    timer = threading.Timer(backend.timeout, _expire)
+    if not interactive:
+        timer.start()
+    try:
+        if proc.stdin is not None:
+            proc.stdin.write(prompt or "")
+            proc.stdin.close()
+        outcome = (
+            _stream.follow(proc.stdout, log)
+            if proc.stdout is not None
+            else _stream.Outcome()
+        )
+        rc = proc.wait()
+    except BaseException:
+        # the session must not outlive an interrupted launcher (Ctrl-C, SIGTERM)
+        proc.kill()
+        proc.wait()
+        raise
+    finally:
+        timer.cancel()
+    if timed_out.is_set() and rc != 0:
+        return dataclasses.replace(
+            outcome,
+            returncode=rc,
+            is_error=True,
+            result=f"timed out after {backend.timeout}s",
+        )
+    return dataclasses.replace(outcome, returncode=rc)
+
+
+def _send_cli(
+    backend: Cli, system: str, user: str, schema: dict | None, cwd: str | None
+) -> str | dict:
+    prompt = f"{system}\n\n{user}" if system else user
+    cmd = cli_argv(backend) + [
+        "-p",
+        "--output-format",
+        "json",
+        "--tools",
+        ",".join(backend.tools),
+    ]
+    if schema is not None:
+        cmd += ["--json-schema", json.dumps(schema)]
+    env = cli_env(backend)
     try:
         res = subprocess.run(
             cmd,

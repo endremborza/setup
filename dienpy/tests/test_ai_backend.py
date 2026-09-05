@@ -51,13 +51,13 @@ def test_missing_file_is_working_defaults() -> None:
         assert "sonnet" in _profiles.names()
         assert _profiles.for_tool("hunks") == "sonnet"
         backend = resolve("hunks", Need(schema=True))
-        assert backend == Cli(model="sonnet")
+        assert backend == Cli(model=_profiles.SONNET)
 
 
 def test_toml_layers_over_builtins() -> None:
     with _with_config(_TOML):
         assert _profiles.get("tunnel")["url"].startswith("http://localhost:9999")
-        assert _profiles.get("haiku") == {"kind": "cli", "model": "haiku"}
+        assert _profiles.get("haiku") == {"kind": "cli", "model": _profiles.HAIKU}
         assert _profiles.for_tool("hunks") == "slow"
         assert _profiles.for_tool("commit") == "tunnel"
 

@@ -1,4 +1,8 @@
-"""Profile store: ~/.config/dienpy/ai.toml layered over built-in defaults."""
+"""Profile store: ~/.config/dienpy/ai.toml layered over built-in defaults.
+
+BUILTIN is the one model table: the tier ids every shell shortcut, launcher and
+tool resolves through. A new model version is a one-line change here.
+"""
 
 from pathlib import Path
 from typing import Annotated, Any
@@ -10,11 +14,30 @@ PATH = Path.home() / ".config" / "dienpy" / "ai.toml"
 
 LOCAL_URL = "http://localhost:8081/v1/chat/completions"
 
+HAIKU = "claude-haiku-4-5"
+SONNET = "claude-sonnet-5"
+OPUS = "claude-opus-5"
+FABLE = "claude-fable-5-1"
+
+
+def _cli(model: str, effort: str = "") -> dict[str, Any]:
+    spec: dict[str, Any] = {"kind": "cli", "model": model}
+    if effort:
+        spec["effort"] = effort
+    return spec
+
+
 BUILTIN: dict[str, dict[str, Any]] = {
-    "haiku": {"kind": "cli", "model": "haiku"},
-    "sonnet": {"kind": "cli", "model": "sonnet"},
-    "opus": {"kind": "cli", "model": "opus"},
-    "fable": {"kind": "cli", "model": "fable"},
+    "haiku": _cli(HAIKU),
+    "sonnet": _cli(SONNET),
+    "opus": _cli(OPUS),
+    "fable": _cli(FABLE),
+    "soh": _cli(SONNET, "high"),
+    "som": _cli(SONNET, "medium"),
+    "opuh": _cli(OPUS, "high"),
+    "opux": _cli(OPUS, "xhigh"),
+    "opum": _cli(OPUS, "max"),
+    "fabx": _cli(FABLE, "xhigh"),
     "local": {"kind": "openai", "url": LOCAL_URL},
 }
 _DEFAULT = "sonnet"

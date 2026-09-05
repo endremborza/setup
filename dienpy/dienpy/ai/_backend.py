@@ -21,6 +21,14 @@ GEMINI_BUDGETS = dict(zip(EFFORTS, (1024, 4096, 16384, 24576, 32768)))
 # advisory, not enforced: the backend validates and names the valid set itself
 Effort = Annotated[str, Complete(EFFORTS)]
 _AUTHS = ("login", "env")
+PERMISSION_MODES = (
+    "acceptEdits",
+    "auto",
+    "bypassPermissions",
+    "manual",
+    "dontAsk",
+    "plan",
+)
 
 
 @dataclass(frozen=True)
@@ -59,6 +67,8 @@ class Cli:
     tools: tuple[str, ...] = ()
     effort: str = ""
     timeout: int = 300
+    # "" leaves the claude command's own default; launch() forces auto when unattended
+    permission_mode: str = ""
 
 
 Backend = Openai | Api | Cli
@@ -106,11 +116,18 @@ def resolve(tool: str, need: Need, profile: str = "") -> Backend:
             raise SystemExit(
                 f"profile '{name}': invalid auth '{auth}' (one of: {', '.join(_AUTHS)})"
             )
+        mode = str(spec.get("permission_mode", ""))
+        if mode and mode not in PERMISSION_MODES:
+            raise SystemExit(
+                f"profile '{name}': invalid permission_mode '{mode}' "
+                f"(one of: {', '.join(PERMISSION_MODES)})"
+            )
         return Cli(
             model=spec.get("model", name),
             auth=auth,
             tools=need.tools,
             effort=effort,
             timeout=timeout,
+            permission_mode=mode,
         )
     raise SystemExit(f"profile '{name}': unknown backend kind '{kind}'")
