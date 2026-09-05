@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# The tty1 session of a media box: cage composites a kiosk browser on the TV.
-# State under $XDG_STATE_HOME/tv: `url` names the page (TV_HOME_URL when
-# absent), `off` parks tty1 as a blanked console, `display` is an env file
-# naming the Wayland and X sockets for tools joining the session. Whatever ends cage ends the
-# session, and the tty1 autologin runs it again with the current state — so a
-# respawn of cage is how the page changes (hyppy tv).
+# The tty1 session of a media box: cage composites the TV. State under
+# $XDG_STATE_HOME/tv: `url` names a page shown fullscreen in a kiosk browser
+# — absent, the compositor carries only the Jellyfin shim and the screen is
+# black until something plays, which is the idle state; `off` parks tty1 as
+# a blanked console; `display` is an env file naming the Wayland and X
+# sockets for tools joining the session. Whatever ends cage ends the session,
+# and the tty1 autologin runs it again with the current state — so a respawn
+# of cage is how the page changes (hyppy tv).
 set -euo pipefail
 
 state=${XDG_STATE_HOME:-$HOME/.local/state}/tv
@@ -15,14 +17,18 @@ if [ -e "$state/off" ]; then
     exec bash --noprofile
 fi
 
-url=$(cat "$state/url" 2>/dev/null || echo "${TV_HOME_URL:-about:blank}")
+url=$(cat "$state/url" 2>/dev/null || true)
 profile=${TV_BROWSER_PROFILE:-$HOME/.mozilla/firefox/tv}
 export XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=cage
 # -m last: the window mapped last fills the screen, so a player started later
 # covers the page and its exit uncovers it
 cage -d -m last -- sh -c '
     printf "WAYLAND_DISPLAY=%s\nDISPLAY=%s\n" "$WAYLAND_DISPLAY" "$DISPLAY" > "$0/display"
-    command -v jellyfin-mpv-shim > /dev/null && jellyfin-mpv-shim &
-    exec firefox --kiosk --profile "$1" "$2"' "$state" "$profile" "$url" 2>> "$state/session.log" || true
+    if [ -n "$2" ]; then
+        command -v jellyfin-mpv-shim > /dev/null && jellyfin-mpv-shim &
+        exec firefox --kiosk --profile "$1" "$2"
+    fi
+    command -v jellyfin-mpv-shim > /dev/null && exec jellyfin-mpv-shim
+    exec sleep infinity' "$state" "$profile" "$url" >> "$state/session.log" 2>&1 || true
 # a failing session must not spin the autologin
 sleep 2
