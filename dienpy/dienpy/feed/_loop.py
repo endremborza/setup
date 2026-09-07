@@ -34,7 +34,6 @@ _RESUME_PROMPT = (
 )
 _LIMIT_HINT = re.compile(r"usage limit|limit reached", re.IGNORECASE)
 _MIN_SLEEP = 30
-_DRIFT = {0: "clean", 1: "DRIFTED", 2: "no run"}
 
 
 @dataclass(frozen=True)
@@ -113,21 +112,18 @@ def _usage(fn: UsageFn, poll: int) -> list[Window]:
 
 
 def _hunks(root: Path, *args: str) -> int:
-    return subprocess.run([sys.executable, "-m", "dienpy", "hunks", *args], cwd=root).returncode
+    return subprocess.run(
+        [sys.executable, "-m", "dienpy", "hunks", *args], cwd=root
+    ).returncode
 
 
-def _close(root: Path, dims: tuple[str, ...], describe: bool) -> str:
-    """Bring the regroup cache up to date for `dims`; returns the final drift state."""
+def _close(root: Path, dims: tuple[str, ...]) -> str:
+    """Bring the regroup cache up to date for `dims`: extend the cached run, or partition afresh."""
     if not dims:
         return "skipped"
-    rc = _hunks(root, "drift", *dims)
-    if rc == 2:
-        _hunks(root, "run", *dims)
-    elif rc == 1 and _hunks(root, "run", "--extend", *dims):
-        _hunks(root, "run", *dims)
-    if describe:
-        _hunks(root, "messages", *dims)
-    return _DRIFT.get(_hunks(root, "drift", *dims), "error")
+    if _hunks(root, "run", "--extend", *dims) and _hunks(root, "run", *dims):
+        return "error"
+    return "ok"
 
 
 def _limit_hit(outcome: ai.Outcome, usage: UsageFn, model: str) -> Window | None:
@@ -235,23 +231,36 @@ def _wrapped_prompt(job: Job, profile: str, wrap: str, timeout: int) -> str:
 _WRAP_GRACE = 300
 
 
-def run_job(repo: RepoQueue, job: Job, s: Settings, profile: str, usage: UsageFn, before: list[Window]) -> Result:
+def run_job(
+    repo: RepoQueue,
+    job: Job,
+    s: Settings,
+    profile: str,
+    usage: UsageFn,
+    before: list[Window],
+) -> Result:
     backend = _airun.backend(profile, tool="feed", timeout=s.timeout)
     _say(f"▶ {job.name} on {profile} ({backend.model})  [{_describe(before)}]")
-    _close(repo.root, repo.hunks, describe=False)
+    _close(repo.root, repo.hunks)
     log = _log.RunLog(s.log_base / repo.name, job.name)
     started = time.monotonic()
     if job.prompt is not None and not repo.wrap:
         outcome = _run_prompt(repo.root, job, s, profile, backend, usage, log)
     elif job.prompt is not None:
         wrapped = _wrapped_prompt(job, profile, repo.wrap, s.timeout)
-        outcome = _run_cmd(repo.root, wrapped, profile, backend, log, s.timeout + _WRAP_GRACE)
+        outcome = _run_cmd(
+            repo.root, wrapped, profile, backend, log, s.timeout + _WRAP_GRACE
+        )
     else:
         outcome = _run_cmd(repo.root, job.cmd, profile, backend, log, s.timeout)
     minutes = (time.monotonic() - started) / 60
-    drift = _close(repo.root, repo.hunks, describe=True)
+    drift = _close(repo.root, repo.hunks)
     state = "ok" if outcome.ok else f"failed ({outcome.subtype or outcome.returncode})"
-    report = log.report(outcome, f"{job.name} — {profile} — {state}") if outcome.result.strip() else None
+    report = (
+        log.report(outcome, f"{job.name} — {profile} — {state}")
+        if outcome.result.strip()
+        else None
+    )
     try:
         after = usage()
     except Exception:
