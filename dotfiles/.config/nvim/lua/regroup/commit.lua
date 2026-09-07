@@ -1,6 +1,6 @@
 local M = {}
 
-local diff = require('regroup.diff')
+local git = require('regroup.git')
 
 local function notify(msg, level)
   vim.notify(msg, level or vim.log.levels.INFO)
@@ -59,16 +59,16 @@ end
 
 -- commits whatever the index holds; returns the short hash
 function M.run(root, msg)
-  local res = diff.git(root, { 'commit', '-F', '-' }, { stdin = msg })
-  assert(res.code == 0, 'git commit failed:\n' .. (res.stderr or '') .. (res.stdout or ''))
+  local res = git.git(root, { 'commit', '-F', '-' }, { stdin = msg })
+  assert(res.code == 0, 'git commit failed:\n' .. git.output(res))
   M.refresh_signs()
-  return vim.trim(diff.git(root, { 'rev-parse', '--short', 'HEAD' }).stdout)
+  return vim.trim(git.git(root, { 'rev-parse', '--short', 'HEAD' }).stdout)
 end
 
 -- commit the staged files, message written in the shared commit buffer
 function M.index(root)
-  root = root or diff.root()
-  local res = diff.git(root, { 'diff', '--cached', '--name-status' })
+  root = root or git.root()
+  local res = git.git(root, { 'diff', '--cached', '--name-status' })
   assert(res.code == 0, 'git diff --cached failed:\n' .. (res.stderr or ''))
   local staged = {}
   for _, l in ipairs(vim.split(vim.trim(res.stdout), '\n', { plain = true })) do

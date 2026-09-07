@@ -1,7 +1,7 @@
 local M = {}
 
--- The engine and its AI config live in dienpy: nvim reads cached runs, extends the one
--- it is looking at (`state.extend`), and never composes an analysis config of its own.
+-- The engine and its AI config live in dienpy: nvim lists cached runs, extends the one it
+-- is looking at, and never composes an analysis config of its own.
 local ENGINE_CMD = 'dienpy hunks run'
 
 local function yank_engine_cmd(root, msg)
@@ -25,27 +25,26 @@ local function matching(runs, tokens)
 end
 
 local function context(tokens)
-  local diff = require('regroup.diff')
+  local git = require('regroup.git')
   local state = require('regroup.state')
 
-  local ok, root = pcall(diff.root)
+  local ok, root = pcall(git.root)
   if not ok then return vim.notify(root, vim.log.levels.ERROR) end
-  local parse = diff.parse(root)
-  if #parse.hunks == 0 then
+  local ok2, data = pcall(state.fetch, root)
+  if not ok2 then return vim.notify('regroup: ' .. data, vim.log.levels.ERROR) end
+  if #data.hunks == 0 then
     return vim.notify('no uncommitted changes in ' .. vim.fs.basename(root), vim.log.levels.INFO)
   end
-  state.sync_cache(root, parse)
-
-  local all = state.runs(root)
-  if #all == 0 then return yank_engine_cmd(root, 'no cached analysis') end
+  local all = state.runs(data)
+  if #all == 0 then return yank_engine_cmd(root, 'no cached run') end
   local runs = matching(all, tokens)
   if #runs == 0 then
     return yank_engine_cmd(root, ('no cached run matching %s'):format(table.concat(tokens, ' ')))
   end
-  return { root = root, parse = parse, runs = runs }
+  return { root = root, data = data, runs = runs }
 end
 
--- Group picker for the run the tokens name; the last-used run when they name several.
+-- Patch picker for the run the tokens name; the engine's current run when they name several.
 function M.open(tokens)
   local state = require('regroup.state')
   local ui = require('regroup.ui')
@@ -53,15 +52,13 @@ function M.open(tokens)
   local ctx = context(tokens or {})
   if not ctx then return end
   local runs = ctx.runs
-  if #runs > 1 then
-    local last = state.last_config(ctx.root)
+  if #runs > 1 and ctx.data.last then
     for _, run in ipairs(runs) do
-      if last and state.key(run.config) == state.key(last) then runs = { run } end
+      if run.key == state.key(ctx.data.last) then runs = { run } end
     end
   end
   if #runs > 1 then return ui.pick_runs(ctx) end
-  state.load(ctx.root, ctx.parse, runs[1].config)
-  ui.pick_groups()
+  ui.open_run(ctx.root, runs[1].config)
 end
 
 function M.runs(tokens)
@@ -87,11 +84,13 @@ function M.setup()
   end, {
     nargs = '*',
     complete = function(arglead)
-      local ok, root = pcall(require('regroup.diff').root)
+      local ok, root = pcall(require('regroup.git').root)
       if not ok then return {} end
+      local ok2, data = pcall(require('regroup.state').fetch, root)
+      if not ok2 then return {} end
       local seen, out = {}, {}
-      for _, run in ipairs(require('regroup.state').runs(root)) do
-        for _, part in ipairs(vim.split(run.key, '|', { plain = true })) do
+      for key in pairs(data.runs) do
+        for _, part in ipairs(vim.split(key, '|', { plain = true })) do
           if not seen[part] and part:find(arglead, 1, true) == 1 then
             seen[part] = true
             table.insert(out, part)
@@ -110,19 +109,23 @@ function M.setup()
     require('regroup.ui').pick_graveyard()
   end, {})
 
+  vim.api.nvim_create_user_command('RegroupBranches', function()
+    require('regroup.ui').pick_branches()
+  end, {})
+
   vim.keymap.set('n', '<leader>gg', function()
     local state = require('regroup.state')
-    local ok, root = pcall(require('regroup.diff').root)
-    if state.current and ok and state.current.parse.root == root then
+    local ok, root = pcall(require('regroup.git').root)
+    if state.current and ok and state.current.root == root then
       return require('regroup.ui').reopen()
     end
     M.open {}
-  end, { desc = '[G]it change [G]roups (picker, or run list when no session)' })
-  vim.keymap.set('n', '<leader>gG', function() M.runs {} end, { desc = '[G]it change [G]roup runs' })
-  vim.keymap.set('n', ']g', function() require('regroup.ui').nav(1) end, { desc = 'Next hunk in change group' })
-  vim.keymap.set('n', '[g', function() require('regroup.ui').nav(-1) end, { desc = 'Prev hunk in change group' })
-  vim.keymap.set('n', ']G', function() require('regroup.ui').nav_group(1) end, { desc = 'Next change group' })
-  vim.keymap.set('n', '[G', function() require('regroup.ui').nav_group(-1) end, { desc = 'Prev change group' })
+  end, { desc = '[G]it patches (picker, or run list when no session)' })
+  vim.keymap.set('n', '<leader>gG', function() M.runs {} end, { desc = '[G]it patch runs' })
+  vim.keymap.set('n', ']g', function() require('regroup.ui').nav(1) end, { desc = 'Next hunk in patch' })
+  vim.keymap.set('n', '[g', function() require('regroup.ui').nav(-1) end, { desc = 'Prev hunk in patch' })
+  vim.keymap.set('n', ']G', function() require('regroup.ui').nav_patch(1) end, { desc = 'Next patch' })
+  vim.keymap.set('n', '[G', function() require('regroup.ui').nav_patch(-1) end, { desc = 'Prev patch' })
 end
 
 return M
