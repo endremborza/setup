@@ -1,17 +1,32 @@
-"""List cached regroup runs with coverage against the current diff."""
+"""List cached runs with coverage against the current diff; --json is what nvim reads."""
 
 import datetime
+import json as _json
 
 from . import _cache, _hunks
 
 
-def main() -> None:
+def main(*, json: bool = False) -> None:
     root = _hunks.git_root()
     hunks = _hunks.parse(root)
     current = {h.id for h in hunks}
-    _cache.prune(root, hunks, _hunks.head_sha(root))
-    data = _cache.load(root)
-    if not data or not data.get("analyses"):
+    _cache.prune(root, hunks)
+    data = _cache.load(root) or {"analyses": {}, "last": None}
+    if json:
+        print(
+            _json.dumps(
+                {
+                    "root": root,
+                    "branch": _hunks._git(root, ["branch", "--show-current"]).strip(),
+                    "hunks": [h.as_json() for h in hunks],
+                    "staged": [h.id for h in _hunks.parse(root, staged=True)],
+                    "runs": data["analyses"],
+                    "last": data.get("last"),
+                }
+            )
+        )
+        return
+    if not data["analyses"]:
         print("no cached regroup runs")
         return
     rows = sorted(
@@ -26,6 +41,6 @@ def main() -> None:
             else "?"
         )
         print(
-            f"{key:<30} {len(e['groups'])} groups  "
+            f"{key:<30} {len(e['patches'])} patches  "
             f"covers {covered}/{len(current)} hunks  {stamp}"
         )
