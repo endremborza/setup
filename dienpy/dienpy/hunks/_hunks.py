@@ -1,14 +1,10 @@
-"""Diff parsing + stable hunk IDs.
+"""Diff parsing and content-addressed hunk ids.
 
-PARITY CONTRACT: IDs must match nvim's regroup/diff.lua byte-for-byte —
-sha256(path + "\\x1f" + body_lines_joined_by_newline)[:12], "~n" suffix for
-duplicates in parse order, whole-file entries hash their header minus `index `
-lines. Change both implementations together; tests/test_group_parity.py pins
-this. A mismatch is safe but visible: the nvim side reads the cache as fully
-stale.
-
-The HEAD-side range (`@@ -start,count`) rides along as the edit-stable anchor
-`_rebind` matches on; it is python-only, not part of the parity contract.
+A hunk id is sha256(path + "\\x1f" + body lines joined by "\\n")[:12], with a "~n"
+suffix for the n-th duplicate in parse order; a whole-file entry (new, deleted, binary
+or purely renamed file) hashes its header minus the `index ` line. The `@@` header is
+not hashed, so a hunk keeps its id while edits elsewhere shift its line numbers, and
+the same content in the index and in the worktree diff yields the same id.
 """
 
 import hashlib
@@ -32,29 +28,40 @@ class Hunk:
     id: str
     path: str
     kind: str  # hunk | file | untracked
-    text: str
-    # `@@ -start,count`; count 0 (new/binary file) means the path is the anchor
-    head_start: int
-    head_count: int
+    header: str  # the file-level diff header, shared by the file's hunks
+    text: str  # `@@` header plus body; the file header alone for a whole-file entry
+    new_start: int  # `@@ +start`: where the change begins in the current file
+
+    def as_json(self) -> dict:
+        return {
+            "id": self.id,
+            "path": self.path,
+            "kind": self.kind,
+            "new_start": self.new_start,
+            "text": self.text,
+        }
 
 
 def git_root() -> str:
     return find_root()
 
 
-def _git(root: str, args: list[str], ok_codes: tuple[int, ...] = (0,)) -> str:
-    return Repo(root, cfg=_GIT_CFG).raw(*args, ok_codes=ok_codes)
+def _git(
+    root: str,
+    args: list[str],
+    ok_codes: tuple[int, ...] = (0,),
+    stdin: str | None = None,
+) -> str:
+    return Repo(root, cfg=_GIT_CFG).raw(*args, ok_codes=ok_codes, stdin=stdin)
 
 
 def head_sha(root: str) -> str:
     return _git(root, ["rev-parse", "HEAD"], ok_codes=(0, 128)).strip()
 
 
-def _head_range(header: str) -> tuple[int, int]:
-    m = re.match(r"^@@ -(\d+)(?:,(\d+))?", header)
-    if not m:
-        return 0, 0
-    return int(m[1]), 1 if m[2] is None else int(m[2])
+def _new_start(header: str) -> int:
+    m = re.match(r"^@@ -\d+(?:,\d+)? \+(\d+)", header)
+    return max(1, int(m[1])) if m else 1
 
 
 def _file_path(header: list[str]) -> str | None:
@@ -106,14 +113,15 @@ def under(hunks: list[Hunk], path: str) -> list[Hunk]:
     return [h for h in hunks if h.path == prefix or h.path.startswith(prefix + "/")]
 
 
-def parse(root: str, staged: bool = False) -> list[Hunk]:
-    """Worktree+index hunks vs HEAD; `staged` parses the index alone (no untracked scan)."""
-    target = "--cached" if staged else "HEAD"
+def parse(root: str, *, staged: bool = False, rev: str = "") -> list[Hunk]:
+    """Worktree+index vs HEAD with untracked files; `staged` the index alone; `rev` any
+    `git diff` revision argument such as `main...topic` (no untracked scan)."""
+    target = "--cached" if staged else rev or "HEAD"
     files = _parse_diff(_git(root, ["diff", "--no-ext-diff", "--no-color", target]))
     untracked = (
-        []
-        if staged
-        else _git(root, ["ls-files", "--others", "--exclude-standard"]).splitlines()
+        _git(root, ["ls-files", "--others", "--exclude-standard"]).splitlines()
+        if not staged and not rev
+        else []
     )
     for path in untracked:
         if not path:
@@ -133,14 +141,15 @@ def parse(root: str, staged: bool = False) -> list[Hunk]:
     counts: dict[str, int] = {}
 
     def register(
-        path: str, kind: str, body: list[str], text: str, anchor: tuple[int, int]
+        path: str, kind: str, body: list[str], header: str, text: str, start: int
     ) -> None:
         base = hashlib.sha256((path + "\x1f" + "\n".join(body)).encode()).hexdigest()[
             :12
         ]
         n = counts.get(base, 0) + 1
         counts[base] = n
-        hunks.append(Hunk(base if n == 1 else f"{base}~{n}", path, kind, text, *anchor))
+        hid = base if n == 1 else f"{base}~{n}"
+        hunks.append(Hunk(hid, path, kind, header, text, start))
 
     for f in files:
         path = f["path"]
@@ -148,18 +157,15 @@ def parse(root: str, staged: bool = False) -> list[Hunk]:
             raise SystemExit(
                 f"could not determine path for diff section: {f['header'][0]}"
             )
+        header = "\n".join(f["header"])
+        kind = "untracked" if f["untracked"] else "hunk"
         if not f["hunks"]:
             body = [ln for ln in f["header"] if not ln.startswith("index ")]
-            kind = "untracked" if f["untracked"] else "file"
-            register(path, kind, body, "\n".join(f["header"]), (0, 0))
+            register(
+                path, "untracked" if f["untracked"] else "file", body, header, header, 1
+            )
         else:
-            kind = "untracked" if f["untracked"] else "hunk"
             for h in f["hunks"]:
-                register(
-                    path,
-                    kind,
-                    h["body"],
-                    h["header"] + "\n" + "\n".join(h["body"]),
-                    _head_range(h["header"]),
-                )
+                text = h["header"] + "\n" + "\n".join(h["body"])
+                register(path, kind, h["body"], header, text, _new_start(h["header"]))
     return hunks
