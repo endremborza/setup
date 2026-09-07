@@ -29,20 +29,29 @@ class Repo:
         self._base = ["git", "-C", str(path), *cfg]
 
     def run(
-        self, *args: str, capture: bool = True, timeout: float | None = None
+        self,
+        *args: str,
+        capture: bool = True,
+        timeout: float | None = None,
+        stdin: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
         """Nonzero exits come back as `.returncode`, not as an exception."""
         return _exec(
             [*self._base, *args],
             capture,
             self.timeout if timeout is None else timeout,
+            stdin=stdin,
         )
 
     def raw(
-        self, *args: str, ok_codes: tuple[int, ...] = (0,), timeout: float | None = None
+        self,
+        *args: str,
+        ok_codes: tuple[int, ...] = (0,),
+        timeout: float | None = None,
+        stdin: str | None = None,
     ) -> str:
         """stdout verbatim -- diff bodies carry significant trailing whitespace."""
-        res = self.run(*args, timeout=timeout)
+        res = self.run(*args, timeout=timeout, stdin=stdin)
         if res.returncode not in ok_codes:
             raise SystemExit(
                 f"git {' '.join(args)} failed in {self.path.name}: {res.stderr.strip()}"
@@ -50,9 +59,13 @@ class Repo:
         return res.stdout
 
     def out(
-        self, *args: str, ok_codes: tuple[int, ...] = (0,), timeout: float | None = None
+        self,
+        *args: str,
+        ok_codes: tuple[int, ...] = (0,),
+        timeout: float | None = None,
+        stdin: str | None = None,
     ) -> str:
-        return self.raw(*args, ok_codes=ok_codes, timeout=timeout).strip()
+        return self.raw(*args, ok_codes=ok_codes, timeout=timeout, stdin=stdin).strip()
 
     def maybe(self, *args: str, timeout: float | None = None) -> str | None:
         """Stripped stdout, or None if git fails, hangs or is missing."""
@@ -95,9 +108,10 @@ def _exec(
     capture: bool,
     timeout: float | None,
     cwd: Path | str | None = None,
+    stdin: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        argv, capture_output=capture, text=True, timeout=timeout, cwd=cwd
+        argv, capture_output=capture, text=True, timeout=timeout, cwd=cwd, input=stdin
     )
 
 
