@@ -1,4 +1,4 @@
-"""AI change-group analysis for git diffs — engine behind nvim's :Regroup."""
+"""Partition a diff into patches, land them as commits or patch branches — engine behind nvim's :Regroup."""
 
 from protocli import Dispatcher
 

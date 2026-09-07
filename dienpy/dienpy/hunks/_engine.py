@@ -1,4 +1,4 @@
-"""Prompt assembly, backend invocation, validation, and incremental merge."""
+"""Prompt assembly, backend invocation, validation, and incremental placement: the partition of a diff into patches."""
 
 import copy
 import dataclasses
@@ -12,7 +12,7 @@ MAX_PROMPT_CHARS = 300000
 
 _TOOLS = ("Read", "Grep", "Glob")
 
-_GROUP_PROPS = {
+_PATCH_PROPS = {
     "title": {"type": "string"},
     "message": {"type": "string"},
     "hunks": {"type": "array", "items": {"type": "string"}},
@@ -27,34 +27,34 @@ _GROUP_PROPS = {
 }
 
 _FULL_RULES = """\
-Group these git hunks into change groups (future commits).
+Partition these git hunks into patches (future commits).
 
 Rules:
-- Every hunk id below appears in exactly one group's "hunks" array; never dropped, never duplicated.
-- Group by semantic concern, not by file: hunks from one file can belong to different groups.
-- If a single hunk mixes two distinct concerns, assign it to the dominant one and record it in that group's "mixed" array with a note naming the foreign part.
+- Every hunk id below appears in exactly one patch's "hunks" array; never dropped, never duplicated.
+- Partition by semantic concern, not by file: hunks from one file can belong to different patches.
+- If a single hunk mixes two distinct concerns, assign it to the dominant one and record it in that patch's "mixed" array with a note naming the foreign part.
 - "title": a commit subject line (<= 72 chars) in the style of the recent subjects below.
 - "message": the commit body, what changed and why; do not restate the title.
-- Order groups so foundational changes come before things built on them."""
+- Order patches so foundational changes come before things built on them."""
 
 _INCR_RULES = """\
-These hunks are NEW since a previous grouping of this diff. Place each new hunk.
+These hunks are NEW since a previous partition of this diff. Place each new hunk.
 
 Rules:
-- Every new hunk id below appears in exactly one returned group's "hunks" array; never dropped, never duplicated.
-- To add new hunks to an existing group, return a group with "extends": <existing group number> containing only those new hunk ids.
-- For new hunks belonging to no existing group, return a new group (no "extends") with title/message in the established style.
-- Do not restate hunks that are already grouped."""
+- Every new hunk id below appears in exactly one returned patch's "hunks" array; never dropped, never duplicated.
+- To add new hunks to an existing patch, return a patch with "extends": <existing patch number> containing only those new hunk ids.
+- For new hunks belonging to no existing patch, return a new patch (no "extends") with title/message in the established style.
+- Do not restate hunks that are already placed."""
 
 
 def _schema(incremental: bool) -> dict:
-    props = dict(_GROUP_PROPS)
+    props = dict(_PATCH_PROPS)
     if incremental:
         props["extends"] = {"type": "integer"}
     return {
         "type": "object",
         "properties": {
-            "groups": {
+            "patches": {
                 "type": "array",
                 "items": {
                     "type": "object",
@@ -63,7 +63,7 @@ def _schema(incremental: bool) -> dict:
                 },
             }
         },
-        "required": ["groups"],
+        "required": ["patches"],
     }
 
 
@@ -77,7 +77,7 @@ def _prompt_head(root: str, config: Config, rules: str) -> list[str]:
         parts += [
             "",
             "You may read files in this repository (read-only) to understand the "
-            "changes before grouping.",
+            "changes before partitioning.",
         ]
     return parts + ["", *context_lines(root, project=config.context != "bare")]
 
@@ -106,7 +106,7 @@ def build_incremental_prompt(
     config: Config,
     feedback: str | None,
 ) -> str:
-    parts = _prompt_head(root, config, _INCR_RULES) + ["", "Existing groups:"]
+    parts = _prompt_head(root, config, _INCR_RULES) + ["", "Existing patches:"]
     for i, g in enumerate(groups, 1):
         parts.append(f"{i}. {g['title']}")
         for line in (g.get("message") or "").split("\n"):
@@ -119,13 +119,13 @@ def build_incremental_prompt(
 
 
 _DESCRIBE_RULES = """\
-Rewrite the commit title and message of ONE change group whose hunks changed since it \
-was described. The other groups are listed by title for context only.
+Rewrite the commit title and message of ONE patch whose hunks changed since it was \
+described. The other patches are listed by title for context only.
 
 Rules:
-- "title": a commit subject line (<= 72 chars) in the style of the recent subjects below; keep the current title when it still describes the group.
+- "title": a commit subject line (<= 72 chars) in the style of the recent subjects below; keep the current title when it still describes the patch.
 - "message": the commit body, what changed and why; do not restate the title.
-- Describe the group as it is now, from all of its hunks, not the delta since the old message."""
+- Describe the patch as it is now, from all of its hunks, not the delta since the old message."""
 
 _DESCRIBE_SCHEMA = {
     "type": "object",
@@ -137,11 +137,11 @@ _DESCRIBE_SCHEMA = {
 def build_describe_prompt(
     root: str, groups: list[dict], index: int, hunks: list[Hunk], config: Config
 ) -> str:
-    parts = _prompt_head(root, config, _DESCRIBE_RULES) + ["", "All groups:"]
+    parts = _prompt_head(root, config, _DESCRIBE_RULES) + ["", "All patches:"]
     for i, g in enumerate(groups):
         parts.append(f"{'>' if i == index else ' '} {i + 1}. {g['title']}")
     g = groups[index]
-    parts += ["", "Current message of the marked group:", g.get("message") or "(none)"]
+    parts += ["", "Current message of the marked patch:", g.get("message") or "(none)"]
     parts += ["", "Its hunks:"] + _hunk_block(hunks)
     return "\n".join(parts)
 
@@ -154,11 +154,11 @@ def describe(
     config: Config,
     backend: ai.Backend,
 ) -> dict:
-    """Fresh title/message for one group; the returned dict is a copy with `stale` cleared."""
+    """Fresh title/message for one patch; the returned dict is a copy with `stale` cleared."""
     prompt = build_describe_prompt(root, groups, index, hunks, config)
     if len(prompt) > MAX_PROMPT_CHARS:
         raise SystemExit(
-            f"group {index + 1} too large to describe: {len(prompt)} chars "
+            f"patch {index + 1} too large to describe: {len(prompt)} chars "
             f"(limit {MAX_PROMPT_CHARS})"
         )
     payload = ai.send(
@@ -201,10 +201,10 @@ def _call(root: str, prompt: str, backend: ai.Backend, incremental: bool) -> lis
     payload = ai.send(
         backend, "", prompt, schema=_schema(incremental), max_tokens=8192, cwd=root
     )
-    groups = payload.get("groups") if isinstance(payload, dict) else None
-    if not isinstance(groups, list):
-        raise SystemExit("no groups in model output")
-    return groups
+    patches = payload.get("patches") if isinstance(payload, dict) else None
+    if not isinstance(patches, list):
+        raise SystemExit("no patches in model output")
+    return patches
 
 
 def _validate_full(hunks: list[Hunk], groups: list[dict]) -> str | None:
@@ -214,13 +214,13 @@ def _validate_full(hunks: list[Hunk], groups: list[dict]) -> str | None:
     for gi, g in enumerate(groups, 1):
         for hid in g["hunks"]:
             if hid not in known:
-                problems.append(f"group {gi} references unknown id {hid}")
+                problems.append(f"patch {gi} references unknown id {hid}")
             elif hid in assigned:
-                problems.append(f"id {hid} appears in more than one group")
+                problems.append(f"id {hid} appears in more than one patch")
             assigned.add(hid)
     for h in hunks:
         if h.id not in assigned:
-            problems.append(f"id {h.id} ({h.path}) is not in any group")
+            problems.append(f"id {h.id} ({h.path}) is not in any patch")
     return "\n".join(problems) or None
 
 
@@ -232,27 +232,27 @@ def _validate_incremental(
     for gi, g in enumerate(groups, 1):
         ext = g.get("extends")
         if ext is not None and not 1 <= ext <= n_existing:
-            problems.append(f"group {gi} extends invalid group number {ext}")
+            problems.append(f"patch {gi} extends invalid patch number {ext}")
         for hid in g["hunks"]:
             if hid not in new_ids:
-                problems.append(f"group {gi} references non-new id {hid}")
+                problems.append(f"patch {gi} references non-new id {hid}")
             elif hid in assigned:
-                problems.append(f"id {hid} appears in more than one group")
+                problems.append(f"id {hid} appears in more than one patch")
             assigned.add(hid)
     for hid in new_ids - assigned:
-        problems.append(f"new id {hid} is not in any group")
+        problems.append(f"new id {hid} is not in any patch")
     return "\n".join(problems) or None
 
 
 _RETRY = (
-    "Your previous grouping was invalid:\n{}\nProduce a corrected, complete grouping."
+    "Your previous partition was invalid:\n{}\nProduce a corrected, complete partition."
 )
 
 
-def analyze_full(
+def partition(
     root: str, hunks: list[Hunk], config: Config, backend: ai.Backend
 ) -> list[dict]:
-    feedback = None
+    feedback = problems = None
     for _ in range(2):
         prompt = build_full_prompt(root, hunks, config, feedback)
         groups = _call(root, prompt, backend, False)
@@ -260,10 +260,10 @@ def analyze_full(
         if not problems:
             return groups
         feedback = _RETRY.format(problems)
-    raise SystemExit(f"invalid grouping after retry:\n{problems}")
+    raise SystemExit(f"invalid partition after retry:\n{problems}")
 
 
-def analyze_incremental(
+def place(
     root: str,
     existing: list[dict],
     new_hunks: list[Hunk],
@@ -271,7 +271,7 @@ def analyze_incremental(
     backend: ai.Backend,
 ) -> list[dict]:
     new_ids = {h.id for h in new_hunks}
-    feedback = None
+    feedback = problems = None
     for _ in range(2):
         prompt = build_incremental_prompt(root, existing, new_hunks, config, feedback)
         groups = _call(root, prompt, backend, True)
@@ -292,4 +292,4 @@ def analyze_incremental(
                     merged.append(g)
             return merged
         feedback = _RETRY.format(problems)
-    raise SystemExit(f"invalid incremental grouping after retry:\n{problems}")
+    raise SystemExit(f"invalid placement after retry:\n{problems}")
