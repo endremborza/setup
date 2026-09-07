@@ -1,4 +1,9 @@
-"""regroup cache (.git/regroup-cache.json) — schema owner; nvim's regroup/state.lua reads this file."""
+"""regroup cache (.git/regroup-cache.json) — schema owner; nvim reads it through `hunks list --json`.
+
+`analyses` is keyed by config (`granularity|model|context`); an entry holds the patches,
+the hunk ids they cover, its config and time; `last` is the config the shell and nvim
+act on. Every hunks command prunes entries that no longer describe any live hunk.
+"""
 
 import dataclasses
 import json
@@ -6,12 +11,14 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import _rebind
 from ._config import Config
 from ._hunks import Hunk
 
-VERSION = 3
-_READABLE = (2, VERSION)  # v2 entries lack anchors; they gain them on the next write
+VERSION = 4
+
+
+def key(config: dict[str, str]) -> str:
+    return f"{config['granularity']}|{config['model']}|{config['context']}"
 
 
 def _path(root: str) -> Path:
@@ -31,7 +38,7 @@ def load(root: str) -> dict[str, Any] | None:
         data = json.loads(p.read_text())
     except json.JSONDecodeError:
         return None
-    if not isinstance(data, dict) or data.get("version") not in _READABLE:
+    if not isinstance(data, dict) or data.get("version") != VERSION:
         return None
     return data
 
@@ -46,31 +53,14 @@ def entry(root: str, config: Config) -> dict[str, Any] | None:
     return (data or {}).get("analyses", {}).get(config.key)
 
 
-def prune(root: str, hunks: list[Hunk], head: str) -> None:
-    """Drop analyses describing none of the current diff — every hunks command calls this.
-
-    An entry survives on a shared hunk id, or on an anchor a live hunk still overlaps
-    (its hunks were edited, not removed — `_rebind` can carry them).
-    """
+def prune(root: str, hunks: list[Hunk]) -> None:
+    """Drop analyses covering none of the live hunks — every hunks command calls this."""
     data = load(root)
     if not data:
         return
-    live_ids = {h.id for h in hunks}
-    live_anchors = list(_rebind.anchors(hunks).values())
-
-    def covers(e: dict) -> bool:
-        if not live_ids.isdisjoint(e["ids"]):
-            return True
-        if e.get("head") != head:
-            return False
-        return any(
-            _rebind.overlap(a, b)
-            for a in (e.get("anchors") or {}).values()
-            for b in live_anchors
-        )
-
+    live = {h.id for h in hunks}
     analyses = data.get("analyses", {})
-    stale = [k for k, e in analyses.items() if not covers(e)]
+    stale = [k for k, e in analyses.items() if live.isdisjoint(e["ids"])]
     if not stale:
         return
     for k in stale:
@@ -86,21 +76,17 @@ def touch_last(root: str, config: Config) -> None:
 
 
 def set_entry(
-    root: str, config: Config, hunks: list[Hunk], groups: list[dict], head: str
+    root: str, config: Config, hunks: list[Hunk], patches: list[dict]
 ) -> None:
     """Write the entry; `time` only advances when its content actually changed.
 
-    `hunks` is the whole live diff (it supplies the rebind anchors), while `ids` records
-    only what the groups actually cover — the two coincide for a full run, and diverge
-    for a path-scoped one, whose groups describe a subset of the diff.
+    `ids` records what the patches cover, a subset of the live diff for a `--path` run.
     """
     data = load(root) or {"version": VERSION, "analyses": {}}
-    grouped = {hid for g in groups for hid in g["hunks"]}
+    grouped = {hid for p in patches for hid in p["hunks"]}
     payload = {
         "ids": [h.id for h in hunks if h.id in grouped],
-        "groups": groups,
-        "anchors": _rebind.anchors(hunks),
-        "head": head,
+        "patches": patches,
         "config": dataclasses.asdict(config),
     }
     prev = data["analyses"].get(config.key) or {}
