@@ -12,8 +12,20 @@ PAYLOAD = {
     "five_hour": {"utilization": 33.0, "resets_at": _S},
     "seven_day": {"utilization": 4.0, "resets_at": _T},
     "limits": [
-        {"kind": "session", "group": "session", "percent": 33, "resets_at": _S, "scope": None},
-        {"kind": "weekly_all", "group": "weekly", "percent": 4, "resets_at": _T, "scope": None},
+        {
+            "kind": "session",
+            "group": "session",
+            "percent": 33,
+            "resets_at": _S,
+            "scope": None,
+        },
+        {
+            "kind": "weekly_all",
+            "group": "weekly",
+            "percent": 4,
+            "resets_at": _T,
+            "scope": None,
+        },
         {
             "kind": "weekly_scoped",
             "group": "weekly",

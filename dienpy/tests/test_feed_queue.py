@@ -17,15 +17,26 @@ NOW = datetime.datetime(2026, 9, 3, 12, 0, tzinfo=UTC)
 
 
 def test_frontmatter_split_and_absence() -> None:
-    meta, body = _prompt_file.split("---\nmode: repeat  # weekly\nprofiles: fabx, opux\ntarget: plans/a.md §B: c\n---\n\nDo it.\n")
-    assert meta == {"mode": "repeat", "profiles": "fabx, opux", "target": "plans/a.md §B: c"}
+    meta, body = _prompt_file.split(
+        "---\nmode: repeat  # weekly\nprofiles: fabx, opux\ntarget: plans/a.md §B: c\n---\n\nDo it.\n"
+    )
+    assert meta == {
+        "mode": "repeat",
+        "profiles": "fabx, opux",
+        "target": "plans/a.md §B: c",
+    }
     assert body == "Do it.\n"
     assert _prompt_file.split("no fence\n---\n") == ({}, "no fence\n---\n")
-    assert _prompt_file.split("---\nunterminated: yes\n") == ({}, "---\nunterminated: yes\n")
+    assert _prompt_file.split("---\nunterminated: yes\n") == (
+        {},
+        "---\nunterminated: yes\n",
+    )
 
 
 def test_parse_meta_defaults_and_validation(tmp_path: Path) -> None:
-    m = _queue.parse_meta({"unattended": "true", "every": "90m", "priority": "1"}, tmp_path)
+    m = _queue.parse_meta(
+        {"unattended": "true", "every": "90m", "priority": "1"}, tmp_path
+    )
     assert m == Meta(unattended=True, every_h=1.5, priority=1)
     with pytest.raises(SystemExit):
         _queue.parse_meta({"mode": "sometimes"}, tmp_path)
@@ -57,7 +68,9 @@ def test_state_round_trip_prunes_deleted_prompts(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     (repo.prompts / "keep.md").write_text("---\nunattended: true\n---\n")
     states = {
-        "keep": State(last=NOW, outcome="ok", attempts=2, costs=(30.0, 35.5), report="feed/r/x.md"),
+        "keep": State(
+            last=NOW, outcome="ok", attempts=2, costs=(30.0, 35.5), report="feed/r/x.md"
+        ),
         "gone": State(last=NOW, outcome="failed", attempts=1),
     }
     _queue.save_state(repo, states)
@@ -70,10 +83,16 @@ def test_record_keeps_last_three_costs() -> None:
     s = State(costs=(1.0, 2.0, 3.0), attempts=3)
     s = _queue.record(s, now=NOW, outcome="ok", cost=4.0, report="")
     assert s.costs == (2.0, 3.0, 4.0) and s.attempts == 4 and s.outcome == "ok"
-    assert _queue.record(s, now=NOW, outcome="limit", cost=None, report="").costs == (2.0, 3.0, 4.0)
+    assert _queue.record(s, now=NOW, outcome="limit", cost=None, report="").costs == (
+        2.0,
+        3.0,
+        4.0,
+    )
 
 
-def _cand(tmp_path: Path, meta: Meta, state: State = State(), name: str = "p") -> Candidate:
+def _cand(
+    tmp_path: Path, meta: Meta, state: State = State(), name: str = "p"
+) -> Candidate:
     tmp_path.mkdir(exist_ok=True)
     path = tmp_path / f"{name}.md"
     path.write_text("x")
@@ -87,23 +106,42 @@ def test_lifecycle_verdicts(tmp_path: Path) -> None:
     once_ok = _cand(tmp_path, Meta(unattended=True), State(last=ago, outcome="ok"))
     assert _queue.lifecycle(once_ok, NOW).startswith("landed?")
     rep = Meta(unattended=True, mode="repeat", every_h=1)
-    assert _queue.lifecycle(_cand(tmp_path, rep, State(last=ago, outcome="ok")), NOW) == ""
+    assert (
+        _queue.lifecycle(_cand(tmp_path, rep, State(last=ago, outcome="ok")), NOW) == ""
+    )
     rep6 = Meta(unattended=True, mode="repeat", every_h=6)
-    assert _queue.lifecycle(_cand(tmp_path, rep6, State(last=ago, outcome="ok")), NOW).startswith("cooldown")
+    assert _queue.lifecycle(
+        _cand(tmp_path, rep6, State(last=ago, outcome="ok")), NOW
+    ).startswith("cooldown")
     failed = _cand(tmp_path, Meta(unattended=True), State(last=NOW, outcome="failed"))
     os.utime(failed.path, times=(ago.timestamp(), ago.timestamp()))
     assert _queue.lifecycle(failed, NOW).startswith("failed")
-    edited = _cand(tmp_path, Meta(unattended=True), State(last=ago - datetime.timedelta(days=400), outcome="failed"))
+    edited = _cand(
+        tmp_path,
+        Meta(unattended=True),
+        State(last=ago - datetime.timedelta(days=400), outcome="failed"),
+    )
     assert _queue.lifecycle(edited, NOW) == ""
 
 
 def test_headroom_uses_need_against_session(tmp_path: Path) -> None:
-    ws = [Window("session", 70.0, None), Window("weekly_all", 10.0, None), Window("weekly_scoped", 20.0, None, "Fable")]
+    ws = [
+        Window("session", 70.0, None),
+        Window("weekly_all", 10.0, None),
+        Window("weekly_scoped", 20.0, None, "Fable"),
+    ]
     t = _gate.Thresholds()
     assert _queue.headroom(("fabx", "opux"), 20, ws, t) == ("fabx", "")
     assert _queue.headroom(("fabx", "opux"), 35, ws, t) == ("", "needs 35 / have 27")
-    measured = _cand(tmp_path, Meta(unattended=True, need=35, profiles=("fabx",)), State(costs=(10.0, 12.0)))
-    assert measured.need == 11.0 and _queue.headroom(measured.profiles, measured.need, ws, t)[0] == "fabx"
+    measured = _cand(
+        tmp_path,
+        Meta(unattended=True, need=35, profiles=("fabx",)),
+        State(costs=(10.0, 12.0)),
+    )
+    assert (
+        measured.need == 11.0
+        and _queue.headroom(measured.profiles, measured.need, ws, t)[0] == "fabx"
+    )
 
 
 def test_order_priority_then_starved_repo(tmp_path: Path) -> None:

@@ -22,7 +22,9 @@ def test_cmd_job_gets_profile_env_and_row(tmp_path: Path) -> None:
     marker = tmp_path / "seen"
     repo = RepoQueue(root=tmp_path, hunks=())
     s = Settings(thresholds=_gate.Thresholds(scoped=10), log_base=tmp_path / "log")
-    job = Job(cmd=f'echo "$FEED_PROFILE $FEED_MODEL" > {marker}', profiles=("fabx", "opux"))
+    job = Job(
+        cmd=f'echo "$FEED_PROFILE $FEED_MODEL" > {marker}', profiles=("fabx", "opux")
+    )
     run_jobs(repo, [job], s, usage=lambda: WS)
     assert marker.read_text().strip() == "opux claude-opus-5"
     rows = (tmp_path / "log" / tmp_path.name / "runs.md").read_text().splitlines()
@@ -51,10 +53,17 @@ def test_choose_fetches_each_usage_source_once(tmp_path: Path) -> None:
         (root / ".git").mkdir(parents=True)
         path = root / f"{name}.md"
         path.write_text("x")
-        return Candidate(RepoQueue(root), path, Meta(unattended=True, profiles=("opux",)))
+        return Candidate(
+            RepoQueue(root), path, Meta(unattended=True, profiles=("opux",))
+        )
 
     now = datetime.datetime.now(datetime.timezone.utc)
-    choice = choose([cand("a"), cand("b")], Settings(), usage, now, fetch=lambda fn: fn())
+    choice = choose(
+        [cand("a"), cand("b")], Settings(), usage, now, fetch=lambda fn: fn()
+    )
     assert len(calls) == 1
     assert choice.picked is not None and choice.profile == "opux"
-    assert [w for _, w in choice.verdicts] == ["runnable → opux  ← next", "runnable → opux"]
+    assert [w for _, w in choice.verdicts] == [
+        "runnable → opux  ← next",
+        "runnable → opux",
+    ]

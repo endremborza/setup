@@ -43,7 +43,9 @@ class Settings:
     log_base: Path = Path(".")  # per-repo subdirectory underneath
     poll: int = 600
     timeout: int = 10800
-    repeat: bool = False  # explicit mode: cycle the job list, `poll` seconds between cycles
+    repeat: bool = (
+        False  # explicit mode: cycle the job list, `poll` seconds between cycles
+    )
     once: bool = False  # scheduler: stop after one job
 
 
@@ -144,7 +146,13 @@ def _limit_hit(outcome: ai.Outcome, usage: UsageFn, model: str) -> Window | None
 
 
 def _run_prompt(
-    root: Path, job: Job, s: Settings, profile: str, backend: ai.Cli, usage: UsageFn, log: _log.RunLog
+    root: Path,
+    job: Job,
+    s: Settings,
+    profile: str,
+    backend: ai.Cli,
+    usage: UsageFn,
+    log: _log.RunLog,
 ) -> ai.Outcome:
     assert job.prompt is not None
     system = _airun.unattended_suffix(commit=job.commit)
@@ -153,22 +161,37 @@ def _run_prompt(
         outcome = ai.launch(backend, body, system=system, log=stream, cwd=str(root))
     hit = _limit_hit(outcome, usage, backend.model)
     if hit and outcome.session_id:
-        _say(f"usage limit hit ({hit.label} {hit.percent:.0f}%); resuming after {_local(hit.resets_at)}")
+        _say(
+            f"usage limit hit ({hit.label} {hit.percent:.0f}%); resuming after {_local(hit.resets_at)}"
+        )
         _sleep_until(hit.resets_at, s.poll)
         while _gate.blockers(_usage(usage, s.poll), backend.model, s.thresholds):
             _sleep_until(None, s.poll)
         with log.stream("-resumed") as stream:
             outcome = ai.launch(
-                backend, _RESUME_PROMPT, system=system, resume=outcome.session_id, log=stream, cwd=str(root)
+                backend,
+                _RESUME_PROMPT,
+                system=system,
+                resume=outcome.session_id,
+                log=stream,
+                cwd=str(root),
             )
     return outcome
 
 
-def _run_cmd(root: Path, cmd: str, profile: str, backend: ai.Cli, log: _log.RunLog, timeout: int) -> ai.Outcome:
+def _run_cmd(
+    root: Path, cmd: str, profile: str, backend: ai.Cli, log: _log.RunLog, timeout: int
+) -> ai.Outcome:
     env = {**os.environ, "FEED_PROFILE": profile, "FEED_MODEL": backend.model}
     with log.console() as out:
         proc = subprocess.Popen(
-            cmd, shell=True, cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+            cmd,
+            shell=True,
+            cwd=root,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
         )
         assert proc.stdout is not None
         timed_out = threading.Event()
@@ -192,7 +215,9 @@ def _run_cmd(root: Path, cmd: str, profile: str, backend: ai.Cli, log: _log.RunL
         finally:
             timer.cancel()
     if timed_out.is_set() and rc != 0:
-        return ai.Outcome(returncode=rc, is_error=True, result=f"timed out after {timeout}s")
+        return ai.Outcome(
+            returncode=rc, is_error=True, result=f"timed out after {timeout}s"
+        )
     return ai.Outcome(returncode=rc, is_error=rc != 0)
 
 
@@ -237,7 +262,9 @@ def run_job(repo: RepoQueue, job: Job, s: Settings, profile: str, usage: UsageFn
         any(w.percent >= 100 for w in after if _gate.applies(w, backend.model))
         or bool(_LIMIT_HINT.search(outcome.result))
     )
-    _say(f"■ {job.name}: {state}, {outcome.turns} turns, {minutes:.0f} min, hunks {drift}  [{_describe(after) or '?'}]")
+    _say(
+        f"■ {job.name}: {state}, {outcome.turns} turns, {minutes:.0f} min, hunks {drift}  [{_describe(after) or '?'}]"
+    )
     _log.append_run(
         s.log_base / repo.name,
         f"| {_log.stamp()} | {job.name} | {profile} | {state} | hunks {drift} "
@@ -271,24 +298,32 @@ class _Lock:
 
     def __enter__(self) -> "_Lock":
         if not self.acquire():
-            raise SystemExit(f"another feed loop is running on {self.path.parent.parent}")
+            raise SystemExit(
+                f"another feed loop is running on {self.path.parent.parent}"
+            )
         return self
 
     def __exit__(self, *exc: object) -> None:
         self.release()
 
 
-def run(repo: RepoQueue, jobs: list[Job], s: Settings, usage: UsageFn = windows) -> None:
+def run(
+    repo: RepoQueue, jobs: list[Job], s: Settings, usage: UsageFn = windows
+) -> None:
     """Explicit queue on one repo, in order; `s.repeat` cycles it."""
     with _Lock(repo.root):
         cycle = 0
         while True:
             cycle += 1
             for i, job in enumerate(jobs, 1):
-                _say(f"job {i}/{len(jobs)}{f' (cycle {cycle})' if s.repeat else ''}: {job}")
+                _say(
+                    f"job {i}/{len(jobs)}{f' (cycle {cycle})' if s.repeat else ''}: {job}"
+                )
                 while True:
                     ws = _usage(usage, s.poll)
-                    profile, why = _queue.headroom(job.profiles, job.need, ws, s.thresholds)
+                    profile, why = _queue.headroom(
+                        job.profiles, job.need, ws, s.thresholds
+                    )
                     if profile:
                         break
                     _say(f"{why}; next look in {s.poll // 60} min")
@@ -306,7 +341,9 @@ class Choice:
     picked: Candidate | None
     profile: str
     windows: list[Window]
-    verdicts: list[tuple[Candidate, str]]  # every candidate in pick order, with why it does or does not run
+    verdicts: list[
+        tuple[Candidate, str]
+    ]  # every candidate in pick order, with why it does or does not run
 
 
 Fetch = Callable[[UsageFn], list[Window]]
@@ -317,11 +354,17 @@ def strict(fn: UsageFn) -> list[Window]:
     try:
         return fn()
     except Exception as e:
-        raise SystemExit(f"usage fetch failed ({type(e).__name__}: {e}); use --offline for lifecycle only")
+        raise SystemExit(
+            f"usage fetch failed ({type(e).__name__}: {e}); use --offline for lifecycle only"
+        )
 
 
 def choose(
-    cands: list[Candidate], s: Settings, host: UsageFn, now: datetime.datetime, fetch: Fetch | None = None
+    cands: list[Candidate],
+    s: Settings,
+    host: UsageFn,
+    now: datetime.datetime,
+    fetch: Fetch | None = None,
 ) -> Choice:
     """Judge every candidate; the first runnable one in priority order is the pick."""
     fetch = fetch or (lambda fn: _usage(fn, s.poll))
@@ -360,12 +403,23 @@ def schedule(repos: list[RepoQueue], s: Settings, usage: UsageFn = windows) -> N
         choice = choose(_queue.collect(repos), s, usage, now)
         cand, profile, ws = choice.picked, choice.profile, choice.windows
         if cand is None:
-            blocked = [w for _, w in choice.verdicts if w.startswith(("needs", "blocked"))]
-            _say(f"nothing runnable ({len(choice.verdicts)} waiting{': ' + blocked[0] if blocked else ''}); next look in {s.poll // 60} min")
+            blocked = [
+                w for _, w in choice.verdicts if w.startswith(("needs", "blocked"))
+            ]
+            _say(
+                f"nothing runnable ({len(choice.verdicts)} waiting{': ' + blocked[0] if blocked else ''}); next look in {s.poll // 60} min"
+            )
             _sleep_until(None, s.poll)
             continue
-        job = Job(prompt=cand.path, profiles=cand.profiles, need=cand.need, commit=cand.meta.commit)
-        _say(f"picked {cand.repo.name}/{cand.name} (priority {cand.meta.priority}, need {cand.need:.0f})")
+        job = Job(
+            prompt=cand.path,
+            profiles=cand.profiles,
+            need=cand.need,
+            commit=cand.meta.commit,
+        )
+        _say(
+            f"picked {cand.repo.name}/{cand.name} (priority {cand.meta.priority}, need {cand.need:.0f})"
+        )
         lock = _Lock(cand.repo.root)
         if not lock.acquire():
             _say(f"{cand.repo.name} became busy; picking again")
@@ -377,7 +431,9 @@ def schedule(repos: list[RepoQueue], s: Settings, usage: UsageFn = windows) -> N
         states = _queue.load_state(cand.repo)
         outcome = "ok" if res.outcome.ok else ("limit" if res.limited else "failed")
         report = str(res.report.relative_to(s.log_base)) if res.report else ""
-        states[cand.name] = _queue.record(cand.state, now=_now(), outcome=outcome, cost=res.cost, report=report)
+        states[cand.name] = _queue.record(
+            cand.state, now=_now(), outcome=outcome, cost=res.cost, report=report
+        )
         _queue.save_state(cand.repo, states)
         if s.once:
             return

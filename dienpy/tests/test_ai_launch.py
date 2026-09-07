@@ -12,7 +12,13 @@ from dienpy.ai.run import unattended_suffix
 def test_argv_carries_model_effort_and_mode() -> None:
     assert cli_argv(Cli(model="m")) == ["claude", "--model", "m"]
     assert cli_argv(Cli(model="m", effort="xhigh", permission_mode="auto")) == [
-        "claude", "--model", "m", "--effort", "xhigh", "--permission-mode", "auto",
+        "claude",
+        "--model",
+        "m",
+        "--effort",
+        "xhigh",
+        "--permission-mode",
+        "auto",
     ]
 
 
@@ -38,17 +44,35 @@ def test_builtin_shortcuts_resolve_pinned_models() -> None:
 def test_follow_collects_session_and_result() -> None:
     events = [
         {"type": "system", "subtype": "init", "session_id": "s1", "model": "m"},
-        {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash", "input": {"command": "ls"}}]}},
-        {"type": "result", "subtype": "success", "is_error": False, "result": "done.", "num_turns": 3, "session_id": "s1"},
+        {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "tool_use", "name": "Bash", "input": {"command": "ls"}}
+                ]
+            },
+        },
+        {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "done.",
+            "num_turns": 3,
+            "session_id": "s1",
+        },
     ]
     log = io.StringIO()
-    out = _stream.follow(io.StringIO("".join(json.dumps(e) + "\n" for e in events)), log)
+    out = _stream.follow(
+        io.StringIO("".join(json.dumps(e) + "\n" for e in events)), log
+    )
     assert out.session_id == "s1" and out.result == "done." and out.turns == 3
     assert out.ok
     assert log.getvalue().count("\n") == 3
 
 
 def test_follow_without_result_is_not_ok() -> None:
-    out = _stream.follow(io.StringIO('{"type":"system","subtype":"init","session_id":"s2"}\n'), None)
+    out = _stream.follow(
+        io.StringIO('{"type":"system","subtype":"init","session_id":"s2"}\n'), None
+    )
     assert out.session_id == "s2" and out.result == ""
     assert _stream.Outcome(returncode=1, session_id="s2").ok is False

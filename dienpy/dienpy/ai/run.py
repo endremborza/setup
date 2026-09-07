@@ -44,8 +44,16 @@ def read_prompt(file: str, raw: str) -> str | None:
     return None
 
 
-def backend(profile: str, *, tool: str = "run", timeout: int = _UNATTENDED_TIMEOUT, auto: bool = False) -> Cli:
-    resolved = resolve(tool, Need(timeout=timeout), profile=profile or _profiles.default_name())
+def backend(
+    profile: str,
+    *,
+    tool: str = "run",
+    timeout: int = _UNATTENDED_TIMEOUT,
+    auto: bool = False,
+) -> Cli:
+    resolved = resolve(
+        tool, Need(timeout=timeout), profile=profile or _profiles.default_name()
+    )
     if not isinstance(resolved, Cli):
         raise SystemExit(f"profile '{profile}' is not a claude cli profile")
     if auto:
