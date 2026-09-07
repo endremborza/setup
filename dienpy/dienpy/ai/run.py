@@ -20,7 +20,7 @@ _UNATTENDED_RULES = (
     "- Never stop early to wait for input. If you are truly blocked, write what blocked you and what you tried into your final report, then stop.",
     "- End with a final report: what landed, what was measured, what remains and why.",
 )
-_NO_COMMIT = "- Never commit, push or amend: the human reviews and commits from the change groups you leave behind."
+_NO_COMMIT = "- Never commit, push or amend: the human reviews and commits from the patches you leave behind."
 
 
 def unattended_suffix(commit: bool = False) -> str:

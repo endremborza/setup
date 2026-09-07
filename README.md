@@ -87,11 +87,11 @@ See [`dienpy/AGENTS.md`](dienpy/AGENTS.md) for the full module list.
 ```bash
 dienpy nvim release_notes      # plugin changelog digest
 dienpy nvim verify --perf      # headless LSP health check
-dienpy hunks run               # group the diff into AI change groups
+dienpy hunks run               # partition the diff into patches
 ```
 
 ## Further reading
 
 - [AGENTS.md](AGENTS.md) — repo conventions, how to add a brick, nvim internals
-- [docs/regroup.md](docs/regroup.md) — AI change-group review (`dienpy hunks` + nvim `:Regroup`)
+- [docs/regroup.md](docs/regroup.md) — patch review and landing (`dienpy hunks` + nvim `:Regroup`)
 - [docs/setup.md](docs/setup.md) — full profile reference, bootstrap, environment propagation, testing

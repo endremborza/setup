@@ -1,58 +1,62 @@
-*regroup.txt*   AI change-group review of uncommitted changes       *regroup*
+*regroup.txt*   Patch review and landing over dienpy hunks              *regroup*
 
-Analysis runs in the shell (tab-completed): >
+The engine runs in the shell (tab-completed): >
     dienpy hunks run [loose|normal|granular] [bare|agents|explore] [profile]
     dienpy hunks list          cached runs + coverage
-    dienpy hunks drift         has the diff moved since a run?
-    dienpy hunks sync          rebind edited hunks into their groups
+    dienpy hunks use [dims]    make a cached run the current one
 <
-Results land in .git/regroup-cache.json; nvim reads it, writes back group
-marks and manual moves, and picks a run to review — never an analysis config.
-The one engine call it makes is `hunks run --extend` on the run it is showing
-(<C-e>), which places the unassigned hunks and never re-analyzes.
+Results land in .git/regroup-cache.json. nvim parses no diff and writes no git
+state: it reads `hunks list --json` and every action below is a `hunks patch`,
+`hunks branch` or `hunks run --extend` call on the run it is showing.
+
+A patch is a set of hunks with a commit title and message. Every patch ends
+committed on the current branch (<C-y>), committed on a new patch branch
+(<C-x>), buried (<C-t>) or discarded (<C-d>). A patch branch is landed as one
+squashed commit (<C-l>, or from :RegroupBranches); its history stays under
+refs/landed/<name>, never pushed.
 
 EDITING WHILE REVIEWING                                        *regroup-edit*
-Fixing something inside a hunk changes its id, so regroup runs `hunks sync`
-(no model call) whenever the live and grouped hunks disagree: the edited hunk
-is matched back to its group by the HEAD-side range it occupies, and a hunk
-that no longer exists is dropped from its group. Nothing to re-analyze.
-
-An edit that merges two hunks from *different* groups can only land in one of
-them: it goes to the larger overlap, is marked `~` in the pickers and listed
-as REBOUND in the group preview, and committing that group asks first. Fix it
-with <C-o> in the hunk picker. Genuinely new changes still show up under
-"(unassigned new changes)" — <C-o> places them by hand, <C-e> has the model
-place them (`hunks run --extend`, run async).
+Fixing something inside a hunk changes its id: the hunk leaves its patch and
+shows up under "(unassigned new changes)". <C-e> has the model place it
+(`hunks run --extend`, run async), <C-o> in the hunk picker moves it by hand.
+Or commit the patch first and fix on the branch — the landing squashes it.
 
 GLOBAL                                                         *regroup-keys*
-    <leader>gg    group picker at last position; last cached run if no session
+    <leader>gg    patch picker at last position; run list when no session
     <leader>gG    run picker                                  :RegroupRuns
-    ]g  [g        next / prev hunk in the current group
-    ]G  [G        next / prev group
+    ]g  [g        next / prev hunk in the current patch
+    ]G  [G        next / prev patch
     :Regroup granular sonnet             narrow to one cached run, any order
                                          (completes from the cached keys)
+    :RegroupBranches                     patch branches
+    :RegroupGraveyard                    buried patches
 
 RUN PICKER                              (? in normal mode lists all keys)
-    <CR>  review this run    <C-e>  extend it    <C-t>  graveyard
+    <CR>  review this run    <C-e>  extend it
+    <C-t>  graveyard         <C-x>  patch branches
 
-GROUP PICKER                            (? in normal mode lists all keys)
-    <CR>  browse group
+PATCH PICKER                            (<Tab> marks several)
+    <CR>  browse patch
     <C-h>  hunk list
-    <C-e>  extend this run (model places the unassigned hunks)
     <C-s> / <C-u> / <C-d>  stage / unstage / discard (revert to HEAD)
-    <C-y>  commit (:w commits, :q aborts)
+    <C-y>  commit on the current branch (:w commits, :q aborts)
+    <C-x>  new patch branch from the marked patches (name prompted)
+    <C-l>  land the current branch: one squashed commit onto main
     <C-t>  bury →  graveyard
+    <C-e>  extend this run (model places the unassigned hunks)
 
 HUNK PICKER
     <CR>  jump    <C-g>  back    <C-s> / <C-u> / <C-d>  same, per hunk
-    <C-o>  move this hunk to another group (persisted to the cache)
+    <C-o>  move this hunk to another patch (persisted to the cache)
+
+PATCH BRANCHES                                            *regroup-branches*
+    <CR>  switch to it    <C-l>  land    <C-d>  drop (kept under refs/dropped)
 
 CHANGED-FILE PICKER                              <leader>gf, review mode
     <CR>  open in the review diff    <Right> / <Left>  stage / unstage file
-    <C-y>  commit the index, in the same commit buffer as the group picker
+    <C-y>  commit the index, in the same commit buffer as the patch picker
 
 GRAVEYARD                  (regroup-tagged git stashes)  *regroup-graveyard*
-    :RegroupGraveyard or <C-t> in the run picker; `git stash list` sees them
     <CR>  restore (pop)    <C-d>  delete forever
 
  vim:tw=78:ts=4:ft=help:norl:

@@ -1,81 +1,63 @@
-# Regroup — AI change-group review
+# Regroup — patches, patch branches, landings
 
-Regroup turns the uncommitted diff into semantic **change groups** — future commits with titles and messages — and lets you review, stage, and commit them group by group.
+Regroup partitions the uncommitted diff into **patches** — sets of hunks that apply and commit as a unit, each with a commit title and message — and lands them: committed straight onto the default branch, or committed onto a **patch branch** whose history is squashed into one **landing** commit when the work is done. The engine is `dienpy hunks` (Python); nvim's `:Regroup` is a viewer over it that runs the odd plain git command itself.
 
-Two components, one interface: the engine (**`dienpy hunks`**, Python) analyzes the diff and owns the cache at `.git/regroup-cache.json`; the UI (**`:Regroup`**, nvim `dotfiles/.config/nvim/lua/regroup/`) reads that cache and acts on the worktree, writing back only group marks and manual hunk moves.
+Every git write goes through the engine, and **the model never writes a diff**: it only references hunks by content-addressed id, while patch reconstruction and application are local and deterministic. A corrupt patch is impossible; a bad partition is just a bad partition.
 
-The analysis config lives on the engine side alone: nvim picks among *cached runs*, never among dimensions, so the AI vocabulary has one home. Its only engine calls carry a config it read from the cache — `sync` (no model) and `run --extend` (the model places the hunks a run doesn't cover yet). Starting a new analysis is a shell command; with nothing cached, `:Regroup` yanks `dienpy hunks run` instead of running it.
+## Hunks and ids
 
-**The model never writes a diff.** It only references hunks by content-addressed ID; diff parsing, patch reconstruction, and application are local and deterministic. A corrupt patch is impossible; a bad grouping is just a bad grouping.
+A hunk is the unit of change, parsed from `git diff HEAD` (untracked files are diffed against `/dev/null`; a binary, empty or purely renamed file is one whole-file entry). Its id is `sha256(path + "\x1f" + body)[:12]`, with a `~n` suffix for duplicates in parse order. The `@@` header is not hashed, so a hunk keeps its id while edits elsewhere shift its line numbers, and the same content in the index and in the worktree diff yields the same id — "is this hunk staged" is a set membership test, and no state records it (`dienpy/dienpy/hunks/_hunks.py`).
 
-## Hunks and IDs
+An edit inside a hunk mints a new id: the hunk leaves its patch and shows up as unassigned, to be placed by the model (`run --extend`) or by hand (`patch move`). Nothing rebinds — a patch is meant to be committed minutes after it is computed, and from then on git owns its identity.
 
-A hunk is the unit of change, parsed locally from `git diff HEAD` (untracked files are diffed against `/dev/null`; a new, deleted, binary or purely renamed file is one whole-file hunk, while a rename carrying edits appears as content hunks under the new path). Its ID is `sha256(path + "\x1f" + body)[:12]`, with a `~n` suffix for duplicates in parse order.
+## Patches and the cache
 
-IDs must match byte-for-byte between `dienpy/dienpy/hunks/_hunks.py` and nvim's `regroup/diff.lua` — pinned by `dienpy/tests/test_hunks_parity.py`; change both together. A mismatch fails safe: the nvim side reads the cache as fully stale.
+`.git/regroup-cache.json` (schema v4, owner `_cache.py`): `analyses` keyed by `granularity|model|context`, each entry holding `patches` (`[{id, title, message, hunks, mixed?}]`), the hunk `ids` they cover, `config` and `time`; plus `last`, the run the shell and nvim act on (`hunks use` changes it). A patch id is minted once, when the model's output is accepted, and is what every command addresses it by; positions work too. Every hunks command prunes entries that no longer describe any live hunk.
 
-Content addressing makes staleness a pure function of (repo, cache): drift detection is a set comparison, no daemon or state anywhere.
-
-## Anchors, rebind, sync
-
-Editing a hunk mid-review mints a new ID. Each cache entry therefore stores the HEAD-side range (`@@ -start,count`; count 0 means the path is the anchor) of every live hunk next to the `head` sha; `dienpy hunks sync` matches live hunks against those anchors and carries edited hunks back into their groups without a model call (`dienpy/dienpy/hunks/_rebind.py`). nvim calls `sync` whenever the live and grouped ID sets disagree, so an edit is not a re-analysis. A rebind that could land in more than one group is flagged `ambiguous` rather than guessed.
-
-## The cache
-
-`.git/regroup-cache.json` (schema v3, owner `dienpy/dienpy/hunks/_cache.py`): `analyses` keyed by `granularity|model|context`, each entry holding `ids` (the hunks its groups cover), `groups` (`[{title, message, hunks, mixed?, ambiguous?, stale?}]`), `anchors` + `head` (the rebind side), `config` and `time`; plus `last`, the most recently used config. `stale` marks a group whose hunk set changed after its message was written — set by an extend that appended to it or a rebind that carried an edited hunk into it, cleared by `messages`. Every hunks command prunes entries that no longer describe any part of the current diff.
-
-## Config dimensions
-
-Analyses are keyed by three dimensions, given as bare tokens in any order (missing ones fall back to the last run, then defaults):
-
-- **granularity** — `loose` (broad themes) | `normal` (atomic commits) | `granular` (smallest self-consistent units)
-- **model** — an AI profile name (below); the builtin profiles `haiku|sonnet|opus|fable` map to the claude CLI, and an unknown token passes through as a bare claude model id
-- **context** — `bare` (hunks only) | `agents` (AGENTS.md in the prompt) | `explore` (agent may also read repo files — needs a backend with tool access)
-
-## AI backends
-
-Model access goes through `dienpy.ai` ([dienpy/AGENTS.md](../dienpy/AGENTS.md#the-ai-package)): the model dimension names a profile from `~/.config/dienpy/ai.toml`, and the engine declares what it needs — schema output, plus repo tools for `explore` — so a profile that cannot serve the need is refused before anything is spent or written.
-
-Grouping via a local or SSH-tunneled OpenAI-compatible server is one profile away:
-
-```toml
-[profile.tunnel]
-kind = "openai"
-url = "http://localhost:8081/v1/chat/completions"
-```
-
-```
-dienpy hunks run tunnel bare
-```
-
-The `cli` profiles run `claude -p --json-schema` on **login auth**: the subprocess drops `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` so the claude command uses its own claude.ai credentials; `--auth env` keeps them.
+Config dimensions, given as bare tokens in any order (missing ones fall back to the last run, then defaults): **granularity** `loose|normal|granular`, **model** (an AI profile name; unknown tokens pass through as bare claude model ids), **context** `bare|agents|explore` (`explore` lets the model read repo files before partitioning).
 
 ## Commands
 
 ```
 dienpy hunks run [dims] [--path P] [--staged] [--force|--full|--extend] [--auth login|env]
-dienpy hunks list        cached runs + coverage against the current diff
-dienpy hunks drift       kept/rebound/gone/new (exit 1 = drifted, 2 = no run)
-dienpy hunks sync        rebind edited hunks into their groups, no model call
-dienpy hunks messages    rewrite title/message of stale groups (--all: every group)
-dienpy hunks improve     rewrite a past commit's message
-dienpy hunks history     describe commits: hashes, or --since 7D / 50h
+dienpy hunks list [--json]                 cached runs + coverage; --json is what nvim reads
+dienpy hunks use [dims]                    make a cached run the current one
+dienpy hunks patch stage|unstage|discard <patch|hunk-id …>
+dienpy hunks patch bury <patch>            stash under the graveyard prefix `regroup: <title>`
+dienpy hunks patch commit <patch …> [--message M]
+dienpy hunks patch move <hunk-id …> <patch>
+dienpy hunks branch new <name> [patch …] [--worktree]
+dienpy hunks branch land [name] [--onto B] [--split [granularity]] [--message M]
+dienpy hunks branch show [name] [--archived] [--json]
+dienpy hunks branch drop <name>
+dienpy hunks improve <hash>                rewrite a past commit's message
+dienpy hunks history <hashes> | --since 7D
 ```
 
-`run` is incremental: when a cached entry covers at least half of the current hunks, only the new hunks are sent along with the existing group titles and placed via `extends`; `--force`/`--full` or low coverage re-runs fully. `--extend` pins that incremental path: it requires a cached run, ignores the coverage threshold, and refuses rather than falling back to a full analysis — a bounded, predictable update, which is why it is the one analysis nvim binds to a key. A grouping that drops or duplicates a hunk id is rejected locally and retried once with the violation report; still-invalid output is a hard error.
+`run` is incremental: when a cached entry covers at least half of the current hunks, only the new ones are sent along with the existing titles and placed via `extends`, and the patches that grew are re-described in the same run. `--extend` pins that path — it requires a cached run and refuses rather than re-partitioning, which is why it is the one analysis nvim binds to a key. `--path` scopes a run to one subtree, leaving patches over the rest of the diff untouched. `--staged` partitions the index and prints messages without touching the cache. A partition that drops or duplicates a hunk id is rejected locally and retried once with the violation report.
 
-`messages` is how an appended-to group gets an accurate message again: an extend never rewrites, so it flags the groups it touched `stale`, and `messages` re-describes each flagged group from all of its current hunks (one schema call per group, persisted after each), keeping the title when it still fits. `dienpy feed` runs it after every unattended session.
+`patch commit` commits on whatever branch is checked out: on the default branch that is the direct landing of a patch; on a patch branch it is how the branch gets built. The index may hold nothing beyond the patch (a staged rename is the one exception — index-side noise the worktree diff folds into content hunks, whose patch headers are rebased onto the new path before `git apply`).
 
-`--path <dir|file>` scopes a run to one subtree: only those hunks reach the model, groups covering the rest of the diff survive untouched, and the entry records the partial coverage, so the remaining hunks land incrementally on the next unscoped run.
+## The patch-branch protocol
 
-`--staged` analyzes the index instead of the worktree and prints groups with full messages without touching the cache — the "message for what I'm about to commit" path; at `loose` granularity that is a single suggested commit message.
+Triage empties the worktree: every patch ends committed on the default branch, committed on a patch branch, buried, or discarded. Leftovers are allowed, but a leftover is what makes a branch switch need a stash, so `branch new` carries them along and `branch land` stashes and pops them.
 
-`improve` and `history` are the post-commit half of the same pipeline: same repo context and style anchor (recent commit subjects) as the grouping prompts, same backend layer (`--profile`, `--effort`; `--max-diff-chars` truncates per-commit diffs for small models). `history` prints; `--out FILE` appends there.
+- `branch new <name> <patches>` switches in place to a new branch at HEAD (dirty files carried) and commits the picked patches on it in order. `--worktree` builds the branch in `../<repo>-<name>` instead, moving the picked patches over as a stash, so the current checkout stays on its branch — the shape an agent or a parallel branch needs.
+- Commits on the branch are free-form; `git commit --fixup` for an edit spotted mid-review is fine, the landing erases it.
+- `branch land` writes the message first (`--message`; a single commit's message as is; otherwise the model rewrites the branch log into one), stashes leftovers, switches to the default branch, `git merge --squash`, commits once, verifies the landing tree equals the branch tip when the base did not move, archives the tip under `refs/landed/<name>` with a note on the landing (`git notes --ref=landed`), deletes the branch and its worktree, pops the leftovers. A squash that conflicts is undone and reported: merge the default branch into the patch branch and land again. `--split` partitions the squashed diff and commits patch by patch instead, so a messy branch lands as a few clean commits — one landing is the `loose` case of the same engine.
+- Landing closes the branch; continuing means a new patch branch from the default branch.
+- `branch drop` archives under `refs/dropped/<name>`. Both namespaces sit outside `refs/heads`: `git branch` does not list them, `git push` never sends them, `git log --all` and `git log refs/landed/<name>` still reach them.
 
-## nvim UI
+## AI backends
 
-`<leader>gg` opens the group picker on the last-used run, `<leader>gG` the run picker; `:Regroup <tokens>` narrows to one cached run, matching tokens against the parts of its cache key (completion comes from the keys themselves). Hunks no run covers collect in a synthetic "(unassigned new changes)" group, reviewable and committable like any other; `<C-e>` extends the run so the model places them instead. A group line carries its hunk and file counts, its preview opens with a per-file hunk manifest above the diffs (skipped when the group is one file), and the prompt matches paths as well as titles — typing a file name narrows to the groups touching it. `]g`/`[g` navigate hunks within the current group; stage/unstage/revert/commit act per group or hunk; `<C-o>` moves a hunk to another group; burying a group stashes it (`regroup:`-tagged, `:RegroupGraveyard` restores). A staged `git mv` is index-side noise — it belongs to no group, so the commit guard ignores it, and patches for that file are rebased onto the new path, which is the only one its index entry still has. The commit buffer lives in `regroup/commit.lua` and is not group-only: `<C-y>` in the `<leader>gf` changed-file picker commits whatever is staged there through the same buffer. Cheatsheet: `:h regroup` (`dotfiles/.config/nvim/doc/regroup.txt`).
+Model access goes through `dienpy.ai` ([dienpy/AGENTS.md](../dienpy/AGENTS.md#the-ai-package)): the model dimension names a profile from `~/.config/dienpy/ai.toml`, and the engine declares what it needs (schema output, repo tools for `explore`), so a profile that cannot serve the need is refused before anything is spent or written. The `cli` profiles run `claude -p --json-schema` on login auth: the subprocess drops `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN`; `--auth env` keeps them. `branch land` uses the `commit` tool profile for its message.
+
+## nvim
+
+`dotfiles/.config/nvim/lua/regroup/` parses no diff and writes no git state: `state.lua` reads `hunks list --json`, `ui.lua` calls `hunks patch …`, `hunks branch …`, `hunks use` and `hunks run --extend`, forwarding a config it read from the listing, and reloads after each. `review.lua` (diff windows) and `commit.lua` (commit buffer) are plain-git views shared with the `<leader>gf/gr/gb` pickers in `init.lua`; `graveyard.lua` is `git stash list` filtered on the prefix.
+
+`<leader>gg` opens the patch picker on the current run, `<leader>gG` the run picker; `:Regroup <tokens>` narrows to one cached run; `:RegroupBranches` lists patch branches (switch, land, drop); `:RegroupGraveyard` restores buried patches. Hunks no patch covers collect in a synthetic "(unassigned new changes)" patch. Cheatsheet: `:h regroup`.
 
 ## Integrations
 
-`cril housekeeping --hunks` shells out to `dienpy hunks run --path` to pre-group one subtree's notes inside a larger diff. `dienpy feed run` closes every unattended session with `run --extend`, `messages` and `drift` on the dims it was given (default `opus normal explore`, the `hunks` alias).
+`cril housekeeping --hunks` shells out to `dienpy hunks run --path` to pre-partition one subtree inside a larger diff. `dienpy feed run` closes every unattended session with `run --extend` on the dims it was given (a full run when nothing is cached).
