@@ -65,12 +65,14 @@ def _bricks_for(profiles: Iterable[str] | None, brick_name: str | None) -> list[
     return [b for b in REGISTRY if wanted & set(b.profiles)]
 
 
-def _invoke(b: Brick) -> None:
+def _invoke(b: Brick) -> bool:
     try:
         b.fn()
         print(f"[ ok ] {b.name}")
+        return True
     except Exception as e:
         print(f"[FAIL] {b.name}: {e}")
+        return False
 
 
 def run(
@@ -78,14 +80,19 @@ def run(
     dry_run: bool = False,
     brick_name: str | None = None,
     force: bool = False,
-) -> None:
+) -> bool:
+    """Every brick gets its turn — one failure does not strand the rest — and
+    the run reports False if any of them failed, so a caller (`fleet update`)
+    cannot read success over a brick that did not converge."""
+    all_ok = True
     for b in _bricks_for(profiles, brick_name):
         if dry_run:
             print(f"[dry ] {b.name}")
         elif not force and b.check and check_passes(b.check):
             print(f"[skip] {b.name}")
         else:
-            _invoke(b)
+            all_ok = _invoke(b) and all_ok
+    return all_ok
 
 
 def verify(profiles: Iterable[str] | None, brick_name: str | None = None) -> bool:

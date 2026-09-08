@@ -2,7 +2,14 @@ import subprocess
 from pathlib import Path
 
 from setup.runner import brick
-from setup.util import cargo_install, clone_gh, run_cmd, extended_env, ONSET_PATH
+from setup.util import (
+    cargo_install,
+    clone_gh,
+    extended_env,
+    run_cmd,
+    sudo_make_install,
+    ONSET_PATH,
+)
 from setup.versions import get as _v
 
 _LUA_VERSION = _v("lua")
@@ -26,7 +33,7 @@ _CARGO_TOOLS: list[tuple[str, str]] = [
 # Version-aware check: a pin bump fails the check fleet-wide, so the next
 # `fleet update` converges every machine to the pinned version.
 _TECTONIC_VERSION = _v("tectonic")
-_TECTONIC_CHECK = f"tectonic --version | grep -qF 'Tectonic {_TECTONIC_VERSION}'"
+_TECTONIC_CHECK = f"tectonic --version | grep -F 'Tectonic {_TECTONIC_VERSION}'"
 _TECTONIC_URL = (
     "https://github.com/tectonic-typesetting/tectonic/releases/download/"
     f"tectonic%40{_TECTONIC_VERSION}/"
@@ -74,7 +81,7 @@ def install_lua() -> None:
     )
     src = ONSET_PATH / f"lua-{_LUA_VERSION}"
     run_cmd("make linux test", cwd=src)
-    run_cmd("sudo make install", cwd=src)
+    sudo_make_install(src)
 
 
 @brick(
@@ -93,7 +100,7 @@ def install_luarocks() -> None:
     src = ONSET_PATH / f"luarocks-{_LUAROCKS_VERSION}"
     run_cmd("./configure --with-lua-include=/usr/local/include", cwd=src)
     run_cmd("make", cwd=src)
-    run_cmd("sudo make install", cwd=src)
+    sudo_make_install(src)
 
 
 @brick(profile="shell", name="jq", check="jq --version", verify="jq --version")
@@ -104,13 +111,13 @@ def install_jq() -> None:
     run_cmd("./configure --with-oniguruma=builtin", cwd=dest)
     run_cmd("make clean", cwd=dest)
     run_cmd("make -j8", cwd=dest)
-    run_cmd("sudo make install", cwd=dest)
+    sudo_make_install(dest)
     run_cmd("sudo ldconfig")
 
 
-# sc-im --version exits nonzero; grep the banner instead. No -q: early pipe
-# close can leave sc-im blocked on SIGPIPE under subprocess capture.
-_SCIM_CHECK = "sc-im --version 2>&1 | grep 'sc-im - version' > /dev/null"
+# sc-im --version exits nonzero; grep the banner instead. Never `grep -q`
+# here: the early pipe close leaves sc-im blocked on SIGPIPE under capture.
+_SCIM_CHECK = "sc-im --version 2>&1 | grep 'sc-im - version'"
 
 
 @brick(profile="shell", name="sc-im", check=_SCIM_CHECK, verify=_SCIM_CHECK)
@@ -124,14 +131,14 @@ def install_scim() -> None:
     link.symlink_to(dest / "src/sc-im")
 
 
-_NEOVIM_CHECK = f"nvim --version | grep -qF 'NVIM {_NEOVIM_TAG}'"
+_NEOVIM_CHECK = f"nvim --version | grep -F 'NVIM {_NEOVIM_TAG}'"
 
 
 @brick(profile="shell", name="neovim", check=_NEOVIM_CHECK, verify=_NEOVIM_CHECK)
 def install_neovim() -> None:
     dest = clone_gh("neovim", "neovim", _NEOVIM_TAG)
     run_cmd("make CMAKE_BUILD_TYPE=RelWithDebInfo", cwd=dest)
-    run_cmd("sudo make install", cwd=dest)
+    sudo_make_install(dest)
 
 
 @brick(profile="shell", name="fzf", check="fzf --version", verify="fzf --version")
@@ -148,7 +155,7 @@ def install_tmux() -> None:
     dest = clone_gh("tmux", "tmux", _TMUX_TAG)
     run_cmd("sh autogen.sh", cwd=dest)
     run_cmd("./configure", cwd=dest)
-    run_cmd("sudo make install", cwd=dest)
+    sudo_make_install(dest)
 
 
 @brick(profile="dev", name="node", check="node --version", verify="node --version")

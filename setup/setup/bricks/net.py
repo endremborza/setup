@@ -55,7 +55,7 @@ def install_wireguard() -> None:
 # update anyway); the prompt it suppresses would otherwise hang the run.
 _CADDY_TAG = _v("caddy")
 _CADDY_VERSION = _CADDY_TAG.lstrip("v")
-_CADDY_CHECK = f"caddy version | grep -qF '{_CADDY_VERSION}'"
+_CADDY_CHECK = f"caddy version | grep -F '{_CADDY_VERSION}'"
 
 
 @brick(profile="web", name="caddy", check=_CADDY_CHECK, verify=_CADDY_CHECK)

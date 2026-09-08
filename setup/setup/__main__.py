@@ -56,12 +56,13 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.cmd == "run":
-        run(
+        ok = run(
             profiles=_resolve_cli_profiles(args.profile),
             dry_run=args.dry_run,
             brick_name=args.brick,
             force=args.force,
         )
+        raise SystemExit(0 if ok else 1)
     elif args.cmd == "list":
         width = max((len(b.profile_label) for b in REGISTRY), default=4)
         for b in REGISTRY:
