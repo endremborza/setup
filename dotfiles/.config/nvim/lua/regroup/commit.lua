@@ -2,6 +2,8 @@ local M = {}
 
 local git = require('regroup.git')
 
+local NAME = 'regroup://commit'
+
 local function notify(msg, level)
   vim.notify(msg, level or vim.log.levels.INFO)
 end
@@ -15,10 +17,14 @@ end
 -- context listing what is being committed. Comment lines are stripped before `on_write`
 -- receives the message; an error thrown there keeps the buffer open to retry.
 function M.buffer(seed, comments, on_write)
-  local existing = vim.fn.bufnr('regroup://commit')
-  if existing ~= -1 then vim.api.nvim_buf_delete(existing, { force = true }) end
+  for _, b in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_get_name(b) == NAME then vim.api.nvim_buf_delete(b, { force = true }) end
+  end
   local buf = vim.api.nvim_create_buf(false, false)
-  vim.api.nvim_buf_set_name(buf, 'regroup://commit')
+  -- no swap file, and set before the name: the buffer backs no file, and a swap file for
+  -- this name blocks the naming (E325) whenever another nvim still holds one
+  vim.bo[buf].swapfile = false
+  vim.api.nvim_buf_set_name(buf, NAME)
 
   local lines = vim.list_extend({}, seed)
   table.insert(lines, '')
