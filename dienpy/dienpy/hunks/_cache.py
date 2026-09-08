@@ -60,6 +60,17 @@ def entry(root: str, config: Config) -> dict[str, Any] | None:
     return (data or {}).get("analyses", {}).get(config.key)
 
 
+def missing(root: str, config: Config) -> SystemExit:
+    """The error for a config without a run, naming the runs that do exist."""
+    keys = list((load(root) or {}).get("analyses", {}))
+    hint = (
+        f"cached: {' '.join(f'[{k}]' for k in keys)} — `hunks use` one, or `hunks run`"
+        if keys
+        else "`hunks run` first"
+    )
+    return SystemExit(f"no cached run for [{config.key}] — {hint}")
+
+
 def prune(root: str, hunks: list[Hunk]) -> None:
     """Drop analyses covering none of the live hunks — every hunks command calls this."""
     data = load(root)

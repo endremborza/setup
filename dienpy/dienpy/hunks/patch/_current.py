@@ -34,6 +34,6 @@ def load() -> Current:
     config = _config.resolve((), _cache.last_config(root))
     entry = _cache.entry(root, config)
     if not entry:
-        raise SystemExit(f"no cached run for [{config.key}] — dienpy hunks run first")
+        raise _cache.missing(root, config)
     live = {h.id for h in hunks}
     return Current(root, config, hunks, _patches.sanitize(entry["patches"], live))

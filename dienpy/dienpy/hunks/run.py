@@ -78,9 +78,7 @@ def main(
         if force or full:
             raise SystemExit("--extend never re-partitions: drop --force/--full")
         if not entry:
-            raise SystemExit(
-                f"no cached run for [{config.key}] — drop --extend to partition from scratch"
-            )
+            raise _cache.missing(root, config)
     backend = _engine.backend_for(config, auth)
     # patches are sanitized against the whole diff so a scoped run never evicts
     # out-of-scope patches; only in-scope hunks are handed to the model
