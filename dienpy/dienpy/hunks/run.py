@@ -88,7 +88,6 @@ def main(
     scope = {h.id for h in hunks}
     extent = f" of {len(all_hunks)} under {path}" if path else ""
     print(f"regroup: {len(hunks)} hunks{extent} [{config.key}]")
-    _cache.touch_last(root, config)
 
     existing = _patches.sanitize(entry["patches"], live) if entry else []
     placed = {hid for p in existing for hid in p["hunks"]}

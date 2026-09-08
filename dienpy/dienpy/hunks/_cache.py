@@ -2,11 +2,14 @@
 
 `analyses` is keyed by config (`granularity|model|context`); an entry holds the patches,
 the hunk ids they cover, its config and time; `last` is the config the shell and nvim
-act on. Every hunks command prunes entries that no longer describe any live hunk.
+act on — the run written last, or the one `use` picked. Every hunks command prunes
+entries that no longer describe any live hunk.
 """
 
 import dataclasses
 import json
+import os
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -78,11 +81,12 @@ def touch_last(root: str, config: Config) -> None:
 def set_entry(
     root: str, config: Config, hunks: list[Hunk], patches: list[dict]
 ) -> None:
-    """Write the entry; `time` only advances when its content actually changed.
+    """Write the entry and make its run current; `time` only advances when the content changed.
 
     `ids` records what the patches cover, a subset of the live diff for a `--path` run.
     """
     data = load(root) or {"version": VERSION, "analyses": {}}
+    data["last"] = dataclasses.asdict(config)
     grouped = {hid for p in patches for hid in p["hunks"]}
     payload = {
         "ids": [h.id for h in hunks if h.id in grouped],
