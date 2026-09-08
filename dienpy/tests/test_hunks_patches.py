@@ -38,6 +38,8 @@ def test_mint_and_select() -> None:
     assert select(patches, ("2", patches[0]["id"])) == [patches[1], patches[0]]
     with pytest.raises(SystemExit, match="no patch"):
         select(patches, ("nope",))
+    digits = [{"id": "p1", "hunks": []}, {"id": "000001", "hunks": []}]
+    assert select(digits, ("000001", "1")) == [digits[1], digits[0]]
     live = {"b" * 12, "1" * 12}
     assert hunk_ids(patches, ("1", "1" * 12, "b" * 12), live) == ["b" * 12, "1" * 12]
     with pytest.raises(SystemExit, match="not in the current diff"):

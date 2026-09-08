@@ -45,13 +45,13 @@ def select(patches: list[dict], tokens: tuple[str, ...]) -> list[dict]:
     """Patches named by id or 1-based position, in the order given."""
     out = []
     for tok in tokens:
-        if tok.isdigit() and 1 <= int(tok) <= len(patches):
-            out.append(patches[int(tok) - 1])
-            continue
         found = [p for p in patches if p["id"] == tok]
-        if not found:
+        if found:
+            out.append(found[0])
+        elif tok.isdigit() and 1 <= int(tok) <= len(patches):
+            out.append(patches[int(tok) - 1])
+        else:
             raise SystemExit(f"no patch '{tok}' in the current run")
-        out.append(found[0])
     return out
 
 
