@@ -84,9 +84,14 @@ local function engine(st, args)
     notify('regroup: ' .. git.output(res), vim.log.levels.ERROR)
     return false
   end
-  state.refresh(st)
-  refresh_signs()
-  vim.cmd('checktime')
+  -- the write already happened: a redraw that fails is its own error, never the write's,
+  -- since a retry would apply the same patch twice
+  local ok, err = pcall(function()
+    state.refresh(st)
+    refresh_signs()
+    vim.cmd('checktime')
+  end)
+  if not ok then notify('regroup: stale view — ' .. tostring(err), vim.log.levels.ERROR) end
   return true, vim.trim(res.stdout or '')
 end
 
@@ -201,6 +206,7 @@ function M.reopen()
   if not st then
     return notify('no regroup session — run :Regroup', vim.log.levels.WARN)
   end
+  state.refresh(st)
   M.pick_patches({ select = st.pos and st.pos.patch })
 end
 
