@@ -153,15 +153,20 @@ def guard_foreign(root: str, ids: list[str]) -> None:
             )
 
 
-def bury(root: str, ids: list[str], title: str) -> None:
-    stage(root, ids)
+def stage_alone(root: str, ids: list[str]) -> None:
+    """Stage `ids` into an index that holds nothing else — the guard runs first, so a
+    refusal changes nothing."""
     guard_foreign(root, ids)
+    stage(root, ids)
+
+
+def bury(root: str, ids: list[str], title: str) -> None:
+    stage_alone(root, ids)
     _hunks._git(root, ["stash", "push", "--staged", "-m", GRAVEYARD + title])
 
 
 def commit(root: str, ids: list[str], message: str) -> str:
-    """Stage `ids`, refuse foreign index content, commit; returns the short hash."""
-    stage(root, ids)
-    guard_foreign(root, ids)
+    """Returns the short hash."""
+    stage_alone(root, ids)
     _hunks._git(root, ["commit", "-q", "-F", "-"], stdin=message)
     return _hunks._git(root, ["rev-parse", "--short", "HEAD"]).strip()

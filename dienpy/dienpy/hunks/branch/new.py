@@ -15,8 +15,7 @@ from . import _ops
 
 def _move_to_worktree(root: str, wt: Path, ids: list[str], message: str) -> str:
     """Carry staged hunks over as a stash — the stash list is shared, git handles every file kind."""
-    _apply.stage(root, ids)
-    _apply.guard_foreign(root, ids)
+    _apply.stage_alone(root, ids)
     _ops.git(root, "stash", "push", "--staged", "-q", "-m", _apply.GRAVEYARD + "moving")
     _ops.git(str(wt), "stash", "pop", "--index", "-q")
     _ops.git(str(wt), "commit", "-q", "-F", "-", stdin=message)
