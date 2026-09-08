@@ -79,13 +79,21 @@ def main(
             f"squashing {name} onto {onto} conflicts — merge {onto} into {name}, then land again"
         )
     if split:
-        landings = _split(root, split, auth)
+        try:
+            landings = _split(root, split, auth)
+        except SystemExit as e:
+            where = f"; leftovers in stash '{_ops.LEFTOVERS}{name}'" if stashed else ""
+            raise SystemExit(
+                f"{e}\nsquashed diff left uncommitted on {onto}{where}"
+            ) from None
     else:
         _ops.git(root, "commit", "-q", "-F", "-", stdin=msg)
         landings = [_ops.git(root, "rev-parse", "--short", "HEAD")]
     if _ops.git(root, "merge-base", base, tip) == base:
         landed_tree = _ops.git(root, "rev-parse", "HEAD^{tree}")
         if landed_tree != _ops.git(root, "rev-parse", f"{tip}^{{tree}}"):
+            if stashed:
+                _ops.pop_leftovers(root)
             raise SystemExit(
                 f"landing tree differs from {name} — inspect before pushing"
             )
