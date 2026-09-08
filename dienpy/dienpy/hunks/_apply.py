@@ -40,6 +40,20 @@ def _rebase_header(header: str, path: str) -> str:
     return "\n".join(out)
 
 
+def _whole_families(hunks: list[Hunk], sel: set[str]) -> None:
+    """Identical hunks differ only by parse order, which the index and worktree views do
+    not share, and git apply lands a lone one on whichever twin's context comes first."""
+    families: dict[str, list[str]] = {}
+    for h in hunks:
+        families.setdefault(h.id.split("~")[0], []).append(h.id)
+    for members in families.values():
+        if len(members) > 1 and not sel.isdisjoint(members) and not sel >= set(members):
+            raise SystemExit(
+                f"hunks {', '.join(members)} are identical — act on all of them at once "
+                "(`patch move` them into one patch)"
+            )
+
+
 def _split(
     hunks: list[Hunk], ids: list[str], renamed: set[str]
 ) -> tuple[str | None, list[str]]:
@@ -49,6 +63,7 @@ def _split(
     unknown = sel - {h.id for h in hunks}
     if unknown:
         raise SystemExit(f"unknown hunk id(s): {', '.join(sorted(unknown))}")
+    _whole_families(hunks, sel)
     patch: list[str] = []
     paths: list[str] = []
     seen_header: set[str] = set()

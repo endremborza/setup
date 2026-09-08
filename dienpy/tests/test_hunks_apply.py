@@ -58,6 +58,26 @@ def test_commit_refuses_foreign_index(tmp_path: Path) -> None:
     _apply.stage(root, [a2])
     with pytest.raises(SystemExit, match="outside the patch"):
         _apply.commit(root, [a1], "x\n")
+    assert _staged(repo) == {a2}  # the refusal changed nothing
+
+
+def test_identical_hunks_move_as_a_family(tmp_path: Path) -> None:
+    repo = make(tmp_path)
+    root = str(repo)
+    block = list("abcdefg")
+    write(repo, "dup.txt", block * 3)
+    git(repo, "add", "dup.txt")
+    git(repo, "commit", "-qm", "dup")
+    lines = block * 3
+    lines[3], lines[17] = "D", "D"
+    write(repo, "dup.txt", lines)
+    first, second = ids(_hunks.parse(root), "dup.txt")
+    assert second == first + "~2"
+    with pytest.raises(SystemExit, match="identical"):
+        _apply.stage(root, [second])
+    assert _staged(repo) == set()
+    assert _apply.stage(root, [first, second]) == 2
+    assert ids(_hunks.parse(root, staged=True), "dup.txt") == [first, second]
 
 
 def test_staged_rename_is_rebased_and_skipped(tmp_path: Path) -> None:
