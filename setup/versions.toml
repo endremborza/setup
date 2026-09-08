@@ -57,3 +57,8 @@ checked = "2026-04-21"
 tag = "1.95.0"
 source = "github:rust-lang/rust"
 checked = "2026-04-19"
+
+[caddy]
+tag = "v2.11.4"
+source = "github:caddyserver/caddy"
+checked = "2026-09-08"

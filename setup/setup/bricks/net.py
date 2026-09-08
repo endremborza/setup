@@ -2,7 +2,8 @@ import getpass
 from pathlib import Path
 
 from setup.runner import brick
-from setup.util import apt_install, run_cmd, write_system_file
+from setup.util import apt_install, run_cmd, write_system_file, ONSET_PATH
+from setup.versions import get as _v
 
 # Input-only hardening: default-deny inbound except lo, established, icmp,
 # ssh/http/https and the wireguard port. The forward chain is deliberately not
@@ -44,16 +45,29 @@ def install_wireguard() -> None:
 
 
 # Config (/etc/caddy/Caddyfile) and service state are the fleet controller's
-# job — `fleet caddy` renders from its inventory and deploys on update. The
-# distro package is deliberately used as-is (auto-HTTPS needs no plugins).
-@brick(
-    profile="web",
-    name="caddy",
-    check="dpkg -s caddy 2>/dev/null | grep -q 'Status: install ok'",
-    verify="command -v caddy",
-)
+# job — `fleet caddy` renders from its inventory and deploys on update.
+#
+# Upstream's own .deb, not the distro package: noble froze caddy at 2.6.2,
+# which predates the `basic_auth` directive the render emits. The vendor
+# package carries the same unit, `caddy` user and /etc/caddy layout, so this
+# is a straight upgrade of the distro one. --force-confold keeps the rendered
+# Caddyfile, a conffile in both packages (fleet rewrites it later in the same
+# update anyway); the prompt it suppresses would otherwise hang the run.
+_CADDY_TAG = _v("caddy")
+_CADDY_VERSION = _CADDY_TAG.lstrip("v")
+_CADDY_CHECK = f"caddy version | grep -qF '{_CADDY_VERSION}'"
+
+
+@brick(profile="web", name="caddy", check=_CADDY_CHECK, verify=_CADDY_CHECK)
 def install_caddy() -> None:
-    apt_install(["caddy"])
+    deb = f"caddy_{_CADDY_VERSION}_linux_amd64.deb"
+    url = f"https://github.com/caddyserver/caddy/releases/download/{_CADDY_TAG}/{deb}"
+    ONSET_PATH.mkdir(parents=True, exist_ok=True)
+    run_cmd(f"curl -fsSLO {url}", cwd=ONSET_PATH)
+    run_cmd(
+        f"sudo apt-get install -y -o Dpkg::Options::=--force-confold ./{deb}",
+        cwd=ONSET_PATH,
+    )
 
 
 @brick(
