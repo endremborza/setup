@@ -9,6 +9,17 @@ from pathlib import Path
 _TOML_PATH = Path(__file__).parent.parent / "versions.toml"
 
 
+# Upstream tag formats disagree with the pins they name: `tectonic@0.17.0`,
+# `jq-1.8.2`, `bun-v1.4.2`, `v0.12.5`, `3.7c`. Compare the number, never the
+# raw string, or a tool reads as behind forever.
+_NUMBER = re.compile(r"\d+\.\d+[\w.\-]*")
+
+
+def number(tag: str) -> str:
+    m = _NUMBER.search(tag)
+    return m.group(0) if m else ""
+
+
 @dataclass
 class ToolVersion:
     name: str
