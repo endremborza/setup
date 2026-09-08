@@ -29,8 +29,12 @@ def _path(root: str) -> Path:
 
 
 def _write(root: str, data: dict[str, Any]) -> None:
+    """Atomic: nvim's background `run --extend` and a shell command may write concurrently."""
     data["version"] = VERSION
-    _path(root).write_text(json.dumps(data))
+    p = _path(root)
+    tmp = p.with_name(p.name + ".tmp")
+    tmp.write_text(json.dumps(data))
+    os.replace(tmp, p)
 
 
 def load(root: str) -> dict[str, Any] | None:
