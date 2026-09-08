@@ -33,7 +33,7 @@ Invariants:
 
 ## Response Expectations
 - If something is ambiguous, or a plan is too complex with many possible paths, ask precise clarifying questions.
-- Be concise.
+- Be concise. A question gets an answer, not an essay: lead with it in a sentence, and stop there unless more was asked. Caveats earn a line only when they change what I would do. No recap of what I just asked, no inventory of what was checked, no bullet list where two sentences do.
 - Do not include tutorial-style commentary.
 - When a mistake is made, take note of it in a persistent way, to avoid making it again.
 
