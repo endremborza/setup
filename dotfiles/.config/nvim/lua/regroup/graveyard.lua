@@ -25,11 +25,6 @@ local function resolve(root, entry)
   error('graveyard entry no longer exists: ' .. entry.title, 0)
 end
 
-function M.bury(root, title)
-  local res = git.git(root, { 'stash', 'push', '--staged', '-m', M.PREFIX .. title })
-  assert(res.code == 0, 'git stash push --staged failed:\n' .. (res.stderr or '') .. (res.stdout or ''))
-end
-
 function M.pop(root, entry)
   local res = git.git(root, { 'stash', 'pop', resolve(root, entry) })
   assert(res.code == 0, 'git stash pop failed (entry kept):\n' .. (res.stderr or '') .. (res.stdout or ''))
