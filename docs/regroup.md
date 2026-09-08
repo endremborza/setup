@@ -56,6 +56,8 @@ Model access goes through `dienpy.ai` ([dienpy/AGENTS.md](../dienpy/AGENTS.md#th
 
 `dotfiles/.config/nvim/lua/regroup/` parses no diff and writes no git state: `state.lua` reads `hunks list --json`, `ui.lua` calls `hunks patch …`, `hunks branch …`, `hunks use` and `hunks run --extend`, forwarding a config it read from the listing, and reloads after each. `review.lua` (diff windows) and `commit.lua` (commit buffer) are plain-git views shared with the `<leader>gf/gr/gb` pickers in `init.lua`; `graveyard.lua` is `git stash list` filtered on the prefix.
 
+The seam has two rules the engine and the plugin both keep: a `--json` payload owns stdout alone, every diagnostic (prune included) goes to stderr; and a command's exit status is the write's alone — a reload that fails after a successful write is reported on its own, since retrying would apply the same patch twice.
+
 `<leader>gg` opens the patch picker on the current run, `<leader>gG` the run picker; `:Regroup <tokens>` narrows to one cached run; `:RegroupBranches` lists patch branches (switch, land, drop); `:RegroupGraveyard` restores buried patches. Hunks no patch covers collect in a synthetic "(unassigned new changes)" patch. Cheatsheet: `:h regroup`.
 
 ## Integrations

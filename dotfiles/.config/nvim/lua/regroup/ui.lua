@@ -718,7 +718,7 @@ function M.pick_branches()
       notify('regroup: ' .. git.output(res), vim.log.levels.ERROR)
       return {}
     end
-    return vim.json.decode(res.stdout)
+    return state.decode(res.stdout)
   end
 
   local function make_finder()

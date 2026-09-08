@@ -13,8 +13,15 @@ local function nil_or(v)
   return v
 end
 
+-- a --json payload owns the engine's stdout; anything else in it is a broken seam
+function M.decode(raw)
+  local ok, data = pcall(vim.json.decode, raw)
+  if not ok then error('regroup: unreadable engine listing — ' .. vim.trim(raw), 0) end
+  return data
+end
+
 function M.fetch(root)
-  local data = vim.json.decode(git.engine_ok(root, { 'list', '--json' }))
+  local data = M.decode(git.engine_ok(root, { 'list', '--json' }))
   data.last = nil_or(data.last)
   return data
 end

@@ -131,3 +131,18 @@ def test_worktree_branch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     assert _log(repo, "main") == ["land side", "init"]
     assert "THIRTYFIVE" not in git(repo, "show", "HEAD:a.txt")
     assert len(ids(_hunks.parse(str(repo)), "a.txt")) == 1  # the unpicked hunk survived
+
+
+def test_show_json_is_pure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    import json
+
+    repo = make(tmp_path)
+    monkeypatch.chdir(repo)
+    by_title = _seed(repo)
+    new.main("feat", by_title["a first"])
+    capsys.readouterr()
+    show.main(json=True)
+    rows = json.loads(capsys.readouterr().out)
+    assert [r["name"] for r in rows] == ["feat"]

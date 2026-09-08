@@ -84,7 +84,11 @@ def prune(root: str, hunks: list[Hunk]) -> None:
     for k in stale:
         del analyses[k]
     _write(root, data)
-    print(f"pruned {len(stale)} stale run{'s' if len(stale) > 1 else ''}")
+    # stderr: `list --json` is a machine interface, its stdout carries the payload alone
+    print(
+        f"pruned {len(stale)} stale run{'s' if len(stale) > 1 else ''}",
+        file=sys.stderr,
+    )
 
 
 def touch_last(root: str, config: Config) -> None:

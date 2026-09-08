@@ -3,7 +3,10 @@
 import json
 from pathlib import Path
 
-from dienpy.hunks import _cache
+from _repo import git, make
+
+from dienpy.hunks import _cache, _hunks
+from dienpy.hunks import list as hunks_list
 from dienpy.hunks._config import Config
 from dienpy.hunks._hunks import Hunk, under
 
@@ -52,8 +55,46 @@ def test_scoped_entry_records_grouped_ids(tmp_path: Path) -> None:
     assert under(hunks, "dat") == []
     patches = [{"id": "p", "title": "t", "message": "", "hunks": ["a"]}]
     _cache.set_entry(root, CONFIG, hunks, patches)
+    assert _cache.last_config(root) == {
+        "granularity": "normal",
+        "model": "sonnet",
+        "context": "bare",
+    }
     entry = _cache.entry(root, CONFIG)
     assert entry and entry["ids"] == ["a"] and entry["patches"] == patches
     stamp = entry["time"]
     _cache.set_entry(root, CONFIG, hunks, patches)
     assert _cache.entry(root, CONFIG)["time"] == stamp
+
+
+def test_json_listing_survives_a_prune(tmp_path: Path, capsys, monkeypatch) -> None:
+    """nvim parses `list --json` stdout: prune's diagnostic must not land in it."""
+    repo = make(tmp_path)
+    monkeypatch.chdir(repo)
+    root = str(repo)
+    hunks = _hunks.parse(root)
+    _cache.set_entry(
+        root,
+        CONFIG,
+        hunks,
+        [{"id": "p", "title": "t", "message": "", "hunks": [h.id for h in hunks]}],
+    )
+    git(repo, "checkout", "--", ".")
+    for p in ("new.txt", "new_bin"):
+        (repo / p).unlink()
+    hunks_list.main(json=True)
+    out = capsys.readouterr()
+    assert json.loads(out.out)["runs"] == {}
+    assert "pruned" in out.err
+
+
+def test_missing_run_names_the_cached_ones(tmp_path: Path) -> None:
+    root = str(tmp_path)
+    other = Config("loose", "sonnet", "bare")
+    assert "`hunks run` first" in str(_cache.missing(root, CONFIG))
+    (tmp_path / ".git").mkdir()
+    _cache.set_entry(
+        root, other, [_h("a")], [{"id": "p", "title": "t", "hunks": ["a"]}]
+    )
+    msg = str(_cache.missing(root, CONFIG))
+    assert "[loose|sonnet|bare]" in msg and "hunks use" in msg
