@@ -4,9 +4,9 @@ source = "github:tectonic-typesetting/tectonic"
 checked = "2026-08-06"
 
 [lua]
-tag = "5.5.0"
+tag = "5.5.1"
 source = "lua.org"
-checked = "2026-04-18"
+checked = "2026-09-08"
 
 [luarocks]
 tag = "3.13.0"
@@ -14,24 +14,24 @@ source = "github:luarocks/luarocks"
 checked = "2026-04-18"
 
 [jq]
-tag = "jq-1.8.1"
+tag = "jq-1.8.2"
 source = "github:jqlang/jq"
-checked = "2026-04-18"
+checked = "2026-09-08"
 
 [neovim]
-tag = "v0.12.1"
+tag = "v0.12.5"
 source = "github:neovim/neovim"
-checked = "2026-04-19"
+checked = "2026-09-08"
 
 [fzf]
-tag = "v0.71.0"
+tag = "v0.74.3"
 source = "github:junegunn/fzf"
-checked = "2026-04-19"
+checked = "2026-09-08"
 
 [tmux]
-tag = "3.6a"
+tag = "3.7c"
 source = "github:tmux/tmux"
-checked = "2026-04-18"
+checked = "2026-09-08"
 
 [alacritty]
 tag = "v0.17.0"
@@ -39,9 +39,9 @@ source = "github:alacritty/alacritty"
 checked = "2026-04-19"
 
 [nerd-fonts]
-tag = "v3.4.0"
+tag = "v3.5.1"
 source = "github:ryanoasis/nerd-fonts"
-checked = "2026-04-19"
+checked = "2026-09-08"
 
 [logseq]
 tag = "0.10.15"
@@ -49,9 +49,9 @@ source = "github:logseq/logseq"
 checked = "2026-04-19"
 
 [bun]
-tag = "bun-v1.3.13"
+tag = "bun-v1.4.2"
 source = "github:oven-sh/bun"
-checked = "2026-04-21"
+checked = "2026-09-08"
 
 [rust]
 tag = "1.95.0"
