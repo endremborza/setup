@@ -1,2 +1,0 @@
-#! /bin/sh
-cd ~/mega/hacking/misc; jupyter-notebook
