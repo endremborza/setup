@@ -176,45 +176,40 @@ def _run_prompt(
 
 
 def _run_cmd(
-    root: Path, cmd: str, profile: str, backend: ai.Cli, log: _log.RunLog, timeout: int
+    root: Path,
+    cmd: str,
+    profile: str,
+    backend: ai.Cli,
+    log: _log.RunLog,
+    timeout: int,
+    capture: bool,
 ) -> ai.Outcome:
+    """A shell command as a job; `capture` makes its console output the outcome's result."""
     env = {**os.environ, "FEED_PROFILE": profile, "FEED_MODEL": backend.model}
+    lines: list[str] = []
     with log.console() as out:
-        proc = subprocess.Popen(
+
+        def tee(proc: subprocess.Popen) -> ai.Outcome:
+            for line in proc.stdout:
+                sys.stdout.write(line)
+                out.write(line)
+                if capture:
+                    lines.append(line)
+            return ai.Outcome(result="".join(lines))
+
+        outcome = ai.supervise(
             cmd,
+            timeout,
+            tee,
             shell=True,
             cwd=root,
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            text=True,
         )
-        assert proc.stdout is not None
-        timed_out = threading.Event()
-
-        def _expire() -> None:
-            # flag before kill, so wait() cannot return with the flag still unset
-            timed_out.set()
-            proc.kill()
-
-        timer = threading.Timer(timeout, _expire)
-        timer.start()
-        try:
-            for line in proc.stdout:
-                sys.stdout.write(line)
-                out.write(line)
-            rc = proc.wait()
-        except BaseException:
-            proc.kill()
-            proc.wait()
-            raise
-        finally:
-            timer.cancel()
-    if timed_out.is_set() and rc != 0:
-        return ai.Outcome(
-            returncode=rc, is_error=True, result=f"timed out after {timeout}s"
-        )
-    return ai.Outcome(returncode=rc, is_error=rc != 0)
+    return dataclasses.replace(
+        outcome, is_error=outcome.is_error or outcome.returncode != 0
+    )
 
 
 def _wrapped_prompt(job: Job, profile: str, wrap: str, timeout: int) -> str:
@@ -240,37 +235,35 @@ def run_job(
     before: list[Window],
 ) -> Result:
     backend = _airun.backend(profile, tool="feed", timeout=s.timeout)
+    timeout = backend.timeout
     _say(f"▶ {job.name} on {profile} ({backend.model})  [{_describe(before)}]")
-    _close(repo.root, repo.hunks)
     log = _log.RunLog(s.log_base / repo.name, job.name)
     started = time.monotonic()
     if job.prompt is not None and not repo.wrap:
-        outcome = _run_prompt(repo.root, job, s, profile, backend, usage, log)
-    elif job.prompt is not None:
-        wrapped = _wrapped_prompt(job, profile, repo.wrap, s.timeout)
-        outcome = _run_cmd(
-            repo.root, wrapped, profile, backend, log, s.timeout + _WRAP_GRACE
-        )
+        outcome = _run_prompt(repo.root, job, s, backend, usage, log)
     else:
-        outcome = _run_cmd(repo.root, job.cmd, profile, backend, log, s.timeout)
+        wrapped = job.prompt is not None
+        cmd = _wrapped_prompt(job, profile, repo.wrap, timeout) if wrapped else job.cmd
+        outcome = _run_cmd(
+            repo.root,
+            cmd,
+            profile,
+            backend,
+            log,
+            timeout + _WRAP_GRACE if wrapped else timeout,
+            capture=wrapped,
+        )
     minutes = (time.monotonic() - started) / 60
     drift = _close(repo.root, repo.hunks)
+    after = _peek(usage)
     state = "ok" if outcome.ok else f"failed ({outcome.subtype or outcome.returncode})"
     report = (
         log.report(outcome, f"{job.name} — {profile} — {state}")
         if outcome.result.strip()
         else None
     )
-    try:
-        after = usage()
-    except Exception:
-        after = []
-    b, a = _session(before), _session(after)
-    cost = a.percent - b.percent if a and b and a.resets_at == b.resets_at else None
-    limited = not outcome.ok and (
-        any(w.percent >= 100 for w in after if _gate.applies(w, backend.model))
-        or bool(_LIMIT_HINT.search(outcome.result))
-    )
+    cost = _cost(_session(before), _session(after))
+    limited = _limited(outcome, after, backend.model) is not None
     _say(
         f"■ {job.name}: {state}, {outcome.turns} turns, {minutes:.0f} min, hunks {drift}  [{_describe(after) or '?'}]"
     )
