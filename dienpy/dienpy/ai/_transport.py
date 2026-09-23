@@ -8,17 +8,31 @@ response_format, --json-schema); without one it is the reply text.
 `launch` is the other cli shape: a session with inherited stdio (interactive, or
 `-p` streaming to the terminal / a stream-json log) — what a shell shortcut or an
 unattended queue starts, as opposed to the captured call `send` makes.
+
+`supervise` is the one child-process runner under both: a timeout that kills the
+whole process group, and a launcher signal (SIGTERM, SIGHUP, Ctrl-C) that takes the
+child down before the launcher exits.
 """
 
+import contextlib
 import dataclasses
 import json
 import os
+import signal
 import subprocess
 import threading
+from collections.abc import Callable, Iterator
 from typing import IO, Any
 
 from . import _stream
 from ._backend import GEMINI_BUDGETS, Api, Backend, Cli, Openai
+
+# the outcome subtype of a run `supervise` had to kill
+TIMEOUT = "timeout"
+
+# thinking tokens count against max_tokens, so a caller's reply budget is only a floor
+_THINKING_FLOOR = 16000
+_LIST_TIMEOUT = 30
 
 
 def send(
@@ -204,6 +218,84 @@ def cli_env(backend: Cli) -> dict[str, str]:
     return env
 
 
+@contextlib.contextmanager
+def _terminating() -> Iterator[None]:
+    """SIGTERM/SIGHUP raise in the launcher, so the child is taken down on the way out."""
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+
+    def raise_exit(signum: int, frame: object) -> None:
+        raise SystemExit(128 + signum)
+
+    previous = {
+        s: signal.signal(s, raise_exit) for s in (signal.SIGTERM, signal.SIGHUP)
+    }
+    try:
+        yield
+    finally:
+        for s, handler in previous.items():
+            signal.signal(s, handler)
+
+
+def supervise(
+    cmd: list[str] | str,
+    timeout: float | None,
+    consume: Callable[[subprocess.Popen], _stream.Outcome],
+    *,
+    group: bool = True,
+    **popen: Any,
+) -> _stream.Outcome:
+    """Run `cmd` to completion; `consume` reads the child while it runs.
+
+    The child leads its own process group so a timeout or a dying launcher kills
+    everything it spawned. `group=False` leaves it in the terminal's session: an
+    interactive claude must stay in the foreground group to own the tty (and inherits
+    the terminal's own Ctrl-C and hangup). Pipes decode with replacement, so stray
+    bytes never abort a run.
+    """
+    proc = subprocess.Popen(cmd, start_new_session=group, errors="replace", **popen)
+    timed_out = threading.Event()
+
+    def kill() -> None:
+        try:
+            if group:
+                os.killpg(proc.pid, signal.SIGKILL)
+            else:
+                proc.kill()
+        except ProcessLookupError:
+            pass
+
+    def expire() -> None:
+        # flag before kill, so wait() cannot return with the flag still unset
+        timed_out.set()
+        kill()
+
+    timer = threading.Timer(timeout, expire) if timeout else None
+    with _terminating():
+        if timer:
+            timer.start()
+        try:
+            outcome = consume(proc)
+            rc = proc.wait()
+        except BaseException:
+            kill()
+            proc.wait()
+            raise
+        finally:
+            if timer:
+                timer.cancel()
+    if timed_out.is_set():
+        return dataclasses.replace(
+            outcome,
+            returncode=rc,
+            is_error=True,
+            subtype=TIMEOUT,
+            result=f"timed out after {timeout:.0f}s",
+        )
+    return dataclasses.replace(outcome, returncode=rc)
+
+
 def launch(
     backend: Cli,
     prompt: str | None,
@@ -240,49 +332,38 @@ def launch(
             cmd += ["--resume", resume]
         if log is not None:
             cmd += ["--output-format", "stream-json", "--verbose"]
-    stdin = subprocess.PIPE if prompt is not None else None
-    stdout = subprocess.PIPE if log is not None else None
+    unread = False
+
+    def consume(proc: subprocess.Popen) -> _stream.Outcome:
+        nonlocal unread
+        if proc.stdin is not None:
+            try:
+                proc.stdin.write(prompt or "")
+                proc.stdin.close()
+            except BrokenPipeError:
+                unread = True
+        if proc.stdout is None:
+            return _stream.Outcome()
+        return _stream.follow(proc.stdout, log)
+
     try:
-        proc = subprocess.Popen(
-            cmd, stdin=stdin, stdout=stdout, text=True, cwd=cwd, env=cli_env(backend)
+        outcome = supervise(
+            cmd,
+            None if interactive else backend.timeout,
+            consume,
+            group=not interactive,
+            stdin=subprocess.PIPE if prompt is not None else None,
+            stdout=subprocess.PIPE if log is not None else None,
+            cwd=cwd,
+            env=cli_env(backend),
         )
     except FileNotFoundError:
         raise SystemExit("claude CLI not found on PATH")
-    timed_out = threading.Event()
-
-    def _expire() -> None:
-        # flag before kill, so wait() cannot return with the flag still unset
-        timed_out.set()
-        proc.kill()
-
-    timer = threading.Timer(backend.timeout, _expire)
-    if not interactive:
-        timer.start()
-    try:
-        if proc.stdin is not None:
-            proc.stdin.write(prompt or "")
-            proc.stdin.close()
-        outcome = (
-            _stream.follow(proc.stdout, log)
-            if proc.stdout is not None
-            else _stream.Outcome()
-        )
-        rc = proc.wait()
-    except BaseException:
-        # the session must not outlive an interrupted launcher (Ctrl-C, SIGTERM)
-        proc.kill()
-        proc.wait()
-        raise
-    finally:
-        timer.cancel()
-    if timed_out.is_set() and rc != 0:
+    if unread and outcome.ok:
         return dataclasses.replace(
-            outcome,
-            returncode=rc,
-            is_error=True,
-            result=f"timed out after {backend.timeout}s",
+            outcome, is_error=True, result="claude exited before reading the prompt"
         )
-    return dataclasses.replace(outcome, returncode=rc)
+    return outcome
 
 
 def _send_cli(
@@ -298,28 +379,35 @@ def _send_cli(
     ]
     if schema is not None:
         cmd += ["--json-schema", json.dumps(schema)]
-    env = cli_env(backend)
+    stderr: list[str] = []
+
+    def consume(proc: subprocess.Popen) -> _stream.Outcome:
+        out, err = proc.communicate(prompt)
+        stderr.append(err)
+        return _stream.Outcome(result=out)
+
     try:
-        res = subprocess.run(
+        res = supervise(
             cmd,
-            input=prompt,
-            capture_output=True,
-            text=True,
+            backend.timeout,
+            consume,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             cwd=cwd,
-            env=env,
-            timeout=backend.timeout,
+            env=cli_env(backend),
         )
-    except subprocess.TimeoutExpired:
-        raise SystemExit(f"claude timed out after {backend.timeout}s")
     except FileNotFoundError:
         raise SystemExit("claude CLI not found on PATH")
+    if res.subtype == TIMEOUT:
+        raise SystemExit(f"claude {res.result}")
     if res.returncode != 0:
-        raise SystemExit("claude failed: " + _cli_failure(res))
+        raise SystemExit("claude failed: " + _cli_failure(res, stderr[0]))
     try:
-        outer = json.loads(res.stdout)
+        outer = json.loads(res.result)
     except json.JSONDecodeError:
         raise SystemExit(
-            f"claude returned non-JSON output: {res.stdout.strip()[-400:]}"
+            f"claude returned non-JSON output: {res.result.strip()[-400:]}"
         )
     if outer.get("is_error"):
         raise SystemExit(f"claude error: {outer.get('result')}")
@@ -339,15 +427,15 @@ def _send_cli(
     return payload
 
 
-def _cli_failure(res: subprocess.CompletedProcess) -> str:
+def _cli_failure(res: _stream.Outcome, stderr: str) -> str:
     parts = []
     try:
-        outer = json.loads(res.stdout or "")
+        outer = json.loads(res.result or "")
         if isinstance(outer.get("result"), str):
             parts.append(outer["result"])
     except json.JSONDecodeError:
-        if res.stdout and res.stdout.strip():
-            parts.append(res.stdout.strip()[-400:])
-    if res.stderr and res.stderr.strip():
-        parts.append(res.stderr.strip()[-400:])
+        if res.result and res.result.strip():
+            parts.append(res.result.strip()[-400:])
+    if stderr and stderr.strip():
+        parts.append(stderr.strip()[-400:])
     return "\n".join(parts) or f"exit code {res.returncode}"

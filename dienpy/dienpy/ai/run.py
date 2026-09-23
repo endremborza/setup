@@ -84,11 +84,13 @@ def main(
     if commit and not unattended:
         raise SystemExit("--commit adjusts the --unattended rules; pass both")
     outcome = launch(
-        backend(profile, timeout=timeout, auto=auto),
+        backend(profile or "", timeout=timeout, auto=auto),
         read_prompt(file, raw),
         interactive=interactive,
         safe=safe,
         system=unattended_suffix(commit) if unattended else "",
     )
-    if outcome.returncode:
-        raise SystemExit(outcome.returncode)
+    if outcome.is_error and outcome.result:
+        print(outcome.result, file=sys.stderr)
+    if not outcome.ok:
+        raise SystemExit(outcome.returncode or 1)
