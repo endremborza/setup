@@ -1,51 +1,59 @@
 #!/bin/bash
 # Defaults mirror .vars: restow runs before ~/.vars is stowed on a fresh machine.
+set -euo pipefail
 : "${SYNC_ROOT:=$HOME/synced}"
 DIEN_ROOT=${DIEN_ROOT:-$SYNC_ROOT/composites/pkm/diencephalon}
 HYPO_ROOT=${HYPO_ROOT:-$SYNC_ROOT/composites/pkm/hypothalamus}
 SHARE_DIR=${SHARE_DIR:-$SYNC_ROOT/share}
+ENVD=$HOME/.config/environment.d
 
 # -R restows: obsolete links from renamed/deleted sources get pruned.
+restow() { stow -R --no-folding --verbose=1 "$@"; }
+
 cd "$DIEN_ROOT"
-stow -R --no-folding --verbose=1 --ignore=.claude -t ~ dotfiles
+restow --ignore=.claude -t ~ dotfiles
 
 if [ -d "$HYPO_ROOT" ]; then
     cd "$HYPO_ROOT"
-    [ -d dotfiles ] && stow -R --no-folding --verbose=1 -t ~ dotfiles
-    [ -d secrets ] && stow -R --no-folding --verbose=1 -t ~ secrets
-
-    if [ -d "$HYPO_ROOT/local-dotfiles/host-$(hostname)" ]; then
-        cd "$HYPO_ROOT/local-dotfiles"
-        stow -R --no-folding --verbose=1 -t ~ "host-$(hostname)"
+    [ ! -d dotfiles ] || restow -t ~ dotfiles
+    [ ! -d secrets ] || restow -t ~ secrets
+    if [ -d "local-dotfiles/host-$(hostname)" ]; then
+        cd local-dotfiles
+        restow -t ~ "host-$(hostname)"
     fi
 fi
 
 if [ -d "$SHARE_DIR" ]; then
     cd "$DIEN_ROOT/dotfiles"
-    stow -R --no-folding --verbose=1 -t "$SHARE_DIR/.claude" .claude
+    restow -t "$SHARE_DIR/.claude" .claude
 fi
 
-# Generate environment.d for systemd user services
-# Sources each file in bash to expand variable references, then outputs KEY=VALUE
-gen_envd() {
-    local src="$1" dst="$2"
-    local keys
-    keys=$(grep -oP '(?<=^export )\w+' "$src")
-    [ -z "$keys" ] && return
-    (
-        . "$src"
-        for k in $keys; do
-            printf '%s=%s\n' "$k" "${!k}"
-        done
-    ) > "$dst"
-}
+# A deleted source is unknown to stow, so its link in ~ dangles until pruned here.
+find ~ -maxdepth 6 -xtype l \
+    \( -lname '*/composites/pkm/diencephalon/dotfiles/*' -o -lname '*/composites/pkm/hypothalamus/*' \) \
+    -print -delete
 
-mkdir -p ~/.config/environment.d
-gen_envd ~/.vars ~/.config/environment.d/10-vars.conf
-[ -f ~/.secret-vars ] && gen_envd ~/.secret-vars ~/.config/environment.d/20-secret-vars.conf
-[ -f ~/.local-vars ] && gen_envd ~/.local-vars ~/.config/environment.d/30-local-vars.conf
+# environment.d carries the same three layers to systemd user services. The
+# layers are sourced on top of each other in one clean shell, so the result
+# depends on the files alone, not on the caller's environment. A missing layer
+# removes its file. environment.d expands $VAR itself, so a literal $ is $$.
+gen_envd() {
+    local src=$1 dst=$2 k
+    if [ ! -f "$src" ]; then rm -f "$dst"; return; fi
+    . "$src"
+    for k in $(grep -oP '(?<=^export )\w+' "$src"); do
+        printf '%s=%s\n' "$k" "${!k//\$/\$\$}"
+    done > "$dst"
+}
+gen_layers() {
+    gen_envd ~/.vars "$ENVD/10-vars.conf"
+    gen_envd ~/.secret-vars "$ENVD/20-secret-vars.conf"
+    gen_envd ~/.local-vars "$ENVD/30-local-vars.conf"
+}
+mkdir -p "$ENVD"
+env -i HOME="$HOME" USER="$USER" PATH="$PATH" ENVD="$ENVD" \
+    bash -c "set -e; $(declare -f gen_envd gen_layers); gen_layers"
 systemctl --user daemon-reload 2>/dev/null || true
 
-# Ensure local alias files exist (sourced unconditionally by shell configs)
+# Sourced unconditionally by .bash_aliases.
 [ -f ~/.local-aliases ] || touch ~/.local-aliases
-[ -f ~/.config/nushell/local-aliases.nu ] || touch ~/.config/nushell/local-aliases.nu
