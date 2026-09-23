@@ -3,4 +3,3 @@
 leftwm-command "UnloadTheme"
 
 pkill polybar
-pkill dunst
