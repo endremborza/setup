@@ -156,8 +156,21 @@ def test_headroom_uses_need_against_session(tmp_path: Path) -> None:
 
 
 def test_order_priority_then_starved_repo(tmp_path: Path) -> None:
-    a = _cand(tmp_path / "a", Meta(unattended=True, priority=3), name="z")
-    b = _cand(tmp_path / "b", Meta(unattended=True, priority=3), name="y")
+    day = datetime.timedelta(days=1)
+    a = _cand(
+        tmp_path / "a", Meta(unattended=True, priority=3), State(last=NOW), name="z"
+    )
+    a2 = _cand(
+        tmp_path / "a",
+        Meta(unattended=True, priority=3),
+        State(last=NOW - 2 * day),
+        name="w",
+    )
+    b = _cand(
+        tmp_path / "b",
+        Meta(unattended=True, priority=3),
+        State(last=NOW - day),
+        name="y",
+    )
     c = _cand(tmp_path / "c", Meta(unattended=True, priority=1), name="x")
-    last = {"a": NOW, "b": NOW - datetime.timedelta(days=1)}
-    assert [x.name for x in _queue.order([a, b, c], last)] == ["x", "y", "z"]
+    assert [x.name for x in _queue.order([a, a2, b, c])] == ["x", "y", "w", "z"]

@@ -26,6 +26,7 @@ DEFAULT_EVERY_H = 12.0
 _COSTS_KEPT = 3
 _DURATION = re.compile(r"^(\d+(?:\.\d+)?)\s*([mhd])$")
 _UNIT_HOURS = {"m": 1 / 60, "h": 1.0, "d": 24.0}
+_FLOOR = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
 
 UsageFn = Callable[[], list[Window]]
 
@@ -280,11 +281,22 @@ def headroom(
     when = f"; resets {wake.astimezone():%a %H:%M}" if wake else ""
     session = next((w for w in verdict.blockers if w.kind == "session"), None)
     if session is not None:
-        return "", f"needs {need:.0f} / have {max(0.0, t.session - session.percent):.0f}{when}"
-    return "", "blocked by " + ", ".join(f"{w.label} {w.percent:.0f}%" for w in verdict.blockers) + when
+        return (
+            "",
+            f"needs {need:.0f} / have {max(0.0, t.session - session.percent):.0f}{when}",
+        )
+    return "", "blocked by " + ", ".join(
+        f"{w.label} {w.percent:.0f}%" for w in verdict.blockers
+    ) + when
 
 
-def order(cands: list[Candidate], last_run: dict[str, datetime.datetime]) -> list[Candidate]:
-    """Priority first, then the repo that has waited longest, then name."""
-    floor = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
-    return sorted(cands, key=lambda c: (c.meta.priority, last_run.get(c.repo.name, floor), c.name))
+def order(cands: list[Candidate]) -> list[Candidate]:
+    """Priority first, then the repo that has waited longest (its latest run of any prompt), then name."""
+    last_run: dict[str, datetime.datetime] = {}
+    for c in cands:
+        if c.state.last and c.state.last > last_run.get(c.repo.name, _FLOOR):
+            last_run[c.repo.name] = c.state.last
+    return sorted(
+        cands,
+        key=lambda c: (c.meta.priority, last_run.get(c.repo.name, _FLOOR), c.name),
+    )
