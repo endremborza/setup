@@ -35,8 +35,12 @@ _RESUME_PROMPT = (
     "The session was interrupted by a usage limit and has been resumed. "
     "Continue where you left off: finish the task and its closing steps, then give the final report."
 )
-_LIMIT_HINT = re.compile(r"usage limit|limit reached", re.IGNORECASE)
+_LIMIT_HINT = re.compile(
+    r"usage limit|limit reached|hit your .*limit|rate limited", re.IGNORECASE
+)
 _MIN_SLEEP = 30
+# a reset stamp that moved by less than this is the same window (api timestamp jitter)
+_SAME_WINDOW = datetime.timedelta(minutes=1)
 
 
 @dataclass(frozen=True)
@@ -72,10 +76,14 @@ class Job:
 @dataclass(frozen=True)
 class Result:
     outcome: ai.Outcome
-    cost: float | None  # session-% consumed, None when a reset fell inside the run
-    drift: str
+    cost: (
+        float | None
+    )  # session-% the run consumed; None when the window reset in between
     report: Path | None
     limited: bool  # the failure was a usage limit: a full applicable window, or the cli said so
+    after: list[
+        Window
+    ]  # measured after the run and its close; the next gate starts from it
 
 
 def _now() -> datetime.datetime:
@@ -251,6 +259,18 @@ def _wrapped_prompt(job: Job, profile: str, wrap: str, timeout: int) -> str:
 _WRAP_GRACE = 300
 
 
+def _cost(before: Window | None, after: Window | None) -> float | None:
+    """Session-% between two readings of one window; None once the window reset in between.
+    An idle window before the run (no reset stamp yet) is the same window at 0."""
+    if before is None or after is None:
+        return None
+    if before.resets_at and (
+        not after.resets_at or abs(after.resets_at - before.resets_at) > _SAME_WINDOW
+    ):
+        return None
+    return after.percent - before.percent
+
+
 def run_job(
     repo: RepoQueue,
     job: Job,
@@ -392,19 +412,16 @@ def choose(
     host: UsageFn,
     now: datetime.datetime,
     fetch: Fetch | None = None,
+    known: dict[int, list[Window]] | None = None,
 ) -> Choice:
-    """Judge every candidate; the first runnable one in priority order is the pick."""
+    """Judge every candidate; the first runnable one in priority order is the pick.
+    `known` seeds the per-source windows (keyed by `id(usage_fn)`) with fresh readings."""
     fetch = fetch or (lambda fn: _usage(fn, s.poll))
-    cache: dict[int, list[Window]] = {}
-    floor = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
-    last_run: dict[str, datetime.datetime] = {}
-    for c in cands:
-        if c.state.last and c.state.last > last_run.get(c.repo.name, floor):
-            last_run[c.repo.name] = c.state.last
+    cache: dict[int, list[Window]] = dict(known or {})
     picked: Candidate | None = None
     profile, ws = "", []
     verdicts: list[tuple[Candidate, str]] = []
-    for c in _queue.order(cands, last_run):
+    for c in _queue.order(cands):
         why = _queue.lifecycle(c, now)
         if not why and _Lock(c.repo.root).held():
             why = "repo busy"
@@ -425,9 +442,11 @@ def choose(
 
 def schedule(repos: list[RepoQueue], s: Settings, usage: UsageFn = windows) -> None:
     """Pick and run the best eligible prompt across the queues until stopped (or once)."""
+    known: dict[int, list[Window]] = {}
     while True:
-        now = _now()
-        choice = choose(_queue.collect(repos), s, usage, now)
+        models.update(quiet=True)
+        choice = choose(_queue.collect(repos), s, usage, _now(), known=known)
+        known = {}
         cand, profile, ws = choice.picked, choice.profile, choice.windows
         if cand is None:
             blocked = [

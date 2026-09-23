@@ -48,18 +48,13 @@ def test_choose_fetches_each_usage_source_once(tmp_path: Path) -> None:
         calls.append(1)
         return WS
 
-    def cand(name: str) -> Candidate:
-        root = tmp_path / name
-        (root / ".git").mkdir(parents=True)
-        path = root / f"{name}.md"
-        path.write_text("x")
-        return Candidate(
-            RepoQueue(root), path, Meta(unattended=True, profiles=("opux",))
-        )
-
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(UTC)
     choice = choose(
-        [cand("a"), cand("b")], Settings(), usage, now, fetch=lambda fn: fn()
+        [_cand(tmp_path, "a"), _cand(tmp_path, "b")],
+        Settings(),
+        usage,
+        now,
+        fetch=lambda fn: fn(),
     )
     assert len(calls) == 1
     assert choice.picked is not None and choice.profile == "opux"
@@ -67,3 +62,12 @@ def test_choose_fetches_each_usage_source_once(tmp_path: Path) -> None:
         "runnable → opux  ← next",
         "runnable → opux",
     ]
+    choose(
+        [_cand(tmp_path, "c")],
+        Settings(),
+        usage,
+        now,
+        fetch=lambda fn: fn(),
+        known={id(usage): WS},
+    )
+    assert len(calls) == 1
