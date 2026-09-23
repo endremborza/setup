@@ -1,11 +1,13 @@
 """Shared prompt material for message-writing leaves: repo context, style anchor, commit rendering."""
 
 import re
+from functools import lru_cache
 from pathlib import Path
 
-from . import _hunks
+from ._hunks import raw, repo, utf8
 
-BATCH_CHAR_LIMIT = 1500
+# a whole series fits one call unless it outgrows a prompt
+BATCH_CHAR_LIMIT = 100_000
 
 
 def project_context(root: str) -> tuple[str, str] | None:
@@ -17,17 +19,19 @@ def project_context(root: str) -> tuple[str, str] | None:
 
 
 def subjects(root: str) -> str:
-    return _hunks._git(root, ["log", "--format=%s", "-15"]).strip()
+    return repo(root).out("log", "--format=%s", "-15")
 
 
-def context_lines(root: str, project: bool = True) -> list[str]:
-    """Project context (optional) + recent subjects — the preamble every prompt shares."""
-    parts = []
+@lru_cache
+def context_lines(root: str, project: bool = True) -> tuple[str, ...]:
+    """Project context (optional) + recent subjects — the preamble every prompt shares,
+    read once per process however many prompts a run builds."""
+    parts: list[str] = []
     ctx = project_context(root) if project else None
     if ctx:
         parts += [f"Project context ({ctx[0]}):", ctx[1], ""]
     parts += ["Recent commit subjects for style:", subjects(root)]
-    return parts
+    return tuple(parts)
 
 
 def message_context(root: str) -> str:
@@ -35,13 +39,14 @@ def message_context(root: str) -> str:
 
 
 def commit_entry(root: str, hash: str, max_diff_chars: int = 0) -> str:
-    msg = _hunks._git(root, ["log", "-1", "--format=%B", hash]).strip()
-    diff = _hunks._git(root, ["show", hash])
+    shown = utf8(raw(repo(root), "show", "--format=%B%x00", hash))
+    msg, _, diff = shown.partition("\0")
+    diff = diff.strip("\n")
     if max_diff_chars and len(diff) > max_diff_chars:
         diff = diff[:max_diff_chars] + "\n... [truncated]"
     return (
         f'<commit hash="{hash}">\n'
-        f"<message>\n{msg}\n</message>\n"
+        f"<message>\n{msg.strip()}\n</message>\n"
         f"<diff>\n{diff}\n</diff>\n"
         f"</commit>"
     )
