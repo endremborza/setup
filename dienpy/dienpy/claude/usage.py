@@ -6,21 +6,14 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from rich.console import Console, Group
-from rich.live import Live
-from rich.progress import BarColumn, Progress, TextColumn
-from rich.rule import Rule
-
 from . import _auth as auth
 
-
-class Http429(Exception):
-    pass
-
-
-console = Console()
 _USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
-_SPANS = {"session": 5 * 3600, "weekly_all": 7 * 24 * 3600, "weekly_scoped": 7 * 24 * 3600}
+_SPANS = {
+    "session": 5 * 3600,
+    "weekly_all": 7 * 24 * 3600,
+    "weekly_scoped": 7 * 24 * 3600,
+}
 
 
 @dataclass(frozen=True)
@@ -93,6 +86,12 @@ def windows(creds_path: Path | None = None) -> list[Window]:
 
 def main(*, watch: bool = False, interval: int = 300) -> None:
     """Show or watch Claude usage windows (5h session, weekly, weekly per scoped model)."""
+    from rich.console import Console, Group
+    from rich.live import Live
+    from rich.progress import BarColumn, Progress, TextColumn
+    from rich.rule import Rule
+
+    console = Console()
     os.system("clear")
     progress = Progress(
         TextColumn("[bold]{task.fields[label]}"),
