@@ -6,5 +6,5 @@ from . import _current
 
 def main(*targets: _patches.Target) -> None:
     cur = _current.load()
-    n = _apply.stage(cur.root, cur.ids(targets))
+    n = _apply.stage(cur.root, cur.ids(targets), cur.hunks, cur.index)
     print(f"staged {n} hunk(s)")

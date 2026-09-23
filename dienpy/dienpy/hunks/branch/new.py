@@ -9,17 +9,24 @@ current checkout stays on its branch — the shape an agent or a parallel branch
 from pathlib import Path
 
 from .. import _apply, _patches
+from .._hunks import Hunk, repo
 from ..patch import _current
 from . import _ops
 
 
-def _move_to_worktree(root: str, wt: Path, ids: list[str], message: str) -> str:
+def _move_to_worktree(
+    root: str,
+    wt: Path,
+    ids: list[str],
+    message: str,
+    live: list[Hunk],
+    index: list[Hunk],
+) -> str:
     """Carry staged hunks over as a stash — the stash list is shared, git handles every file kind."""
-    _apply.stage_alone(root, ids)
-    _ops.git(root, "stash", "push", "--staged", "-q", "-m", _apply.GRAVEYARD + "moving")
-    _ops.git(str(wt), "stash", "pop", "--index", "-q")
-    _ops.git(str(wt), "commit", "-q", "-F", "-", stdin=message)
-    return _ops.git(str(wt), "rev-parse", "--short", "HEAD")
+    _apply.stage_alone(root, ids, live, index)
+    repo(root).out("stash", "push", "--staged", "-q", "-m", _apply.GRAVEYARD + "moving")
+    repo(str(wt)).out("stash", "pop", "--index", "-q")
+    return _apply.commit_staged(str(wt), message)
 
 
 def main(name: str, *patches: _patches.Target, worktree: bool = False) -> None:
@@ -33,19 +40,19 @@ def main(name: str, *patches: _patches.Target, worktree: bool = False) -> None:
     wt = None
     if worktree:
         wt = Path(root).parent / f"{Path(root).name}-{name}"
-        _ops.git(root, "worktree", "add", "-q", str(wt), "-b", name)
+        repo(root).out("worktree", "add", "-q", str(wt), "-b", name)
         print(f"worktree {wt}")
     else:
-        _ops.git(root, "switch", "-q", "-c", name)
-    for patch in picked:
-        ids = [i for i in patch["hunks"] if i in cur.live]
-        if not ids:
-            raise SystemExit(f"nothing left to commit in: {patch['title']}")
+        repo(root).out("switch", "-q", "-c", name)
+    for n, patch in enumerate(picked):
+        if n:
+            cur.reparse()
+        ids = cur.ids((patch["id"],), live_only=True)
         msg = _patches.message(patch)
         short = (
-            _move_to_worktree(root, wt, ids, msg)
+            _move_to_worktree(root, wt, ids, msg, cur.hunks, cur.index)
             if wt
-            else _apply.commit(root, ids, msg)
+            else _apply.commit(root, ids, msg, cur.hunks, cur.index)
         )
         print(f"{short} {patch['title']}")
     print(f"on {name}" if not wt else f"{name} in {wt}")

@@ -14,9 +14,12 @@ def main(*targets: _patches.Target, message: str = "") -> None:
     if message and len(targets) > 1:
         raise SystemExit("--message applies to a single patch")
     cur = _current.load()
-    for patch in _patches.select(cur.patches, targets):
-        ids = [i for i in patch["hunks"] if i in cur.live]
-        if not ids:
-            raise SystemExit(f"nothing left to commit in: {patch['title']}")
-        short = _apply.commit(cur.root, ids, message or _patches.message(patch))
+    picked = _patches.select(cur.patches, targets)
+    for n, patch in enumerate(picked):
+        if n:
+            cur.reparse()
+        ids = cur.ids((patch["id"],), live_only=True)
+        short = _apply.commit(
+            cur.root, ids, message or _patches.message(patch), cur.hunks, cur.index
+        )
         print(f"{short} {patch['title']}")

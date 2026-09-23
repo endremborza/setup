@@ -9,7 +9,7 @@ def main(*args: _patches.Target) -> None:
         raise SystemExit("usage: move <hunk-id…> <patch>")
     cur = _current.load()
     target = _patches.select(cur.patches, (args[-1],))[0]
-    ids = cur.ids(args[:-1])
+    ids = cur.ids(args[:-1], live_only=True)
     for p in cur.patches:
         p["hunks"] = [i for i in p["hunks"] if i not in ids]
     target["hunks"] += ids

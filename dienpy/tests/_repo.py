@@ -45,3 +45,29 @@ def dirty(repo: Path) -> None:
 
 def ids(hunks: list, path: str) -> list[str]:
     return [h.id for h in hunks if h.path == path]
+
+
+def views(repo: Path) -> tuple[list, list]:
+    """The worktree and index views `_apply` entry points take."""
+    from dienpy.hunks import _hunks
+
+    return _hunks.parse(str(repo)), _hunks.parse(str(repo), staged=True)
+
+
+def seed(repo: Path) -> dict[str, str]:
+    """A current run with one patch per hunk of a.txt and b.txt; returns title -> patch id."""
+    from dienpy.hunks import _cache, _config, _hunks
+
+    root = str(repo)
+    hunks = _hunks.parse(root)
+    a1, a2 = ids(hunks, "a.txt")
+    b1 = ids(hunks, "b.txt")[0]
+    patches = [
+        {"id": "p1", "title": "a first", "message": "body one", "hunks": [a1]},
+        {"id": "p2", "title": "a second", "message": "", "hunks": [a2]},
+        {"id": "p3", "title": "b edit", "message": "", "hunks": [b1]},
+    ]
+    config = _config.Config("normal", "sonnet", "bare")
+    _cache.set_entry(root, config, hunks, patches)
+    _cache.touch_last(root, config)
+    return {p["title"]: p["id"] for p in patches}

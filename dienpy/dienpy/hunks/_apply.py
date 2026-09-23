@@ -4,11 +4,14 @@ The index and the worktree diff are two views of one change, and hunk ids agree 
 where the views agree. A staged `git mv` is a whole-file entry in the index while the
 worktree diff folds the move into the renamed file's content hunks under the new path:
 patches for such a file are rebased onto the new path, the only one the index still
-has, and the commit guard skips the move itself.
+has, and the commit guard skips the move itself. An unstaged edit within a staged
+hunk's context merges both into one worktree hunk the index does not hold; the index
+hunks clashing with it (same path, overlapping HEAD lines) are what staging or
+unstaging that merged hunk clears first. Every entry point takes both views parsed,
+so a command parses each once.
 """
 
-from . import _hunks
-from ._hunks import Hunk
+from ._hunks import Hunk, raw, repo, unquote
 
 GRAVEYARD = "regroup: "
 
@@ -94,63 +97,99 @@ def _split(
 
 
 def _apply(root: str, patch: str, *flags: str) -> None:
-    _hunks._git(root, ["apply", *flags, "--whitespace=nowarn", "-"], stdin=patch)
+    raw(repo(root), "apply", *flags, "--whitespace=nowarn", "-", stdin=patch)
 
 
-def stage(root: str, ids: list[str]) -> int:
+def _overlap(a: tuple[int, int], b: tuple[int, int]) -> bool:
+    (s1, n1), (s2, n2) = a, b
+    return s1 < s2 + max(n2, 1) and s2 < s1 + max(n1, 1)
+
+
+def clashes(index: list[Hunk], live: list[Hunk], targets: list[Hunk]) -> list[str]:
+    """Index hunks the worktree view no longer has, where `targets` change the same file."""
+    live_ids = {h.id for h in live}
+    out: list[str] = []
+    for s in index:
+        if s.id in live_ids or rename_source(s):
+            continue
+        for t in targets:
+            if s.path == t.path and (
+                s.kind != "hunk" or t.kind != "hunk" or _overlap(s.old_span, t.old_span)
+            ):
+                out.append(s.id)
+                break
+    return out
+
+
+def stage(root: str, ids: list[str], live: list[Hunk], index: list[Hunk]) -> int:
     """Stage the live hunks among `ids` that the index does not hold yet."""
-    live = _hunks.parse(root)
-    index = _hunks.parse(root, staged=True)
-    staged = by_id(index)
-    todo = [i for i in ids if i not in staged]
+    held = by_id(index)
+    recs = by_id(live)
+    todo = [i for i in ids if i not in held]
+    clash = clashes(index, live, [recs[i] for i in todo if i in recs])
+    if clash:
+        unstage(root, clash, live, index)
     patch, paths = _split(live, todo, staged_renames(index))
     if patch:
         _apply(root, patch, "--cached")
     if paths:
-        _hunks._git(root, ["add", "--", *paths])
+        raw(repo(root), "add", "--", *paths)
     return len(todo)
 
 
-def unstage(root: str, ids: list[str]) -> int:
-    index = _hunks.parse(root, staged=True)
+def unstage(root: str, ids: list[str], live: list[Hunk], index: list[Hunk]) -> int:
     held = by_id(index)
+    recs = by_id(live)
     todo = [i for i in ids if i in held]
+    todo += clashes(index, live, [recs[i] for i in ids if i in recs and i not in held])
     patch, paths = _split(index, todo, staged_renames(index))
     if patch:
         _apply(root, patch, "--cached", "--reverse")
     if paths:
-        _hunks._git(root, ["restore", "--staged", "--", *paths])
+        raw(repo(root), "restore", "--staged", "--", *paths)
     return len(todo)
 
 
-def discard(root: str, ids: list[str]) -> int:
-    """Return the hunks to their HEAD state in both the index and the worktree."""
-    unstage(root, ids)
-    live = _hunks.parse(root)
+def _worktree_paths(h: Hunk) -> list[tuple[str, bool]]:
+    """A whole-file entry's paths, each with whether HEAD has it."""
+    if h.kind == "untracked" or "\nnew file mode " in h.header:
+        return [(h.path, False)]
+    if "\ndeleted file mode " in h.header:
+        return [(h.path, True)]
+    src = rename_source(h)
+    return [(h.path, False), (src, True)] if src else [(h.path, True)]
+
+
+def discard(root: str, ids: list[str], live: list[Hunk], index: list[Hunk]) -> int:
+    """Return the hunks to their HEAD state in both the index and the worktree; an id
+    only the index holds is unstaged, the worktree keeps what the merged hunk has."""
+    unstage(root, ids, live, index)
     recs = by_id(live)
-    content = [i for i in ids if recs[i].kind == "hunk"]
-    patch, _ = _split(live, content, staged_renames(_hunks.parse(root, staged=True)))
+    content = [i for i in ids if i in recs and recs[i].kind == "hunk"]
+    patch, _ = _split(live, content, staged_renames(index))
     if patch:
         _apply(root, patch, "--reverse")
-    clean = [recs[i].path for i in ids if recs[i].kind == "untracked"]
     restore: list[str] = []
+    clean: list[str] = []
     for i in ids:
-        if recs[i].kind == "file":
-            restore += [p for p in (recs[i].path, rename_source(recs[i])) if p]
+        h = recs.get(i)
+        if h is None or h.kind == "hunk":
+            continue
+        for p, in_head in _worktree_paths(h):
+            (restore if in_head else clean).append(p)
+    r = repo(root)
     if restore:
-        _hunks._git(
-            root, ["restore", "--source=HEAD", "--staged", "--worktree", "--", *restore]
-        )
+        raw(r, "restore", "--source=HEAD", "--worktree", "--", *restore)
     if clean:
-        _hunks._git(root, ["clean", "-f", "--", *clean])
+        raw(r, "clean", "-f", "--", *clean)
     return len(ids)
 
 
-def guard_foreign(root: str, ids: list[str]) -> None:
+def guard_foreign(index: list[Hunk], ids: list[str]) -> None:
     """The index may hold nothing beyond `ids` except a staged rename, which is
     index-side noise the worktree diff folds into content hunks."""
     sel = set(ids)
-    for h in _hunks.parse(root, staged=True):
+    for h in index:
         if h.id not in sel and not (h.kind == "file" and rename_source(h)):
             raise SystemExit(
                 f"index contains changes outside the patch ({h.id} {h.path}) — "
@@ -158,20 +197,29 @@ def guard_foreign(root: str, ids: list[str]) -> None:
             )
 
 
-def stage_alone(root: str, ids: list[str]) -> None:
+def stage_alone(root: str, ids: list[str], live: list[Hunk], index: list[Hunk]) -> None:
     """Stage `ids` into an index that holds nothing else — the guard runs first, so a
     refusal changes nothing."""
-    guard_foreign(root, ids)
-    stage(root, ids)
+    guard_foreign(index, ids)
+    stage(root, ids, live, index)
 
 
-def bury(root: str, ids: list[str], title: str) -> None:
-    stage_alone(root, ids)
-    _hunks._git(root, ["stash", "push", "--staged", "-m", GRAVEYARD + title])
+def bury(
+    root: str, ids: list[str], title: str, live: list[Hunk], index: list[Hunk]
+) -> None:
+    stage_alone(root, ids, live, index)
+    raw(repo(root), "stash", "push", "--staged", "-q", "-m", GRAVEYARD + title)
 
 
-def commit(root: str, ids: list[str], message: str) -> str:
-    """Returns the short hash."""
-    stage_alone(root, ids)
-    _hunks._git(root, ["commit", "-q", "-F", "-"], stdin=message)
-    return _hunks._git(root, ["rev-parse", "--short", "HEAD"]).strip()
+def commit_staged(root: str, message: str) -> str:
+    """Commit the index; returns the short hash."""
+    r = repo(root)
+    raw(r, "commit", "-q", "-F", "-", stdin=message)
+    return r.out("rev-parse", "--short", "HEAD")
+
+
+def commit(
+    root: str, ids: list[str], message: str, live: list[Hunk], index: list[Hunk]
+) -> str:
+    stage_alone(root, ids, live, index)
+    return commit_staged(root, message)

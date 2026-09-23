@@ -55,12 +55,15 @@ def select(patches: list[dict], tokens: tuple[str, ...]) -> list[dict]:
     return out
 
 
-def hunk_ids(patches: list[dict], tokens: tuple[str, ...], live: set[str]) -> list[str]:
-    """Expand patch and hunk tokens into live hunk ids, deduplicated, in token order."""
+def hunk_ids(
+    patches: list[dict], tokens: tuple[str, ...], live: set[str], known: set[str]
+) -> list[str]:
+    """Expand patch and hunk tokens into hunk ids, deduplicated, in token order: a
+    patch contributes its live hunks, a bare id must be one of `known`."""
     out: list[str] = []
     for tok in tokens:
         if _HUNK_ID.match(tok):
-            if tok not in live:
+            if tok not in known:
                 raise SystemExit(f"hunk {tok} is not in the current diff")
             ids = [tok]
         else:

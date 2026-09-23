@@ -41,6 +41,10 @@ def test_mint_and_select() -> None:
     digits = [{"id": "p1", "hunks": []}, {"id": "000001", "hunks": []}]
     assert select(digits, ("000001", "1")) == [digits[1], digits[0]]
     live = {"b" * 12, "1" * 12}
-    assert hunk_ids(patches, ("1", "1" * 12, "b" * 12), live) == ["b" * 12, "1" * 12]
+    assert hunk_ids(patches, ("1", "1" * 12, "b" * 12), live, live) == [
+        "b" * 12,
+        "1" * 12,
+    ]
     with pytest.raises(SystemExit, match="not in the current diff"):
-        hunk_ids(patches, ("a" * 12,), live)
+        hunk_ids(patches, ("a" * 12,), live, live)
+    assert hunk_ids(patches, ("a" * 12,), live, live | {"a" * 12}) == ["a" * 12]
