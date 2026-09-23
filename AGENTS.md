@@ -6,12 +6,12 @@ User-facing docs: [README.md](README.md). Deep reference (profiles, env, testing
 
 ## Repo layout
 
-| Directory   | Purpose                                                                    |
-|-------------|----------------------------------------------------------------------------|
+| Directory | Purpose |
+| --- | --- |
 | `dotfiles/` | Generic dotfiles stowed to `~` (nvim, alacritty, tmux, leftwm, shell, etc) |
-| `setup/`    | Profile-based bootstrap package (`setup` CLI)                              |
-| `dienpy/`   | Public Python CLI (`dienpy <module>`) — see `dienpy/AGENTS.md`             |
-| `util/`     | Templates (systemd service/socket) used by `create-service`                |
+| `setup/` | Profile-based bootstrap package (`setup` CLI) |
+| `dienpy/` | Public Python CLI (`dienpy <module>`) — see `dienpy/AGENTS.md` |
+| `util/` | Templates (systemd service/socket) used by `create-service` |
 
 ## Boundary rule
 

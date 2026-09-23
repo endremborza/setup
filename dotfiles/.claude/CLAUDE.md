@@ -29,6 +29,8 @@ Invariants:
 ## Writing md
 - One line per paragraph. Never hard-wrap prose at a column -- wrapping is the editor's job, and hard wraps make a one-word edit reflow the whole block in the diff.
 - Same for list items and table rows: one line each, however long.
+- Tables are compact: one space around each cell (`| a | b |`), delimiter row `| --- |` (`:--`, `--:`, `:-:` when aligned). Never pad columns out to the widest cell -- padding makes a one-cell edit rewrite every row of the table in the diff, and one long cell pushes the rest off the screen. Alignment is the renderer's job: nvim draws markdown tables aligned in-buffer (`<leader>tm` toggles it).
+- No formatter re-pads them: a repo that runs prettier ignores `*.md`.
 - Only real structure gets a linebreak: paragraph, list item, heading, code block.
 
 ## Response Expectations

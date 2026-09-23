@@ -512,9 +512,28 @@ require('lazy').setup({
         'bash',
         'html',
         'svelte',
-        'nu',
       })
     end,
+  },
+  {
+    'MeanderingProgrammer/render-markdown.nvim',
+    ft = 'markdown',
+    cmd = 'RenderMarkdown',
+    keys = { { '<leader>tm', '<cmd>RenderMarkdown toggle<CR>', desc = 'toggle markdown render' } },
+    opts = {
+      -- tables are stored compact (`| a | b |`); the padding that aligns them is virtual text
+      heading = { enabled = false },
+      code = { enabled = false },
+      bullet = { enabled = false },
+      checkbox = { enabled = false },
+      quote = { enabled = false },
+      link = { enabled = false },
+      sign = { enabled = false },
+      pipe_table = { preset = 'round', cell = 'padded' },
+      -- the row under the cursor stays rendered, so moving down a table does not break it up
+      anti_conceal = { enabled = false },
+      win_options = { conceallevel = { rendered = 2 } },
+    },
   },
   {
     "catppuccin/nvim",

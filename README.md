@@ -3,11 +3,11 @@
 Public dotfiles, scripts, and bootstrap tooling. No secrets, no personal paths - generalizable config
 
 | Directory | Purpose |
-|-----------|---------|
+| --- | --- |
 | `dotfiles/` | Generic dotfiles stowed to `~` via GNU stow |
-| `setup/`    | Profile-based system bootstrap (Python CLI: `setup`) |
-| `dienpy/`   | Public Python CLI toolkit (`dienpy <module>`) |
-| `util/`     | systemd service/socket templates |
+| `setup/` | Profile-based system bootstrap (Python CLI: `setup`) |
+| `dienpy/` | Public Python CLI toolkit (`dienpy <module>`) |
+| `util/` | systemd service/socket templates |
 
 ## Quick start
 
