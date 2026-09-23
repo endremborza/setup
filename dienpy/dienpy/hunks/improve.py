@@ -1,7 +1,9 @@
 """Rewrite a past commit's message with AI (prints; does not amend)."""
 
+from dienpy._git import find_root
+
 from .. import ai
-from . import _hunks, _prompt
+from . import _prompt
 
 _SYSTEM = """\
 Improve the git commit message for the commit shown below.
@@ -21,7 +23,7 @@ def main(
     effort: ai.Effort = "",
     max_diff_chars: int = 0,
 ) -> None:
-    root = _hunks.git_root()
+    root = find_root()
     backend = ai.resolve("commit", ai.Need(effort=effort), profile=profile)
     user = (
         f"{_prompt.message_context(root)}\n\n"

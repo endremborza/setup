@@ -6,8 +6,11 @@ from typing import Annotated
 
 from protocli import FILES
 
+from dienpy._git import find_root
+
 from .. import ai
-from . import _hunks, _prompt
+from . import _prompt
+from ._hunks import repo
 
 _SYSTEM = """\
 Describe a series of git commits as a cohesive summary.
@@ -27,13 +30,15 @@ def main(
     max_diff_chars: int = 0,
     out: Annotated[str, FILES] = "",
 ) -> None:
-    root = _hunks.git_root()
+    root = find_root()
     if since and hashes:
         raise SystemExit("pass commit hashes or --since, not both")
     if since:
-        found = _hunks._git(
-            root, ["log", f"--since={_prompt.parse_since(since)}", "--format=%H"]
-        ).split()
+        found = (
+            repo(root)
+            .out("log", f"--since={_prompt.parse_since(since)}", "--format=%H")
+            .split()
+        )
         if not found:
             raise SystemExit(f"no commits since {since}")
         hashes = tuple(reversed(found))  # oldest first

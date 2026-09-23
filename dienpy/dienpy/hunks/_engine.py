@@ -85,7 +85,7 @@ def _prompt_head(root: str, config: Config, rules: str) -> list[str]:
 def _hunk_block(hunks: list[Hunk]) -> list[str]:
     parts = []
     for h in hunks:
-        parts += ["", f"[{h.id}] {h.path}", h.text]
+        parts += ["", f"[{h.id}] {h.path}", h.display]
     return parts
 
 

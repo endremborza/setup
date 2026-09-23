@@ -9,8 +9,9 @@ commands that legitimately block (push, clone) do not.
 
 from __future__ import annotations
 
+import os
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 
@@ -23,10 +24,12 @@ class Repo:
         *,
         cfg: Sequence[str] = (),
         timeout: float | None = None,
+        env: Mapping[str, str] | None = None,
     ) -> None:
         self.path = Path(path)
         self.timeout = timeout
         self._base = ["git", "-C", str(path), *cfg]
+        self._env = {**os.environ, **env} if env else None
 
     def run(
         self,
@@ -41,6 +44,7 @@ class Repo:
             capture,
             self.timeout if timeout is None else timeout,
             stdin=stdin,
+            env=self._env,
         )
 
     def raw(
@@ -66,6 +70,19 @@ class Repo:
         stdin: str | None = None,
     ) -> str:
         return self.raw(*args, ok_codes=ok_codes, timeout=timeout, stdin=stdin).strip()
+
+    def run_bytes(
+        self, *args: str, stdin: bytes | None = None
+    ) -> subprocess.CompletedProcess[bytes]:
+        """No decoding and no newline translation -- diff bodies must round-trip
+        through `git apply` byte for byte. Nonzero exits come back as `.returncode`."""
+        return subprocess.run(
+            [*self._base, *args],
+            capture_output=True,
+            timeout=self.timeout,
+            input=stdin,
+            env=self._env,
+        )
 
     def maybe(self, *args: str, timeout: float | None = None) -> str | None:
         """Stripped stdout, or None if git fails, hangs or is missing."""
@@ -109,9 +126,16 @@ def _exec(
     timeout: float | None,
     cwd: Path | str | None = None,
     stdin: str | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        argv, capture_output=capture, text=True, timeout=timeout, cwd=cwd, input=stdin
+        argv,
+        capture_output=capture,
+        text=True,
+        timeout=timeout,
+        cwd=cwd,
+        input=stdin,
+        env=env,
     )
 
 

@@ -20,7 +20,7 @@ def by_id(hunks: list[Hunk]) -> dict[str, Hunk]:
 def rename_source(h: Hunk) -> str | None:
     for line in h.header.split("\n"):
         if line.startswith("rename from "):
-            return line[len("rename from ") :]
+            return unquote(line[len("rename from ") :])
     return None
 
 
@@ -28,13 +28,18 @@ def staged_renames(index: list[Hunk]) -> set[str]:
     return {h.path for h in index if rename_source(h)}
 
 
-def _rebase_header(header: str, path: str) -> str:
+def _rebase_header(header: str) -> str:
+    """The header of a renamed file, addressed by its new path on both sides — git's own
+    spelling of that path (quoting, trailing tab) comes from the `+++` line."""
+    lines = header.split("\n")
+    new = next(ln[4:] for ln in lines if ln.startswith("+++ "))
+    b = new.rstrip("\t")
     out = []
-    for line in header.split("\n"):
+    for line in lines:
         if line.startswith("diff --git "):
-            out.append(f"diff --git a/{path} b/{path}")
-        elif line.startswith("--- a/"):
-            out.append(f"--- a/{path}")
+            out.append(f"diff --git {b.replace('b/', 'a/', 1)} {b}")
+        elif line.startswith("--- "):
+            out.append("--- " + new.replace("b/", "a/", 1))
         elif not line.startswith(("similarity index ", "rename from ", "rename to ")):
             out.append(line)
     return "\n".join(out)
@@ -79,7 +84,7 @@ def _split(
             if h.header not in seen_header:
                 seen_header.add(h.header)
                 patch.append(
-                    _rebase_header(h.header, h.path) if h.path in renamed else h.header
+                    _rebase_header(h.header) if h.path in renamed else h.header
                 )
             patch.append(h.text)
         else:

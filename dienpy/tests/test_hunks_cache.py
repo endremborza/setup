@@ -14,7 +14,7 @@ CONFIG = Config("normal", "sonnet", "bare")
 
 
 def _h(hid: str, path: str = "a.txt") -> Hunk:
-    return Hunk(hid, path, "hunk", "", "", 1)
+    return Hunk(hid, path, "hunk", "", "", 1, (1, 1))
 
 
 def _seed(root: Path, entries: dict) -> None:

@@ -3,11 +3,13 @@
 import datetime
 import json as _json
 
+from dienpy._git import find_root
+
 from . import _cache, _hunks
 
 
 def main(*, json: bool = False) -> None:
-    root = _hunks.git_root()
+    root = find_root()
     hunks = _hunks.parse(root)
     current = {h.id for h in hunks}
     _cache.prune(root, hunks)
@@ -17,7 +19,7 @@ def main(*, json: bool = False) -> None:
             _json.dumps(
                 {
                     "root": root,
-                    "branch": _hunks._git(root, ["branch", "--show-current"]).strip(),
+                    "branch": _hunks.repo(root).out("branch", "--show-current"),
                     "hunks": [h.as_json() for h in hunks],
                     "staged": [h.id for h in _hunks.parse(root, staged=True)],
                     "runs": data["analyses"],
@@ -33,7 +35,7 @@ def main(*, json: bool = False) -> None:
         data["analyses"].items(), key=lambda kv: kv[1].get("time") or 0, reverse=True
     )
     for key, e in rows:
-        covered = sum(1 for i in current if i in set(e["ids"]))
+        covered = len(current.intersection(e["ids"]))
         when = e.get("time")
         stamp = (
             datetime.datetime.fromtimestamp(when).strftime("%m-%d %H:%M")

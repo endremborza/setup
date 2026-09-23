@@ -14,13 +14,15 @@ from typing import Annotated, Literal
 
 from protocli import FILES
 
+from dienpy._git import find_root
+
 from . import _cache, _config, _engine, _hunks, _patches
 
 _INCR_MIN_COVERAGE = 0.5
 
 
 def _run_staged(dims: tuple[str, ...], auth: str | None, path: str) -> None:
-    root = _hunks.git_root()
+    root = find_root()
     hunks = _hunks.under(_hunks.parse(root, staged=True), path)
     if not hunks:
         raise SystemExit(f"no staged changes{f' under {path}' if path else ''}")
@@ -62,7 +64,7 @@ def main(
     if staged:
         _run_staged(dims, auth, path)
         return
-    root = _hunks.git_root()
+    root = find_root()
     all_hunks = _hunks.parse(root)
     _cache.prune(root, all_hunks)
     if not all_hunks:
