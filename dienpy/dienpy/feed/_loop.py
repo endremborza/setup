@@ -318,30 +318,47 @@ def run_job(
         f"| {outcome.turns} | {minutes:.0f} | {f'{cost:.0f}' if cost is not None else ''} | {_describe(after) or '?'} "
         f"| {report.name if report else ''} |",
     )
-    return Result(outcome, cost, drift, report, limited)
+    return Result(outcome, cost, report, limited, after)
 
 
 class _Lock:
+    """`.git/feed.lock` under flock for the job: the kernel drops it when the holder dies."""
+
     def __init__(self, root: Path):
         self.path = root / ".git" / "feed.lock"
+        self._fd: int | None = None
+
+    def _grab(self) -> int | None:
+        fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o644)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            os.close(fd)
+            return None
+        return fd
 
     def held(self) -> bool:
-        if not self.path.exists():
+        if not self.path.parent.is_dir():
             return False
-        try:
-            os.kill(int(self.path.read_text().strip() or 0), 0)
-        except (ProcessLookupError, ValueError):
-            return False
-        return True
+        fd = self._grab()
+        if fd is None:
+            return True
+        os.close(fd)
+        return False
 
     def acquire(self) -> bool:
-        if self.held():
+        fd = self._grab()
+        if fd is None:
             return False
-        self.path.write_text(str(os.getpid()))
+        os.ftruncate(fd, 0)
+        os.write(fd, f"{os.getpid()}\n".encode())
+        self._fd = fd
         return True
 
     def release(self) -> None:
-        self.path.unlink(missing_ok=True)
+        if self._fd is not None:
+            os.close(self._fd)
+            self._fd = None
 
     def __enter__(self) -> "_Lock":
         if not self.acquire():
@@ -471,15 +488,22 @@ def schedule(repos: list[RepoQueue], s: Settings, usage: UsageFn = windows) -> N
             _say(f"{cand.repo.name} became busy; picking again")
             continue
         try:
-            res = run_job(cand.repo, job, s, profile, cand.repo.usage or usage, ws)
+            source = cand.repo.usage or usage
+            res = run_job(cand.repo, job, s, profile, source, ws)
+            states = _queue.load_state(cand.repo)
+            outcome = "ok" if res.outcome.ok else ("limit" if res.limited else "failed")
+            report = str(res.report.relative_to(s.log_base)) if res.report else ""
+            states[cand.name] = _queue.record(
+                cand.state,
+                now=_now(),
+                outcome=outcome,
+                cost=res.cost if res.outcome.ok else None,
+                report=report,
+            )
+            _queue.save_state(cand.repo, states)
         finally:
             lock.release()
-        states = _queue.load_state(cand.repo)
-        outcome = "ok" if res.outcome.ok else ("limit" if res.limited else "failed")
-        report = str(res.report.relative_to(s.log_base)) if res.report else ""
-        states[cand.name] = _queue.record(
-            cand.state, now=_now(), outcome=outcome, cost=res.cost, report=report
-        )
-        _queue.save_state(cand.repo, states)
+        if res.after:
+            known = {id(source): res.after}
         if s.once:
             return
