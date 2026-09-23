@@ -1,37 +1,43 @@
 """Show patch branches: every branch but the default one with its commits ahead, or one branch's log; --archived lists refs/landed and refs/dropped."""
 
 import json as _json
+from pathlib import Path
 
-from .. import _hunks
+from dienpy._git import find_root
+
+from .._hunks import repo
 from . import _ops
 
 
 def _branches(root: str, onto: str) -> list[dict]:
+    r = repo(root)
+    here = Path(root).resolve()
+    rows = r.out(
+        "for-each-ref",
+        f"--format=%(if)%(HEAD)%(then)*%(else)-%(end)%09%(refname:short)%09%(worktreepath)%09%(ahead-behind:{onto})",
+        "refs/heads",
+    )
     out = []
-    cur = _ops.current(root)
-    for name in _ops.git(
-        root, "for-each-ref", "--format=%(refname:short)", "refs/heads"
-    ).split("\n"):
-        if not name or name == onto:
+    for row in rows.split("\n"):
+        if not row:
             continue
-        wt = _ops.worktree_of(root, name)
+        head, name, wt, ahead_behind = row.split("\t")
+        if name == onto:
+            continue
         out.append(
             {
                 "name": name,
-                "commits": int(
-                    _ops.git(root, "rev-list", "--count", f"{onto}..{name}")
-                ),
-                "stat": _ops.git(root, "diff", "--shortstat", f"{onto}...{name}"),
-                "current": name == cur,
-                "worktree": str(wt) if wt else "",
+                "commits": int(ahead_behind.split()[0]),
+                "stat": r.out("diff", "--shortstat", f"{onto}...{name}"),
+                "current": head == "*",
+                "worktree": wt if wt and Path(wt).resolve() != here else "",
             }
         )
     return out
 
 
 def _archived(root: str) -> list[dict]:
-    rows = _ops.git(
-        root,
+    rows = repo(root).out(
         "for-each-ref",
         "--format=%(refname)%09%(objectname:short)%09%(committerdate:short)",
         "refs/landed",
@@ -43,8 +49,10 @@ def _archived(root: str) -> list[dict]:
     ]
 
 
-def main(name: str = "", *, archived: bool = False, json: bool = False) -> None:
-    root = _hunks.git_root()
+def main(
+    name: _ops.BranchName = "", *, archived: bool = False, json: bool = False
+) -> None:
+    root = find_root()
     onto = _ops.default(root)
     if name:
         ref = name if _ops.exists(root, name) else f"refs/landed/{name}"
