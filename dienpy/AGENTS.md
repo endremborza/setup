@@ -103,13 +103,13 @@ commit = "tunnel"
 
 ### The prompt protocol
 
-A repo's queue is `<repo>/.cril/prompts/*.md`. A prompt opts in through a flat `---` fenced frontmatter block (`dienpy.ai._prompt_file`; the model only sees the body):
+A repo's queue is `<repo>/.cril/prompts/*.md`. A prompt opts in through a flat `---` fenced frontmatter block (`dienpy.ai._prompt_file`; the model only sees the body). A leading `---` that is not followed by `key: value` lines closed by a second fence is plain text, not frontmatter; a block whose values fail validation lists the prompt as `invalid frontmatter: …` instead of stopping the scheduler:
 
 ```markdown
 ---
 mode: once            # once | repeat
 unattended: true      # absent/false: never scheduled
-profiles: fabx, opux  # preference order; default from feed.toml, then fabx, opux
+profiles: fabx, opux  # preference order; default from feed.toml, then ai.toml's `[tool] feed`, then fabx, opux
 priority: 2           # 1 first … 5 last
 need: 35              # % of the 5h window one run consumes; replaced by the mean of the last three measured runs
 every: 24h            # repeat: minimum gap after an ok run (default 12h); once: re-eligible after it even if the file survives

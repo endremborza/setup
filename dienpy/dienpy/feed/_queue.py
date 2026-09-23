@@ -6,13 +6,14 @@ eligibility rules that turn those into a verdict per prompt.
 import datetime
 import re
 import statistics
-import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from .. import ai
-from .._toml import fmt_value
+from .._git import find_root
+from .._toml import fmt_value, write_atomic
+from .._toml import load as load_toml
 from ..ai import _prompt_file
 from ..claude import _gate
 from ..claude.usage import Window
@@ -74,6 +75,9 @@ class Candidate:
     path: Path
     meta: Meta
     state: State = field(default_factory=State)
+    invalid: str = (
+        ""  # why the frontmatter could not be parsed; such a prompt never runs
+    )
 
     @property
     def name(self) -> str:
@@ -106,40 +110,53 @@ def parse_every(value: str) -> float:
     return float(m.group(1)) * _UNIT_HOURS[m.group(2)]
 
 
-def parse_meta(raw: dict[str, str], where: Path) -> Meta:
-    try:
-        meta = Meta(
-            mode=raw.get("mode", "once"),
-            unattended=_prompt_file.as_bool(raw.get("unattended", "")),
-            commit=_prompt_file.as_bool(raw.get("commit", "")),
-            profiles=_prompt_file.as_list(raw.get("profiles", "")),
-            priority=int(raw.get("priority", 3)),
-            need=float(raw.get("need", DEFAULT_NEED)),
-            every_h=parse_every(raw["every"]) if raw.get("every") else None,
-        )
-    except ValueError as e:
-        raise SystemExit(f"{where}: {e}")
+def parse_meta(raw: dict[str, str]) -> Meta:
+    """Typed metadata from a frontmatter block; ValueError names what is wrong with it."""
+    meta = Meta(
+        mode=raw.get("mode", "once"),
+        unattended=_prompt_file.as_bool(raw.get("unattended", "")),
+        commit=_prompt_file.as_bool(raw.get("commit", "")),
+        profiles=_prompt_file.as_list(raw.get("profiles", "")),
+        priority=int(raw.get("priority", 3)),
+        need=float(raw.get("need", DEFAULT_NEED)),
+        every_h=parse_every(raw["every"]) if raw.get("every") else None,
+    )
     if meta.mode not in MODES:
-        raise SystemExit(f"{where}: mode must be one of {', '.join(MODES)}")
+        raise ValueError(f"mode must be one of {', '.join(MODES)}")
     if not 1 <= meta.priority <= 5:
-        raise SystemExit(f"{where}: priority must be 1..5")
+        raise ValueError("priority must be 1..5")
     return meta
 
 
-def load_repo(root: Path) -> RepoQueue:
-    path = root / ".cril" / "feed.toml"
-    if not path.exists():
-        return RepoQueue(root=root)
+def meta_of(path: Path) -> Meta:
+    """The prompt file's metadata (defaults without frontmatter); a user error when malformed."""
+    raw, _ = _prompt_file.split(path.read_text(errors="replace"))
     try:
-        data = tomllib.loads(path.read_text())
-    except tomllib.TOMLDecodeError as e:
+        return parse_meta(raw)
+    except ValueError as e:
         raise SystemExit(f"{path}: {e}")
+
+
+def default_profiles() -> tuple[str, ...]:
+    """The `[tool] feed` binding when ai.toml has one, else fabx then opux."""
+    bound = ai.profile_bindings().get("feed")
+    return (bound,) if bound else DEFAULT_PROFILES
+
+
+def load_repo(root: Path) -> RepoQueue:
+    data = load_toml(root / ".cril" / "feed.toml")
     return RepoQueue(
         root=root,
         hunks=tuple(data.get("hunks", DEFAULT_HUNKS)),
-        profiles=tuple(data.get("profiles", DEFAULT_PROFILES)),
+        profiles=tuple(data.get("profiles", default_profiles())),
         env=str(data.get("env", "")),
     )
+
+
+def repo_queues(repos: list[str]) -> list[RepoQueue]:
+    """RepoQueues for the given roots; none given = the repo around the cwd."""
+    roots = [Path(r).resolve() for r in repos] or [Path(find_root())]
+    return [load_repo(r) for r in roots]
 
 
 def _state_path(repo: RepoQueue) -> Path:
@@ -147,15 +164,8 @@ def _state_path(repo: RepoQueue) -> Path:
 
 
 def load_state(repo: RepoQueue) -> dict[str, State]:
-    path = _state_path(repo)
-    if not path.exists():
-        return {}
-    try:
-        data = tomllib.loads(path.read_text())
-    except tomllib.TOMLDecodeError as e:
-        raise SystemExit(f"{path}: {e}")
     out = {}
-    for name, d in data.items():
+    for name, d in load_toml(_state_path(repo)).items():
         last = d.get("last")
         if isinstance(last, datetime.datetime) and last.tzinfo is None:
             last = last.replace(tzinfo=datetime.timezone.utc)
@@ -177,49 +187,73 @@ def save_state(repo: RepoQueue, states: dict[str, State]) -> None:
         s = states[name]
         if name not in live:
             continue
-        lines += [f"[{name}]"]
+        lines += [f"[{fmt_value(name)}]"]
         if s.last:
-            lines.append(f"last = {s.last.astimezone(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}")
+            lines.append(
+                f"last = {s.last.astimezone(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}"
+            )
         lines.append(f"outcome = {fmt_value(s.outcome)}")
         lines.append(f"attempts = {s.attempts}")
         lines.append(f"costs = {fmt_value([round(c, 1) for c in s.costs])}")
         if s.report:
             lines.append(f"report = {fmt_value(s.report)}")
         lines.append("")
-    _state_path(repo).write_text("\n".join(lines))
+    write_atomic(_state_path(repo), "\n".join(lines))
 
 
-def record(state: State, *, now: datetime.datetime, outcome: str, cost: float | None, report: str) -> State:
+def record(
+    state: State,
+    *,
+    now: datetime.datetime,
+    outcome: str,
+    cost: float | None,
+    report: str,
+) -> State:
     costs = state.costs + ((cost,) if cost is not None and cost >= 0 else ())
     return State(
-        last=now, outcome=outcome, attempts=state.attempts + 1, costs=costs[-_COSTS_KEPT:], report=report
+        last=now,
+        outcome=outcome,
+        attempts=state.attempts + 1,
+        costs=costs[-_COSTS_KEPT:],
+        report=report,
     )
 
 
 def collect(repos: list[RepoQueue]) -> list[Candidate]:
+    """Every prompt with frontmatter; one that cannot be parsed is listed as invalid, not fatal."""
     out: list[Candidate] = []
     for repo in repos:
         if not repo.prompts.is_dir():
             continue
         states = load_state(repo)
         for path in sorted(repo.prompts.glob("*.md")):
-            raw, _ = _prompt_file.split(path.read_text())
+            raw, _ = _prompt_file.split(path.read_text(errors="replace"))
             if not raw:
                 continue
-            out.append(Candidate(repo, path, parse_meta(raw, path), states.get(path.stem, State())))
+            state = states.get(path.stem, State())
+            try:
+                out.append(Candidate(repo, path, parse_meta(raw), state))
+            except ValueError as e:
+                out.append(Candidate(repo, path, Meta(), state, invalid=str(e)))
     return out
 
 
 def lifecycle(c: Candidate, now: datetime.datetime) -> str:
     """The reason a prompt is not runnable by its own history, or "" when it is."""
+    if c.invalid:
+        return f"invalid frontmatter: {c.invalid}"
     if not c.meta.unattended:
         return "not unattended"
     s = c.state
     if s.outcome == "failed" and not c.edited_since_run:
-        return f"failed {s.last:%m-%d %H:%M} (edit to retry)"
+        return f"failed {s.last.astimezone():%m-%d %H:%M} (edit to retry)"
     if s.last is None or s.outcome != "ok":
         return ""
-    every = c.meta.every_h if c.meta.every_h is not None else (DEFAULT_EVERY_H if c.meta.mode == "repeat" else None)
+    every = (
+        c.meta.every_h
+        if c.meta.every_h is not None
+        else (DEFAULT_EVERY_H if c.meta.mode == "repeat" else None)
+    )
     if every is None:
         return "landed? (ran ok, file still here)"
     due = s.last + datetime.timedelta(hours=every)

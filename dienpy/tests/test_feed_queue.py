@@ -26,22 +26,22 @@ def test_frontmatter_split_and_absence() -> None:
         "target": "plans/a.md §B: c",
     }
     assert body == "Do it.\n"
-    assert _prompt_file.split("no fence\n---\n") == ({}, "no fence\n---\n")
-    assert _prompt_file.split("---\nunterminated: yes\n") == (
-        {},
+    for plain in (
+        "no fence\n---\n",
         "---\nunterminated: yes\n",
-    )
+        "---\nA horizontal rule, then prose without a colon\n---\n",
+        "---\nNot a key: but a sentence\n---\n",
+    ):
+        assert _prompt_file.split(plain) == ({}, plain)
 
 
-def test_parse_meta_defaults_and_validation(tmp_path: Path) -> None:
-    m = _queue.parse_meta(
-        {"unattended": "true", "every": "90m", "priority": "1"}, tmp_path
-    )
+def test_parse_meta_defaults_and_validation() -> None:
+    m = _queue.parse_meta({"unattended": "true", "every": "90m", "priority": "1"})
     assert m == Meta(unattended=True, every_h=1.5, priority=1)
-    with pytest.raises(SystemExit):
-        _queue.parse_meta({"mode": "sometimes"}, tmp_path)
-    with pytest.raises(SystemExit):
-        _queue.parse_meta({"every": "soon"}, tmp_path)
+    with pytest.raises(ValueError):
+        _queue.parse_meta({"mode": "sometimes"})
+    with pytest.raises(ValueError):
+        _queue.parse_meta({"every": "soon"})
 
 
 def _repo(tmp_path: Path, feed_toml: str | None = None) -> RepoQueue:
@@ -57,26 +57,37 @@ def test_repo_defaults_and_feed_toml(tmp_path: Path) -> None:
     assert repo.hunks == () and repo.profiles == ("opux",) and repo.env == "hedonic"
 
 
-def test_collect_skips_files_without_frontmatter(tmp_path: Path) -> None:
+def test_collect_skips_plain_files_and_lists_invalid_ones(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     (repo.prompts / "a.md").write_text("---\nunattended: true\n---\nA\n")
     (repo.prompts / "README.md").write_text("# nothing\n")
-    assert [c.name for c in _queue.collect([repo])] == ["a"]
+    (repo.prompts / "bad.md").write_text("---\nunattended: true\npriority: 9\n---\nB\n")
+    cands = {c.name: c for c in _queue.collect([repo])}
+    assert sorted(cands) == ["a", "bad"]
+    assert (
+        _queue.lifecycle(cands["bad"], NOW)
+        == "invalid frontmatter: priority must be 1..5"
+    )
+    with pytest.raises(SystemExit):
+        _queue.meta_of(repo.prompts / "bad.md")
 
 
 def test_state_round_trip_prunes_deleted_prompts(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     (repo.prompts / "keep.md").write_text("---\nunattended: true\n---\n")
+    (repo.prompts / "fix.bugs.md").write_text("---\nunattended: true\n---\n")
     states = {
         "keep": State(
             last=NOW, outcome="ok", attempts=2, costs=(30.0, 35.5), report="feed/r/x.md"
         ),
+        "fix.bugs": State(last=NOW, outcome="failed", attempts=1),
         "gone": State(last=NOW, outcome="failed", attempts=1),
     }
     _queue.save_state(repo, states)
     loaded = _queue.load_state(repo)
-    assert list(loaded) == ["keep"]
-    assert loaded["keep"] == states["keep"]
+    assert list(loaded) == ["fix.bugs", "keep"]
+    assert loaded["keep"] == states["keep"] and loaded["fix.bugs"] == states["fix.bugs"]
+    assert not list(repo.prompts.glob(".*.tmp"))
 
 
 def test_record_keeps_last_three_costs() -> None:
