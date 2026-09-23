@@ -4,6 +4,7 @@ BUILTIN is the one model table: the tier ids every shell shortcut, launcher and
 tool resolves through. A new model version is a one-line change here.
 """
 
+import functools
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -43,13 +44,21 @@ BUILTIN: dict[str, dict[str, Any]] = {
 _DEFAULT = "sonnet"
 
 
-def _read() -> dict[str, Any]:
-    if not PATH.exists():
-        return {}
+@functools.cache
+def _load(path: Path, stamp: int) -> dict[str, Any]:
     try:
-        return tomllib.loads(PATH.read_text())
+        return tomllib.loads(path.read_text())
     except tomllib.TOMLDecodeError as e:
-        raise SystemExit(f"{PATH}: {e}")
+        raise SystemExit(f"{path}: {e}")
+
+
+def _read() -> dict[str, Any]:
+    """The toml, parsed once per (path, mtime): an edit is seen, a long loop pays no re-parse."""
+    try:
+        stamp = PATH.stat().st_mtime_ns
+    except FileNotFoundError:
+        return {}
+    return _load(PATH, stamp)
 
 
 def profiles() -> dict[str, dict[str, Any]]:
