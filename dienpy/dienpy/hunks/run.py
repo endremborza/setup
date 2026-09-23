@@ -35,21 +35,10 @@ def _run_staged(dims: tuple[str, ...], auth: str | None, path: str) -> None:
             print(p["message"])
 
 
-def describe_stale(
-    root: str,
-    patches: list[dict],
-    hunks: list[_hunks.Hunk],
-    config: _config.Config,
-    backend,
-) -> list[dict]:
-    """Fresh title/message for every patch flagged `stale` by a placement."""
-    recs = {h.id: h for h in hunks}
-    for i, p in enumerate(patches):
-        if not p.get("stale"):
-            continue
-        own = [recs[hid] for hid in p["hunks"] if hid in recs]
-        patches[i] = _engine.describe(root, patches, i, own, config, backend)
-    return patches
+def _fresh(root: str, config: _config.Config, live: set[str]) -> list[dict]:
+    """The entry as it is after a model call: a `patch move` made meanwhile is kept."""
+    entry = _cache.entry(root, config)
+    return _patches.sanitize(entry["patches"], live) if entry else []
 
 
 def main(
@@ -75,7 +64,7 @@ def main(
         print(f"no uncommitted changes under {path}")
         return
     config = _config.resolve(dims, _cache.last_config(root))
-    entry = None if force else _cache.entry(root, config)
+    entry = _cache.entry(root, config)
     if extend:
         if force or full:
             raise SystemExit("--extend never re-partitions: drop --force/--full")
@@ -94,24 +83,27 @@ def main(
     new_ids = scope - placed
     kept = len(scope) - len(new_ids)
 
-    if entry and not new_ids:
+    if entry and not new_ids and not force:
+        # a placement interrupted before its re-describe leaves patches flagged stale
+        existing = _engine.describe_stale(root, existing, all_hunks, config, backend)
         _cache.set_entry(root, config, all_hunks, existing)
         print("cached partition is current:")
         _patches.print_patches(existing, live)
         return
 
     incremental = extend or (kept >= _INCR_MIN_COVERAGE * len(scope) and kept > 0)
-    if existing and not full and incremental:
+    if existing and incremental and not (force or full):
         print(
             f"incremental: placing {len(new_ids)} new hunks into "
             f"{len(existing)} existing patches"
         )
         new_hunks = [h for h in hunks if h.id in new_ids]
+        groups = _engine.place(root, existing, new_hunks, config, backend)
         patches = _patches.sanitize(
-            _engine.place(root, existing, new_hunks, config, backend), live
+            _engine.merge_placement(_fresh(root, config, live), groups, existing), live
         )
         _cache.set_entry(root, config, all_hunks, _patches.mint(patches))
-        patches = describe_stale(root, patches, all_hunks, config, backend)
+        patches = _engine.describe_stale(root, patches, all_hunks, config, backend)
     else:
         if extend:
             raise SystemExit(
@@ -119,11 +111,12 @@ def main(
                 "drop --extend to re-partition"
             )
         print(f"partitioning {len(hunks)} hunks...")
+        groups = _engine.partition(root, hunks, config, backend)
         # out-of-scope patches keep their hunks: a scoped run rewrites only its own part
-        kept_patches = _patches.sanitize(existing, live - scope) if path else []
-        patches = _patches.sanitize(
-            kept_patches + _engine.partition(root, hunks, config, backend), live
+        kept_patches = (
+            _patches.sanitize(_fresh(root, config, live), live - scope) if path else []
         )
+        patches = _patches.sanitize(kept_patches + groups, live)
 
     _cache.set_entry(root, config, all_hunks, _patches.mint(patches))
     _patches.print_patches(patches, live)

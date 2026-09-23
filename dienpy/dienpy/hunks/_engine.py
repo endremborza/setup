@@ -172,6 +172,23 @@ def describe(
     return out
 
 
+def describe_stale(
+    root: str,
+    patches: list[dict],
+    hunks: list[Hunk],
+    config: Config,
+    backend: ai.Backend,
+) -> list[dict]:
+    """Fresh title/message for every patch flagged `stale` by a placement."""
+    recs = {h.id: h for h in hunks}
+    for i, p in enumerate(patches):
+        if not p.get("stale"):
+            continue
+        own = [recs[hid] for hid in p["hunks"] if hid in recs]
+        patches[i] = describe(root, patches, i, own, config, backend)
+    return patches
+
+
 def _need(config: Config) -> ai.Need:
     return ai.Need(
         schema=True,
@@ -270,6 +287,7 @@ def place(
     config: Config,
     backend: ai.Backend,
 ) -> list[dict]:
+    """Validated placements: groups whose `extends` names a position in `existing`."""
     new_ids = {h.id for h in new_hunks}
     feedback = problems = None
     for _ in range(2):
@@ -277,19 +295,26 @@ def place(
         groups = _call(root, prompt, backend, True)
         problems = _validate_incremental(new_ids, len(existing), groups)
         if not problems:
-            merged = copy.deepcopy(existing)
-            for g in groups:
-                ext = g.pop("extends", None)
-                if ext is not None:
-                    target = merged[ext - 1]
-                    target["hunks"] = list(target["hunks"]) + list(g["hunks"])
-                    target["stale"] = True
-                    if g.get("mixed"):
-                        target["mixed"] = list(target.get("mixed") or []) + list(
-                            g["mixed"]
-                        )
-                else:
-                    merged.append(g)
-            return merged
+            return groups
         feedback = _RETRY.format(problems)
     raise SystemExit(f"invalid placement after retry:\n{problems}")
+
+
+def merge_placement(
+    patches: list[dict], groups: list[dict], snapshot: list[dict]
+) -> list[dict]:
+    """Placements made against `snapshot` applied to `patches`, the entry as it is now:
+    an extended patch is found by id, one gone meanwhile takes the placement whole."""
+    merged = copy.deepcopy(patches)
+    by_id = {p["id"]: p for p in merged}
+    for g in groups:
+        ext = g.pop("extends", None)
+        target = by_id.get(snapshot[ext - 1]["id"]) if ext is not None else None
+        if target is None:
+            merged.append(g)
+            continue
+        target["hunks"] = list(target["hunks"]) + list(g["hunks"])
+        target["stale"] = True
+        if g.get("mixed"):
+            target["mixed"] = list(target.get("mixed") or []) + list(g["mixed"])
+    return merged
