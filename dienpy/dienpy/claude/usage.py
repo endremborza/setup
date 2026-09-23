@@ -49,8 +49,6 @@ class Window:
 def get_usage(creds_path: Path | None = None) -> dict:
     """Fetch the raw Claude usage payload (``limits``, ``five_hour``, ``seven_day``, ...)."""
     r = auth.request("get", _USAGE_URL, creds_path=creds_path)
-    if r.status_code == 429:
-        raise Http429()
     r.raise_for_status()
     return r.json()
 
