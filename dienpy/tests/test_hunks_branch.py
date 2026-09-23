@@ -1,30 +1,13 @@
-"""branch: new commits picked patches, land squashes with archive and note, split, drop, worktree, conflict undo."""
+"""branch: new commits picked patches, land squashes with archive and note, split, drop, worktree, conflict undo, checkout."""
 
+import json
 from pathlib import Path
 
 import pytest
 from _repo import git, ids, make, write
-
-from dienpy.hunks import _cache, _config, _engine, _hunks
-from dienpy.hunks.branch import drop, land, new, show
-
-CONFIG = _config.Config("normal", "sonnet", "bare")
-
-
-def _seed(repo: Path) -> dict[str, str]:
-    """Cache with one patch per hunk of a.txt and b.txt; returns title -> patch id."""
-    root = str(repo)
-    hunks = _hunks.parse(root)
-    a1, a2 = ids(hunks, "a.txt")
-    b1 = ids(hunks, "b.txt")[0]
-    patches = [
-        {"id": "p1", "title": "a first", "message": "body one", "hunks": [a1]},
-        {"id": "p2", "title": "a second", "message": "", "hunks": [a2]},
-        {"id": "p3", "title": "b edit", "message": "", "hunks": [b1]},
-    ]
-    _cache.set_entry(root, CONFIG, hunks, patches)
-    _cache.touch_last(root, CONFIG)
-    return {p["title"]: p["id"] for p in patches}
+from _repo import seed as _seed
+from dienpy.hunks import _engine, _hunks
+from dienpy.hunks.branch import checkout, drop, land, new, show
 
 
 def _log(repo: Path, rng: str) -> list[str]:
@@ -113,7 +96,9 @@ def test_drop_archives(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert not git(repo, "branch", "--list", "junk")
 
 
-def test_worktree_branch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_worktree_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
     repo = make(tmp_path)
     monkeypatch.chdir(repo)
     _seed(repo)
@@ -124,8 +109,15 @@ def test_worktree_branch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     left = _hunks.parse(str(repo))
     assert len(ids(left, "a.txt")) == 1 and not ids(left, "b.txt")
     assert not git(repo, "status", "--porcelain", "--", "b.txt")
-    rows = show._branches(str(repo), "main")
-    assert rows[0]["name"] == "side" and rows[0]["worktree"] == str(wt)
+    capsys.readouterr()
+    show.main(json=True)
+    (row,) = json.loads(capsys.readouterr().out)
+    assert row["name"] == "side" and row["worktree"] == str(wt)
+    write(wt, "stray.txt", ["not committed"])
+    with pytest.raises(SystemExit, match="uncommitted"):
+        land.main("side", message="land side")
+    assert wt.exists() and git(repo, "branch", "--list", "side")
+    (wt / "stray.txt").unlink()
     land.main("side", message="land side")
     assert not wt.exists()
     assert _log(repo, "main") == ["land side", "init"]
@@ -136,13 +128,50 @@ def test_worktree_branch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
 def test_show_json_is_pure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
-    import json
-
     repo = make(tmp_path)
     monkeypatch.chdir(repo)
     by_title = _seed(repo)
     new.main("feat", by_title["a first"])
+    git(repo, "branch", "aside")  # sorts first and is not checked out
     capsys.readouterr()
     show.main(json=True)
     rows = json.loads(capsys.readouterr().out)
-    assert [r["name"] for r in rows] == ["feat"]
+    assert [r["name"] for r in rows] == ["aside", "feat"]
+    assert not rows[0]["current"] and rows[0]["commits"] == 1
+    assert rows[1]["current"] and rows[1]["commits"] == 1 and not rows[1]["worktree"]
+
+
+def test_checkout_and_refusals(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = make(tmp_path)
+    monkeypatch.chdir(repo)
+    _seed(repo)
+    new.main("side", "p3", worktree=True)
+    with pytest.raises(SystemExit, match="checked out in"):
+        checkout.main("side")
+    with pytest.raises(SystemExit, match="default branch"):
+        drop.main("main")
+    git(repo, "branch", "empty")
+    with pytest.raises(SystemExit, match="no commits beyond"):
+        land.main("empty")
+    with pytest.raises(SystemExit, match="no branch"):
+        checkout.main("nope")
+    drop.main("side")
+    assert not (tmp_path / "repo-side").exists()
+    checkout.main("empty")
+    assert git(repo, "branch", "--show-current") == "empty"
+    assert ids(_hunks.parse(str(repo)), "a.txt")  # dirty files carried along
+
+
+def test_reused_branch_name_archives_apart(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = make(tmp_path)
+    monkeypatch.chdir(repo)
+    _seed(repo)
+    new.main("feat", "p1")
+    land.main(message="one")
+    new.main("feat", "p2")
+    land.main(message="two")
+    refs = git(repo, "for-each-ref", "--format=%(refname)", "refs/landed").split()
+    assert refs == ["refs/landed/feat", "refs/landed/feat-2"]
+    assert _log(repo, "main") == ["two", "one", "init"]
