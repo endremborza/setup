@@ -35,7 +35,7 @@ RUN PICKER                              (? in normal mode lists all keys)
     <CR>  review this run    <C-e>  extend it
     <C-t>  graveyard         <C-x>  patch branches
 
-PATCH PICKER                            (<Tab> marks several)
+PATCH PICKER                            (<Tab> marks several, one engine call)
     <CR>  browse patch
     <C-h>  hunk list
     <C-s> / <C-u> / <C-d>  stage / unstage / discard (revert to HEAD)

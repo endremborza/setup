@@ -53,9 +53,13 @@ local function adopt(st, patches)
   end
 end
 
+local function by_seq(a, b) return a.seq < b.seq end
+
+-- Each patch gets `live`, its hunks still in the diff in diff order; hunks no patch covers
+-- fill the session's one synthetic patch, shown last while it has any.
 local function take(st, data)
   st.branch = data.branch
-  st.last = data.last
+  st.drifted = data.last ~= nil and M.key(data.last) ~= st.key
   st.hunks = data.hunks
   st.by_id, st.staged = {}, {}
   for i, h in ipairs(st.hunks) do
@@ -65,18 +69,45 @@ local function take(st, data)
   for _, id in ipairs(data.staged) do st.staged[id] = true end
   local entry = data.runs[st.key]
   adopt(st, entry and entry.patches or {})
+  local assigned = {}
+  st.shown = {}
+  for _, p in ipairs(st.patches) do
+    p.live = {}
+    for _, id in ipairs(p.hunks) do
+      local h = st.by_id[id]
+      if h then
+        assigned[id] = true
+        table.insert(p.live, h)
+      end
+    end
+    table.sort(p.live, by_seq)
+    table.insert(st.shown, p)
+  end
+  local stray = st.stray
+  stray.hunks, stray.live = {}, {}
+  for _, h in ipairs(st.hunks) do
+    if not assigned[h.id] then
+      table.insert(stray.hunks, h.id)
+      table.insert(stray.live, h)
+    end
+  end
+  if #stray.live > 0 then table.insert(st.shown, stray) end
 end
 
--- Open the run `config` names (the engine's current one when nil); a run the engine has
--- pruned meanwhile loads with no patches, its remaining hunks showing as unassigned.
-function M.load(root, config)
-  local data = M.fetch(root)
+-- Open the run `config` names (the engine's current one when nil) from `data`, or from a
+-- fresh listing; a run the engine has pruned meanwhile loads with no patches, its
+-- remaining hunks showing as unassigned.
+function M.load(root, config, data)
+  data = data or M.fetch(root)
   config = config or data.last
   if not config then return nil end
   local key = M.key(config)
   local st = M.current
   if not (st and st.root == root and st.key == key) then
-    st = { root = root, config = config, key = key, patches = {} }
+    st = {
+      root = root, config = config, key = key, patches = {},
+      stray = { id = '', title = '(unassigned new changes)', message = '', hunks = {}, stray = true },
+    }
     M.current = st
   end
   take(st, data)

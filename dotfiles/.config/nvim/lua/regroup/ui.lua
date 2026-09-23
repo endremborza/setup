@@ -4,30 +4,19 @@ local git = require('regroup.git')
 local state = require('regroup.state')
 local review = require('regroup.review')
 local commit = require('regroup.commit')
+local picker = require('regroup.picker')
 
-local function notify(msg, level)
-  vim.notify(msg, level or vim.log.levels.INFO)
-end
+local notify = state.notify
+local WARN, ERROR = vim.log.levels.WARN, vim.log.levels.ERROR
 
-local refresh_signs = commit.refresh_signs
+local pick_patches, pick_hunks, move_hunk
 
 local function confirm(question, default_no)
   return vim.fn.confirm(question, '&Yes\n&No', default_no and 2 or 1) == 1
 end
 
--- live hunks of a patch, in diff order
-local function live_recs(st, p)
-  local out = {}
-  for _, id in ipairs(p.hunks) do
-    local h = st.by_id[id]
-    if h then table.insert(out, h) end
-  end
-  table.sort(out, function(a, b) return a.seq < b.seq end)
-  return out
-end
-
-local function live_ids(st, p)
-  return vim.tbl_map(function(h) return h.id end, live_recs(st, p))
+local function no_session()
+  return notify('no regroup session — run :Regroup', WARN)
 end
 
 -- distinct paths in hunk order, each with the number of hunks it carries
@@ -53,113 +42,101 @@ local function first_change(h)
   return ''
 end
 
--- Hunks no patch of the run covers collect in one synthetic, unpersisted patch.
-local function display_patches(st)
-  local assigned = {}
-  for _, p in ipairs(st.patches) do
-    for _, id in ipairs(p.hunks) do assigned[id] = true end
-  end
-  local stray = {}
-  for _, h in ipairs(st.hunks) do
-    if not assigned[h.id] then table.insert(stray, h.id) end
-  end
-  local out = vim.list_slice(st.patches)
-  if #stray > 0 then
-    table.insert(out, { id = '', title = '(unassigned new changes)', message = '', hunks = stray, stray = true })
-  end
-  return out
-end
-
-local function unassigned(st)
-  for _, p in ipairs(display_patches(st)) do
-    if p.stray then return #p.hunks end
-  end
-  return 0
-end
-
--- Every write goes through the engine; the session reloads from its listing afterwards.
-local function engine(st, args)
-  local res = git.engine(st.root, args)
-  if res.code ~= 0 then
-    notify('regroup: ' .. git.output(res), vim.log.levels.ERROR)
-    return false
-  end
-  -- the write already happened: a redraw that fails is its own error, never the write's,
-  -- since a retry would apply the same patch twice
-  local ok, err = pcall(function()
-    state.refresh(st)
-    refresh_signs()
-    vim.cmd('checktime')
-  end)
-  if not ok then notify('regroup: stale view — ' .. tostring(err), vim.log.levels.ERROR) end
-  return true, vim.trim(res.stdout or '')
-end
-
 -- what names a patch to the engine: its id, or the hunk ids of the synthetic one
-local function targets(st, p)
-  if p.stray then return live_ids(st, p) end
+local function targets(p)
+  if p.stray then return vim.tbl_map(function(h) return h.id end, p.live) end
   return { p.id }
 end
 
-local function with_targets(st, p, verb)
-  local t = targets(st, p)
-  if #t == 0 then return notify('patch has no remaining hunks', vim.log.levels.WARN) end
+-- An engine write on the run the session shows; the session and buffers reload after it.
+local function write(st, args)
+  local pointed, err = state.point(st)
+  if not pointed then
+    notify('regroup: ' .. err, ERROR)
+    return false
+  end
+  local res = git.engine(st.root, args)
+  if res.code ~= 0 then
+    notify('regroup: ' .. git.output(res), ERROR)
+    return false
+  end
+  return true, vim.trim(res.stdout or '')
+end
+
+local function engine(st, args)
+  local ok, out = write(st, args)
+  if ok then state.after_write(st.root) end
+  return ok, out
+end
+
+-- one engine call for every picked patch
+local function act(st, patches, verb)
+  local t = {}
+  for _, p in ipairs(patches) do vim.list_extend(t, targets(p)) end
+  if #t == 0 then return notify('no remaining hunks', WARN) end
   local ok, out = engine(st, vim.list_extend({ 'patch', verb }, t))
-  if ok then notify(('%s: %s'):format(out, p.title)) end
+  if ok then notify(out) end
 end
 
-function M.stage(st, p) with_targets(st, p, 'stage') end
-function M.unstage(st, p) with_targets(st, p, 'unstage') end
+local function live_count(patches)
+  local n = 0
+  for _, p in ipairs(patches) do n = n + #p.live end
+  return n
+end
 
-function M.discard(st, p)
-  local n = #live_recs(st, p)
-  if n == 0 then return notify('patch has no remaining hunks', vim.log.levels.WARN) end
-  if confirm(('Discard %d hunk(s) of "%s"? This reverts them to HEAD.'):format(n, p.title), true) then
-    with_targets(st, p, 'discard')
+local function of_patches(patches)
+  if #patches == 1 then return ('"%s"'):format(patches[1].title) end
+  return ('%d patches'):format(#patches)
+end
+
+local function discard(st, patches)
+  local n = live_count(patches)
+  if n == 0 then return notify('no remaining hunks', WARN) end
+  if confirm(('Discard %d hunk(s) of %s? This reverts them to HEAD.'):format(n, of_patches(patches)), true) then
+    act(st, patches, 'discard')
   end
 end
 
-function M.stage_hunk(st, h) engine(st, { 'patch', 'stage', h.id }) end
-function M.unstage_hunk(st, h) engine(st, { 'patch', 'unstage', h.id }) end
-
-function M.discard_hunk(st, h)
-  if confirm(('Discard %s:%d? This reverts it to HEAD.'):format(h.path, h.new_start), true) then
-    engine(st, { 'patch', 'discard', h.id })
+-- bury takes one patch per call: each stash carries that patch's title
+local function bury(st, patches)
+  for _, p in ipairs(patches) do
+    if p.stray then return notify('place the unassigned hunks first (<C-e> or <C-o>)', WARN) end
   end
+  local ready = vim.tbl_filter(function(p) return #p.live > 0 end, patches)
+  if #ready == 0 then return notify('no remaining hunks', WARN) end
+  if not confirm(('Bury %d hunk(s) of %s to the graveyard (git stash)?'):format(live_count(ready), of_patches(ready))) then
+    return
+  end
+  for _, p in ipairs(ready) do
+    local ok, out = write(st, { 'patch', 'bury', p.id })
+    if not ok then break end
+    notify('⚰ ' .. out)
+  end
+  state.after_write(st.root)
 end
 
-function M.bury(st, p)
-  if p.stray then return notify('place the unassigned hunks first (<C-e> or <C-o>)', vim.log.levels.WARN) end
-  local n = #live_recs(st, p)
-  if n == 0 then return notify('patch has no remaining hunks', vim.log.levels.WARN) end
-  if confirm(('Bury %d hunk(s) of "%s" to the graveyard (git stash)?'):format(n, p.title)) then
-    local ok, out = engine(st, { 'patch', 'bury', p.id })
-    if ok then notify('⚰ ' .. out) end
-  end
-end
-
--- Hand the run back to the engine to place its unassigned hunks, then reopen on the result.
-function M.extend_run(root, config)
-  notify(('regroup: extending [%s] — placing the unassigned hunks...'):format(state.key(config)))
+-- Hand the run to the engine to place its unassigned hunks; the session reloads when done.
+local function extend_run(root, config)
+  local key = state.key(config)
+  notify(('regroup: extending [%s] — placing the unassigned hunks...'):format(key))
   git.engine(root, { 'run', '--extend', config.granularity, config.model, config.context }, function(res)
     if res.code ~= 0 then
-      return notify('regroup: extend failed\n' .. git.output(res), vim.log.levels.ERROR)
+      return notify('regroup: extend failed\n' .. git.output(res), ERROR)
     end
-    local st = state.load(root, config)
-    if not st then return notify('regroup: run no longer in the cache', vim.log.levels.WARN) end
-    local left = unassigned(st)
-    notify(('regroup: [%s] updated — %d patches%s'):format(state.key(config), #st.patches,
+    local ok, st = pcall(state.load, root, config)
+    if not ok then return notify('regroup: ' .. tostring(st), ERROR) end
+    if not st then return notify('regroup: run no longer in the cache', WARN) end
+    local left = #st.stray.live
+    notify(('regroup: [%s] updated — %d patches%s; <leader>gg reopens'):format(key, #st.patches,
       left > 0 and (', %d hunk(s) still unassigned'):format(left) or ''))
-    M.pick_patches()
   end)
 end
 
-function M.goto_hunk(p, idx)
+local function goto_hunk(p, idx)
   local st = state.current
-  state.refresh(st)
-  local live = live_recs(st, p)
+  local live = p.live
   if #live == 0 then
-    return notify('patch has no remaining hunks (committed or discarded)', vim.log.levels.WARN)
+    return notify('patch has no remaining hunks (committed or discarded)', WARN)
   end
   idx = ((idx - 1) % #live) + 1
   st.pos = { patch = p, idx = idx }
@@ -171,55 +148,39 @@ end
 
 function M.nav(dir)
   local st = state.current
-  if not st or not st.pos then
-    return notify('no active patch — run :Regroup', vim.log.levels.WARN)
-  end
-  M.goto_hunk(st.pos.patch, st.pos.idx + dir)
-end
-
-local function same_patch(a, b)
-  return a == b or (a and b and a.stray and b.stray) or false
+  if not st or not st.pos then return notify('no active patch — run :Regroup', WARN) end
+  goto_hunk(st.pos.patch, st.pos.idx + dir)
 end
 
 function M.nav_patch(dir)
   local st = state.current
-  if not st or not st.pos then
-    return notify('no active patch — run :Regroup', vim.log.levels.WARN)
-  end
+  if not st or not st.pos then return notify('no active patch — run :Regroup', WARN) end
   state.refresh(st)
-  local live = {}
-  for _, p in ipairs(display_patches(st)) do
-    if #live_recs(st, p) > 0 then table.insert(live, p) end
-  end
-  if #live == 0 then
-    return notify('no patches with remaining hunks', vim.log.levels.WARN)
-  end
+  local live = vim.tbl_filter(function(p) return #p.live > 0 end, st.shown)
+  if #live == 0 then return notify('no patches with remaining hunks', WARN) end
   local cur = 1
   for i, p in ipairs(live) do
-    if same_patch(p, st.pos.patch) then cur = i end
+    if p == st.pos.patch then cur = i end
   end
-  M.goto_hunk(live[((cur - 1 + dir) % #live) + 1], 1)
+  goto_hunk(live[((cur - 1 + dir) % #live) + 1], 1)
 end
 
 function M.reopen()
   local st = state.current
-  if not st then
-    return notify('no regroup session — run :Regroup', vim.log.levels.WARN)
-  end
+  if not st then return no_session() end
   state.refresh(st)
-  M.pick_patches({ select = st.pos and st.pos.patch })
+  pick_patches({ select = st.pos and st.pos.patch })
 end
 
 -- The message is edited in the shared commit buffer; the engine stages the patch and
 -- refuses when the index holds anything else.
-function M.commit_patch(p)
+local function commit_patch(p)
   local st = state.current
-  if p.stray then return notify('place the unassigned hunks first (<C-e> or <C-o>)', vim.log.levels.WARN) end
+  if p.stray then return notify('place the unassigned hunks first (<C-e> or <C-o>)', WARN) end
   state.refresh(st)
-  local live = live_recs(st, p)
-  if #live == 0 then return notify('nothing left to commit in this patch', vim.log.levels.WARN) end
+  if #p.live == 0 then return notify('nothing left to commit in this patch', WARN) end
   local hunk_lines = {}
-  for _, h in ipairs(live) do
+  for _, h in ipairs(p.live) do
     table.insert(hunk_lines, ('#   %s (%s)'):format(h.path, h.id))
   end
   local seed = { p.title, '' }
@@ -236,12 +197,12 @@ local function slug(title)
 end
 
 -- A patch branch from the picked patches: committed there in order, the rest stays dirty.
-function M.branch_new(st, patches)
+local function branch_new(st, patches)
   local ids = {}
   for _, p in ipairs(patches) do
-    if not p.stray and #live_recs(st, p) > 0 then table.insert(ids, p.id) end
+    if not p.stray and #p.live > 0 then table.insert(ids, p.id) end
   end
-  if #ids == 0 then return notify('pick patches with remaining hunks', vim.log.levels.WARN) end
+  if #ids == 0 then return notify('pick patches with remaining hunks', WARN) end
   vim.ui.input({ prompt = 'patch branch: ', default = slug(patches[1].title) }, function(name)
     if not name or name == '' then return end
     local ok, out = engine(st, vim.list_extend({ 'branch', 'new', name }, ids))
@@ -249,41 +210,38 @@ function M.branch_new(st, patches)
   end)
 end
 
-local function land(root, name, after)
+local function land(root, name)
   notify(('regroup: landing %s...'):format(name))
   git.engine(root, { 'branch', 'land', name }, function(res)
     if res.code ~= 0 then
-      return notify('regroup: land failed\n' .. git.output(res), vim.log.levels.ERROR)
+      return notify('regroup: land failed\n' .. git.output(res), ERROR)
     end
-    refresh_signs()
-    vim.cmd('checktime')
+    state.after_write(root)
     notify(vim.trim(res.stdout))
-    if after then after() end
   end)
 end
 
-function M.land_current(st)
+local function land_current(st)
   local name = st.branch
-  if name == '' then return notify('detached HEAD', vim.log.levels.WARN) end
+  if name == '' then return notify('detached HEAD', WARN) end
   local summary = git.engine(st.root, { 'branch', 'show', name })
   if summary.code ~= 0 or vim.trim(summary.stdout) == '' then
-    return notify(('%s has nothing to land'):format(name), vim.log.levels.WARN)
+    return notify(('%s has nothing to land'):format(name), WARN)
   end
   if confirm(('Land %s as one squashed commit?\n%s'):format(name, vim.trim(summary.stdout))) then
-    land(st.root, name, function() state.refresh(st) end)
+    land(st.root, name)
   end
 end
 
-local function patch_preview(st, p, bufnr)
+local function patch_lines(p)
   local lines = { '# ' .. p.title, '' }
   for _, l in ipairs(vim.split(p.message or '', '\n', { plain = true })) do
     table.insert(lines, l)
   end
-  local live = live_recs(st, p)
-  local files = files_of(live)
-  if #files > 1 then  -- one file names itself in every hunk header below
+  local files = files_of(p.live)
+  if #files > 1 then -- one file names itself in every hunk header below
     table.insert(lines, '')
-    table.insert(lines, ('# %d hunks in %d files'):format(#live, #files))
+    table.insert(lines, ('# %d hunks in %d files'):format(#p.live, #files))
     for _, f in ipairs(files) do
       table.insert(lines, ('#  %2d  %s'):format(f.n, f.path))
     end
@@ -294,13 +252,12 @@ local function patch_preview(st, p, bufnr)
       table.insert(lines, ('# MIXED %s: %s'):format(m.hunk, m.note))
     end
   end
-  for _, h in ipairs(live) do
+  for _, h in ipairs(p.live) do
     table.insert(lines, '')
     table.insert(lines, ('# [%s] %s'):format(h.id, h.path))
     vim.list_extend(lines, vim.split(h.text, '\n', { plain = true }))
   end
-  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-  vim.bo[bufnr].filetype = 'diff'
+  return lines
 end
 
 local function rel_age(t)

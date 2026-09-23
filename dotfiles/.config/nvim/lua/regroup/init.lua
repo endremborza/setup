@@ -58,7 +58,7 @@ function M.open(tokens)
     end
   end
   if #runs > 1 then return ui.pick_runs(ctx) end
-  ui.open_run(ctx.root, runs[1].config)
+  ui.open_run(ctx.root, runs[1].config, ctx.data)
 end
 
 function M.runs(tokens)
