@@ -1,4 +1,0 @@
-#! /usr/bin/env nu
-light -S 100%
-xrandr --output $env.MAIN_SCREEN --gamma 1:1:1
-

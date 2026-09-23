@@ -1,0 +1,8 @@
+#!/bin/sh
+# screen-light morning|evening — backlight and colour temperature of $MAIN_SCREEN
+set -eu
+case "$1" in
+    morning) light -S 100%; xrandr --output "$MAIN_SCREEN" --gamma 1:1:1 ;;
+    evening) light -S 10%; xrandr --output "$MAIN_SCREEN" --gamma 1:0.8:0.5 ;;
+    *) echo "usage: screen-light morning|evening" >&2; exit 2 ;;
+esac
