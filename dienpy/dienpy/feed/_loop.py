@@ -2,29 +2,32 @@
 
 Two front doors share one job runner: `run` takes an explicit list of jobs for the
 current repo; `schedule` picks the best eligible prompt across repo queues each cycle.
-One job at a time; a repo is locked (`.git/feed.lock`) while its job runs. A job is a
-prompt file (a claude session with the unattended suffix, streamed to a log, resumed
+One job at a time; a repo is locked (`.git/feed.lock`, flock) while its job runs. A job is
+a prompt file (a claude session with the unattended suffix, streamed to a log, resumed
 once after a usage limit) or a shell command (run as is, the chosen profile in
 FEED_PROFILE/FEED_MODEL); a repo with a wrapper runs its prompts as commands inside it.
 """
 
+import dataclasses
 import datetime
+import fcntl
 import os
 import re
 import shlex
 import subprocess
 import sys
-import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 from .. import ai
-from ..ai import _prompt_file
+from ..ai import _prompt_file, models
 from ..ai import run as _airun
 from ..claude import _gate
 from ..claude.usage import Window, windows
+from ..hunks import _cache as _regroup
+from ..hunks import _config as _regroup_config
 from . import _log, _queue
 from ._queue import Candidate, RepoQueue, UsageFn
 
@@ -111,51 +114,73 @@ def _usage(fn: UsageFn, poll: int) -> list[Window]:
             time.sleep(poll)
 
 
+def _peek(fn: UsageFn) -> list[Window]:
+    """One attempt, [] when the endpoint is unreachable: a reading, not a gate."""
+    try:
+        return fn()
+    except Exception:
+        return []
+
+
 def _hunks(root: Path, *args: str) -> int:
     return subprocess.run(
         [sys.executable, "-m", "dienpy", "hunks", *args], cwd=root
     ).returncode
 
 
+def _cached(root: Path, dims: tuple[str, ...]) -> bool:
+    """Whether the regroup cache still holds a run for `dims` (the engine prunes dead ones)."""
+    r = str(root)
+    try:
+        config = _regroup_config.resolve(dims, _regroup.last_config(r))
+    except SystemExit:
+        return False
+    return _regroup.entry(r, config) is not None
+
+
 def _close(root: Path, dims: tuple[str, ...]) -> str:
-    """Bring the regroup cache up to date for `dims`: extend the cached run, or partition afresh."""
+    """Bring the regroup cache up to date for `dims`: extend the cached run, or partition
+    afresh only when there is none — a failed extend leaves a curated run as it was."""
     if not dims:
         return "skipped"
-    if _hunks(root, "run", "--extend", *dims) and _hunks(root, "run", *dims):
+    if _hunks(root, "run", "--extend", *dims) == 0:
+        return "ok"
+    if _cached(root, dims):
         return "error"
-    return "ok"
+    return "ok" if _hunks(root, "run", *dims) == 0 else "error"
 
 
-def _limit_hit(outcome: ai.Outcome, usage: UsageFn, model: str) -> Window | None:
+def _limited(outcome: ai.Outcome, ws: list[Window], model: str) -> Window | None:
+    """The window behind a failed run when it was a usage limit: one that is full for the
+    model, or the session window when the cli said so."""
     if outcome.ok:
-        return None
-    try:
-        ws = usage()
-    except Exception:
         return None
     full = [w for w in ws if _gate.applies(w, model) and w.percent >= 100]
     if full:
         return full[0]
     if _LIMIT_HINT.search(outcome.result):
-        return _session(ws)
+        return _session(ws) or Window("session", 100.0, None)
     return None
+
+
+def _judge(outcome: ai.Outcome, usage: UsageFn, model: str) -> Window | None:
+    return None if outcome.ok else _limited(outcome, _peek(usage), model)
 
 
 def _run_prompt(
     root: Path,
     job: Job,
     s: Settings,
-    profile: str,
     backend: ai.Cli,
     usage: UsageFn,
     log: _log.RunLog,
 ) -> ai.Outcome:
     assert job.prompt is not None
     system = _airun.unattended_suffix(commit=job.commit)
-    body = _prompt_file.split(job.prompt.read_text())[1]
+    body = _prompt_file.split(job.prompt.read_text(errors="replace"))[1]
     with log.stream() as stream:
         outcome = ai.launch(backend, body, system=system, log=stream, cwd=str(root))
-    hit = _limit_hit(outcome, usage, backend.model)
+    hit = _judge(outcome, usage, backend.model)
     if hit and outcome.session_id:
         _say(
             f"usage limit hit ({hit.label} {hit.percent:.0f}%); resuming after {_local(hit.resets_at)}"
