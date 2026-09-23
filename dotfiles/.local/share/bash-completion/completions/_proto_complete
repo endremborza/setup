@@ -43,11 +43,16 @@ _proto_reply() {
     fi
     local cur_plain="${cur//\\ / }"
     COMPREPLY=()
-    local c
+    local c i
     for c in "${candidates[@]}"; do
         [[ "$c" == "$cur_plain"* ]] && COMPREPLY+=("$c")
     done
-    [[ ${#COMPREPLY[@]} -gt 0 ]] && compopt -o filenames
+    [[ ${#COMPREPLY[@]} -eq 0 ]] && return
+    # Candidates quote themselves: -o filenames would append / to a name that
+    # is also a local directory and list a/x and b/x both as x.
+    for i in "${!COMPREPLY[@]}"; do
+        printf -v 'COMPREPLY[i]' '%q' "${COMPREPLY[i]}"
+    done
 }
 
 # Splits alias $1 into shell words in array $2, refusing anything that is not
