@@ -83,14 +83,16 @@ def print_patches(patches: list[dict], live: set[str]) -> None:
 
 
 def completions() -> list[str]:
-    from . import _cache, _hunks
+    from dienpy._git import find_root
+
+    from . import _cache, _config
 
     try:
-        data = _cache.load(_hunks.git_root())
+        data = _cache.load(find_root())
     except SystemExit:
         return []
     last = data and data.get("last")
-    entry = data and last and data["analyses"].get(_cache.key(last))
+    entry = data and last and data["analyses"].get(_config.Config(**last).key)
     return [p["id"] for p in entry["patches"]] if entry else []
 
 

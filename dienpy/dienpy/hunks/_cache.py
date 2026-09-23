@@ -20,10 +20,6 @@ from ._hunks import Hunk
 VERSION = 4
 
 
-def key(config: dict[str, str]) -> str:
-    return f"{config['granularity']}|{config['model']}|{config['context']}"
-
-
 def _path(root: str) -> Path:
     return Path(root) / ".git" / "regroup-cache.json"
 
