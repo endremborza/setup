@@ -59,11 +59,14 @@ def fetch_models(provider: str) -> list[str]:
         import anthropic
 
         _require("ANTHROPIC_API_KEY")
-        return sorted(m.id for m in anthropic.Anthropic().models.list())
+        client = anthropic.Anthropic(timeout=_LIST_TIMEOUT)
+        return sorted(m.id for m in client.models.list())
     if provider == "google":
+        # the client closes its transport when collected, so it outlives the pager
+        client = _google_client(_LIST_TIMEOUT)
         return sorted(
             m.name.removeprefix("models/")
-            for m in _google_client().models.list()
+            for m in client.models.list()
             if "generateContent" in (m.supported_actions or [])
         )
     raise SystemExit(f"unknown provider '{provider}'")
@@ -146,30 +149,34 @@ def _send_anthropic(backend: Api, system: str, user: str, max_tokens: int) -> st
     _require("ANTHROPIC_API_KEY")
     kwargs: dict[str, Any] = {
         "model": backend.model,
-        "max_tokens": max_tokens,
+        "max_tokens": max(max_tokens, _THINKING_FLOOR),
         "system": system,
         "messages": [{"role": "user", "content": user}],
         "thinking": {"type": "adaptive"},
     }
     if backend.effort:
         kwargs["output_config"] = {"effort": backend.effort}
-    msg = anthropic.Anthropic().messages.create(**kwargs)
+    msg = anthropic.Anthropic(timeout=backend.timeout).messages.create(**kwargs)
     if msg.stop_reason == "refusal":
         raise SystemExit("model refused the request")
+    if msg.stop_reason == "max_tokens":
+        raise SystemExit(f"reply truncated at {kwargs['max_tokens']} tokens")
     for block in msg.content:
         if block.type == "text":
             return block.text.strip()
     raise SystemExit("No text content in model response.")
 
 
-def _google_client():
+def _google_client(timeout: int):
     from google import genai
+    from google.genai import types
 
+    options = types.HttpOptions(timeout=timeout * 1000)
     api_key = os.environ.get("GEMINI_API_KEY")
     if api_key:
-        return genai.Client(api_key=api_key)
+        return genai.Client(api_key=api_key, http_options=options)
     try:
-        return genai.Client()
+        return genai.Client(http_options=options)
     except Exception:
         raise SystemExit(
             "Google auth not configured. Set GEMINI_API_KEY or run: "
@@ -195,7 +202,7 @@ def _send_google(
         if budget
         else None,
     )
-    response = _google_client().models.generate_content(
+    response = _google_client(backend.timeout).models.generate_content(
         model=backend.model, contents=user, config=config
     )
     return (response.text or "").strip()
