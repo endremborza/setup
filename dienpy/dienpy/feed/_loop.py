@@ -48,7 +48,9 @@ class Settings:
     thresholds: _gate.Thresholds = _gate.Thresholds()
     log_base: Path = Path(".")  # per-repo subdirectory underneath
     poll: int = 600
-    timeout: int = 10800
+    timeout: int | None = (
+        None  # explicit; None = the profile's, else `ai run`'s unattended default
+    )
     repeat: bool = (
         False  # explicit mode: cycle the job list, `poll` seconds between cycles
     )

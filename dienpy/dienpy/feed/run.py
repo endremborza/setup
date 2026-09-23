@@ -22,15 +22,16 @@ def main(
     repos: list[str] = [],
     profiles: list[str] = [],
     hunks: list[str] | None = None,
-    need: float = _queue.DEFAULT_NEED,
-    session_ceiling: float = 97.0,
-    week_below: float = 97.0,
-    scoped_below: float = 97.0,
+    need: float | None = None,
+    session_ceiling: float = _T.session,
+    week_below: float = _T.weekly,
+    scoped_below: float = _T.scoped,
     log_dir: Annotated[str, FILES] = "",
-    poll: int = 600,
-    timeout: int = 10800,
+    poll: int = Settings.poll,
+    timeout: int | None = None,
     repeat: bool = False,
     once: bool = False,
+    commit: bool = False,
     dry_run: bool = False,
 ) -> None:
     """Scheduler mode (no prompts, no --cmd): pick the best eligible prompt across the
@@ -39,9 +40,11 @@ def main(
 
     Explicit mode: the given prompt files and/or --cmd run in order in this repo (--repeat
     cycles them), gated the same way: a job starts when its profile's weekly windows are
-    under the thresholds and session% + --need stays under --session-ceiling. --hunks and
-    --profiles override the repo's `.cril/feed.toml` (`--hunks ""` skips the regroup
-    close). Logs land in --log-dir/<repo> (default $LOGS_DIR/feed).
+    under the thresholds and session% + need stays under --session-ceiling. Each prompt's
+    frontmatter supplies its need, profiles and commit rule; --need, --profiles and
+    --commit override them, --hunks the repo's `.cril/feed.toml` (`--hunks ""` skips the
+    regroup close). --timeout overrides the profile's. Logs land in --log-dir/<repo>
+    (default $LOGS_DIR/feed).
     """
     settings = Settings(
         thresholds=_gate.Thresholds(session_ceiling, week_below, scoped_below),
@@ -61,19 +64,35 @@ def main(
     if repos:
         raise SystemExit("--repos is scheduler mode; drop the prompt files / --cmd")
     repo = _queue.load_repo(Path(find_root()))
-    if profiles:
-        repo = dataclasses.replace(repo, profiles=tuple(profiles))
     if hunks is not None:
         repo = dataclasses.replace(repo, hunks=tuple(hunks))
-    jobs = [Job(prompt=Path(p).resolve(), profiles=repo.profiles, need=need) for p in prompts]
+    jobs = []
+    for p in prompts:
+        path = Path(p).resolve()
+        if not path.is_file():
+            raise SystemExit(f"prompt file not found: {p}")
+        meta = _queue.meta_of(path)
+        jobs.append(
+            Job(
+                prompt=path,
+                profiles=tuple(profiles) or meta.profiles or repo.profiles,
+                need=meta.need if need is None else need,
+                commit=commit or meta.commit,
+            )
+        )
     if cmd:
-        jobs.append(Job(cmd=cmd, profiles=repo.profiles, need=need))
-    missing = [str(j.prompt) for j in jobs if j.prompt is not None and not j.prompt.is_file()]
-    if missing:
-        raise SystemExit(f"prompt file(s) not found: {', '.join(missing)}")
+        jobs.append(
+            Job(
+                cmd=cmd,
+                profiles=tuple(profiles) or repo.profiles,
+                need=_queue.DEFAULT_NEED if need is None else need,
+            )
+        )
     if dry_run:
-        print(f"repo      {repo.root}\nhunks     {' '.join(repo.hunks) or '(skipped)'}\nprofiles  {', '.join(repo.profiles)}")
+        print(f"repo      {repo.root}\nhunks     {' '.join(repo.hunks) or '(skipped)'}")
         for i, j in enumerate(jobs, 1):
-            print(f"job {i:<5} {j}")
+            print(
+                f"job {i:<5} {j}  profiles={','.join(j.profiles)} need={j.need:.0f} commit={j.commit}"
+            )
         return
     run(repo, jobs, settings)
