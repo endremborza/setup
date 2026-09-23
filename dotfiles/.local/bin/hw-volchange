@@ -1,27 +1,7 @@
-#!/usr/bin/env nu
-
-def main [change: int, --abs] {
-    let sink = (pactl get-default-sink)
-
-    let current = (
-        pactl get-sink-volume $sink
-        | parse -r '(\d+)%'
-        | get 0
-        | get capture0
-        | into int
-    )
-
-    if $abs {
-        if $change == 0 and $current == 0 {
-            pactl set-sink-volume $sink 100%
-        } else {
-            pactl set-sink-volume $sink $"($change)%"
-        }
-    } else {
-        if $change > 0 {
-            pactl set-sink-volume $sink $"+($change)%"
-        } else {
-            pactl set-sink-volume $sink $"($change)%"
-        }
-    }
-}
+#!/bin/sh
+# hw-volchange +5 | -5 | mute — default sink volume step or mute toggle
+set -eu
+case "$1" in
+    mute) pactl set-sink-mute @DEFAULT_SINK@ toggle ;;
+    *) pactl set-sink-volume @DEFAULT_SINK@ "$1%" ;;
+esac
