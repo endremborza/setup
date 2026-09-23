@@ -1,2 +1,0 @@
-#! /bin/sh
-tmux save-buffer - | xclip -i -sel clipboard
