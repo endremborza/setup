@@ -64,13 +64,28 @@ def parse_windows(usage: dict) -> list[Window]:
     limits = usage.get("limits")
     if not limits:
         return [
-            Window("session", float(usage["five_hour"]["utilization"]), _when(usage["five_hour"]["resets_at"])),
-            Window("weekly_all", float(usage["seven_day"]["utilization"]), _when(usage["seven_day"]["resets_at"])),
+            Window(
+                "session",
+                float(usage["five_hour"]["utilization"]),
+                _when(usage["five_hour"]["resets_at"]),
+            ),
+            Window(
+                "weekly_all",
+                float(usage["seven_day"]["utilization"]),
+                _when(usage["seven_day"]["resets_at"]),
+            ),
         ]
     out = []
     for lim in limits:
         scope = ((lim.get("scope") or {}).get("model") or {}).get("display_name") or ""
-        out.append(Window(str(lim["kind"]), float(lim["percent"]), _when(lim.get("resets_at")), scope))
+        out.append(
+            Window(
+                str(lim["kind"]),
+                float(lim["percent"]),
+                _when(lim.get("resets_at")),
+                scope,
+            )
+        )
     return out
 
 
@@ -112,7 +127,9 @@ def main(*, watch: bool = False, interval: int = 300) -> None:
             progress.update(time_task, completed=w.time_percent or 0.0)
             if w.resets_at:
                 fmt = "%H:%M" if w.kind == "session" else "%a %H:%M"
-                resets.append(f"{w.label} resets {w.resets_at.astimezone().strftime(fmt)}")
+                resets.append(
+                    f"{w.label} resets {w.resets_at.astimezone().strftime(fmt)}"
+                )
 
     if watch:
         try:
