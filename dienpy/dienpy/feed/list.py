@@ -12,7 +12,10 @@ from ._queue import RepoQueue
 def show(queues: list[RepoQueue], settings: Settings, *, offline: bool) -> None:
     cands = _queue.collect(queues)
     if not cands:
-        print("no prompts with frontmatter under " + ", ".join(str(q.prompts) for q in queues))
+        print(
+            "no prompts with frontmatter under "
+            + ", ".join(str(q.prompts) for q in queues)
+        )
         return
     now = datetime.datetime.now(datetime.timezone.utc)
     verdicts: dict[tuple[str, str], str] = {}
@@ -23,7 +26,9 @@ def show(queues: list[RepoQueue], settings: Settings, *, offline: bool) -> None:
         for c, why in choose(cands, settings, windows, now, fetch=strict).verdicts:
             verdicts[(c.repo.name, c.name)] = why
     width = max(len(f"{c.repo.name}/{c.name}") for c in cands)
-    print(f"{'prompt':<{width}}  {'mode':<6} {'pri':<3} {'need':<5} {'profiles':<12} {'last':<12} verdict")
+    print(
+        f"{'prompt':<{width}}  {'mode':<6} {'pri':<3} {'need':<5} {'profiles':<12} {'last':<12} verdict"
+    )
     for c in cands:
         last = f"{c.state.last.astimezone():%m-%d %H:%M}" if c.state.last else "-"
         print(

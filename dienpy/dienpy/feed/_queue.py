@@ -85,13 +85,17 @@ class Candidate:
 
     @property
     def need(self) -> float:
-        return statistics.fmean(self.state.costs) if self.state.costs else self.meta.need
+        return (
+            statistics.fmean(self.state.costs) if self.state.costs else self.meta.need
+        )
 
     @property
     def edited_since_run(self) -> bool:
         if self.state.last is None:
             return True
-        mtime = datetime.datetime.fromtimestamp(self.path.stat().st_mtime, datetime.timezone.utc)
+        mtime = datetime.datetime.fromtimestamp(
+            self.path.stat().st_mtime, datetime.timezone.utc
+        )
         return mtime > self.state.last
 
 
@@ -230,7 +234,9 @@ def _models(profiles: tuple[str, ...]) -> list[str]:
     return out
 
 
-def headroom(profiles: tuple[str, ...], need: float, ws: list[Window], t: _gate.Thresholds) -> tuple[str, str]:
+def headroom(
+    profiles: tuple[str, ...], need: float, ws: list[Window], t: _gate.Thresholds
+) -> tuple[str, str]:
     """(profile, "") when some profile fits now, else ("", reason)."""
     models = _models(profiles)
     verdict = _gate.pick(ws, models, t, need=need)
