@@ -1,4 +1,4 @@
-"""Bury a patch: stash it under the graveyard prefix (`git stash list` shows `regroup: <title>`)."""
+"""Bury a patch: stash it under the graveyard prefix (`hunks graveyard` lists and restores it)."""
 
 from .. import _apply, _patches
 from . import _current

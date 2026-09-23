@@ -25,20 +25,27 @@ dienpy hunks run [dims] [--path P] [--staged] [--force|--full|--extend] [--auth 
 dienpy hunks list [--json]                 cached runs + coverage; --json is what nvim reads
 dienpy hunks use [dims]                    make a cached run the current one
 dienpy hunks patch stage|unstage|discard <patch|hunk-id …>
-dienpy hunks patch bury <patch>            stash under the graveyard prefix `regroup: <title>`
+dienpy hunks patch bury <patch>            stash it into the graveyard
 dienpy hunks patch commit <patch …> [--message M]
 dienpy hunks patch move <hunk-id …> <patch>
+dienpy hunks graveyard list [--json]       buried patches and surviving leftovers, by hash
+dienpy hunks graveyard restore|drop <hash>
 dienpy hunks branch new <name> [patch …] [--worktree]
 dienpy hunks branch land [name] [--onto B] [--split [granularity]] [--message M]
 dienpy hunks branch show [name] [--archived] [--json]
+dienpy hunks branch checkout <name>
 dienpy hunks branch drop <name>
 dienpy hunks improve <hash>                rewrite a past commit's message
 dienpy hunks history <hashes> | --since 7D
 ```
 
-`run` is incremental: when a cached entry covers at least half of the current hunks, only the new ones are sent along with the existing titles and placed via `extends`, and the patches that grew are re-described in the same run. `--extend` pins that path — it requires a cached run and refuses rather than re-partitioning, which is why it is the one analysis nvim binds to a key. `--path` scopes a run to one subtree, leaving patches over the rest of the diff untouched. `--staged` partitions the index and prints messages without touching the cache. A partition that drops or duplicates a hunk id is rejected locally and retried once with the violation report.
+`run` is incremental: when a cached entry covers at least half of the current hunks, only the new ones are sent along with the existing titles and placed via `extends`, and the patches that grew are re-described in the same run. Placements are merged into the entry as it is *after* the model call, matched by patch id, so a `patch move` made meanwhile survives. `--extend` pins the incremental path — it requires a cached run and refuses rather than re-partitioning, which is why it is the one analysis nvim binds to a key. `--path` scopes a run to one subtree, leaving patches over the rest of the diff untouched, `--force` included. `--staged` partitions the index and prints messages without touching the cache. A partition that drops or duplicates a hunk id is rejected locally and retried once with the violation report.
 
 `patch commit` commits on whatever branch is checked out: on the default branch that is the direct landing of a patch; on a patch branch it is how the branch gets built. The index may hold nothing beyond the patch (a staged rename is the one exception — index-side noise the worktree diff folds into content hunks, whose patch headers are rebased onto the new path before `git apply`).
+
+## The graveyard
+
+`patch bury` stages a patch alone and stashes it (`git stash push --staged`) under the message `regroup: <title>`; the leftovers `branch land` stashes around a switch use the same prefix. `graveyard list` shows every such stash newest first, addressed by the stash commit's hash — a `stash@{n}` index shifts as entries come and go, the hash does not. `graveyard restore` applies the entry's index and worktree changes as patches and drops it: unlike `git stash pop`, other uncommitted edits to the same files stay put, and an entry whose patch no longer applies is kept. `graveyard drop` removes one for good.
 
 ## The patch-branch protocol
 
@@ -46,21 +53,22 @@ Triage empties the worktree: every patch ends committed on the default branch, c
 
 - `branch new <name> <patches>` switches in place to a new branch at HEAD (dirty files carried) and commits the picked patches on it in order. `--worktree` builds the branch in `../<repo>-<name>` instead, moving the picked patches over as a stash, so the current checkout stays on its branch — the shape an agent or a parallel branch needs.
 - Commits on the branch are free-form; `git commit --fixup` for an edit spotted mid-review is fine, the landing erases it.
-- `branch land` writes the message first (`--message`; a single commit's message as is; otherwise the model rewrites the branch log into one), stashes leftovers, switches to the default branch, `git merge --squash`, commits once, verifies the landing tree equals the branch tip when the base did not move, archives the tip under `refs/landed/<name>` with a note on the landing (`git notes --ref=landed`), deletes the branch and its worktree, pops the leftovers. A squash that conflicts is undone and reported: merge the default branch into the patch branch and land again. `--split` partitions the squashed diff and commits patch by patch instead, so a messy branch lands as a few clean commits — one landing is the `loose` case of the same engine.
-- Landing closes the branch; continuing means a new patch branch from the default branch.
-- `branch drop` archives under `refs/dropped/<name>`. Both namespaces sit outside `refs/heads`: `git branch` does not list them, `git push` never sends them, `git log --all` and `git log refs/landed/<name>` still reach them.
+- `branch land` refuses before anything moves when the branch has no commits beyond the default branch, when its worktree holds uncommitted work, when the default branch is checked out in another worktree (land from there), or when a `--split` profile cannot serve the need. It then writes the message (`--message`; a single commit's message as is; otherwise the model rewrites the branch log into one), stashes leftovers, switches to the default branch, `git merge --squash`, commits once, verifies the landing tree equals the branch tip when the base did not move, archives the tip under `refs/landed/<name>` with a note on the landing (`git notes --ref=landed`), deletes the branch and its worktree, pops the leftovers with their staged state. A switch, squash or commit that fails is undone with the leftovers back in place; a squash conflict is reported: merge the default branch into the patch branch and land again. `--split` partitions the squashed diff and commits patch by patch instead, so a messy branch lands as a few clean commits — one landing is the `loose` case of the same engine.
+- Landing closes the branch; continuing means a new patch branch from the default branch. A reused branch name archives apart: `refs/landed/<name>-2`, `-3`, … keep every earlier landing reachable.
+- `branch checkout` switches this worktree to a patch branch, refusing one another worktree holds.
+- `branch drop` archives under `refs/dropped/<name>`, refusing the default branch and a branch whose worktree is dirty. Both namespaces sit outside `refs/heads`: `git branch` does not list them, `git push` never sends them, `git log --all` and `git log refs/landed/<name>` still reach them.
 
 ## AI backends
 
-Model access goes through `dienpy.ai` ([dienpy/AGENTS.md](../dienpy/AGENTS.md#the-ai-package)): the model dimension names a profile from `~/.config/dienpy/ai.toml`, and the engine declares what it needs (schema output, repo tools for `explore`), so a profile that cannot serve the need is refused before anything is spent or written. The `cli` profiles run `claude -p --json-schema` on login auth: the subprocess drops `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN`; `--auth env` keeps them. `branch land` uses the `commit` tool profile for its message.
+Model access goes through `dienpy.ai` ([dienpy/AGENTS.md](../dienpy/AGENTS.md#the-ai-package)): the model dimension names a profile from `~/.config/dienpy/ai.toml`, and the engine declares what it needs (schema output, repo tools for `explore`), so a profile that cannot serve the need is refused before anything is spent or written. The `cli` profiles run `claude -p --json-schema` on login auth: the subprocess drops `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN`; `--auth env` keeps them. `branch land` uses the `commit` tool profile for its message. `history` renders the commits into one prompt (batched only past 100k characters), so a series comes back as one summary.
 
 ## nvim
 
-`dotfiles/.config/nvim/lua/regroup/` parses no diff and writes no git state: `state.lua` reads `hunks list --json`, `ui.lua` calls `hunks patch …`, `hunks branch …`, `hunks use` and `hunks run --extend`, forwarding a config it read from the listing, and reloads after each. `review.lua` (diff windows) and `commit.lua` (commit buffer) are plain-git views shared with the `<leader>gf/gr/gb` pickers in `init.lua`; `graveyard.lua` is `git stash list` filtered on the prefix.
+`dotfiles/.config/nvim/lua/regroup/` parses no diff and writes no git state: `state.lua` reads `hunks list --json`, `ui.lua` calls `hunks patch …`, `hunks branch …`, `hunks graveyard …`, `hunks use` and `hunks run --extend`, forwarding a config it read from the listing, and reloads after each. `review.lua` (diff windows) and `commit.lua` (commit buffer) are plain-git views shared with the `<leader>gf/gr/gb` pickers in `init.lua`.
 
-The seam has two rules the engine and the plugin both keep: a `--json` payload owns stdout alone, every diagnostic (prune included) goes to stderr; and a command's exit status is the write's alone — a reload that fails after a successful write is reported on its own, since retrying would apply the same patch twice.
+The seam has two rules the engine and the plugin both keep: a `--json` payload owns stdout alone, every diagnostic (prune included) goes to stderr; and a command's exit status is the write's alone — a reload that fails after a successful write is reported on its own, since retrying would apply the same patch twice. The one exception is a landing whose leftovers fail to pop: the landing line is printed, then the pop's error, and the exit status is nonzero because the tree is left in conflict.
 
-`<leader>gg` opens the patch picker on the current run, `<leader>gG` the run picker; `:Regroup <tokens>` narrows to one cached run; `:RegroupBranches` lists patch branches (switch, land, drop); `:RegroupGraveyard` restores buried patches. Hunks no patch covers collect in a synthetic "(unassigned new changes)" patch. Cheatsheet: `:h regroup`.
+`<leader>gg` opens the patch picker on the current run, `<leader>gG` the run picker; `:Regroup <tokens>` narrows to one cached run; `:RegroupBranches` lists patch branches (checkout, land, drop); `:RegroupGraveyard` restores buried patches. Hunks no patch covers collect in a synthetic "(unassigned new changes)" patch. Cheatsheet: `:h regroup`.
 
 ## Integrations
 
