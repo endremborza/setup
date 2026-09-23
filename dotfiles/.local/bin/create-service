@@ -1,22 +1,27 @@
-#! /usr/bin/env nu
+#!/usr/bin/env bash
+# create-service NAME [--local] [--socket] — a systemd user unit from
+# util/*-template, edited, stowed and started. Units are private: they go to
+# hypothalamus/dotfiles, or with --local to this host's local-dotfiles.
+set -euo pipefail
 
-def main [f: string --local --socket] {
-    let prefix = if $local {$"local-dotfiles/host-(hostname)"} else {"dotfiles"};
-    let fdir = $"($env.DIEN_ROOT)/($prefix)/.config/systemd/user"
-    let filepath = $"($fdir)/($f).service"
-    cp $"($env.DIEN_ROOT)/util/service-template" $filepath
-    nvim $filepath;
-    if $socket {
-        let socket_filepath = $"($fdir)/($f).socket"
-        cp $"($env.DIEN_ROOT)/util/socket-template" $socket_filepath
-        nvim $socket_filepath;
-    }
-    restow;
-    systemctl enable --user $"($f).service"
-    systemctl start --user $"($f).service"
-    systemctl status --user $"($f).service"
-    if $socket {
-        systemctl enable --user --now $"($f).socket"
-    }
-}
+name=${1:?usage: create-service NAME [--local] [--socket]}
+shift
+unit_dir=$HYPO_ROOT/dotfiles/.config/systemd/user
+units=("$name.service")
+for arg in "$@"; do
+    case $arg in
+        --local) unit_dir=$HYPO_ROOT/local-dotfiles/host-$(hostname)/.config/systemd/user ;;
+        --socket) units+=("$name.socket") ;;
+        *) echo "usage: create-service NAME [--local] [--socket]" >&2; exit 2 ;;
+    esac
+done
 
+mkdir -p "$unit_dir"
+for unit in "${units[@]}"; do
+    [ ! -e "$unit_dir/$unit" ] || { echo "$unit_dir/$unit exists" >&2; exit 1; }
+    cp "$DIEN_ROOT/util/${unit##*.}-template" "$unit_dir/$unit"
+    "${EDITOR:-nvim}" "$unit_dir/$unit"
+done
+restow
+systemctl --user enable --now "${units[@]}"
+systemctl --user status "${units[@]}"
