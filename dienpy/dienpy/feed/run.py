@@ -11,13 +11,9 @@ from ..claude import _gate
 from ..constants import LOGS_DIR
 from . import _queue
 from ._loop import Job, Settings, run, schedule
-from ._queue import RepoQueue
+from .list import show
 
-
-def repo_queues(repos: list[str]) -> list[RepoQueue]:
-    """RepoQueues for the given roots; none given = the repo around the cwd."""
-    roots = [Path(r).resolve() for r in repos] or [Path(find_root())]
-    return [_queue.load_repo(r) for r in roots]
+_T = _gate.Thresholds()
 
 
 def main(
@@ -56,10 +52,8 @@ def main(
         once=once,
     )
     if not prompts and not cmd:
-        queues = repo_queues(repos)
+        queues = _queue.repo_queues(repos)
         if dry_run:
-            from .list import show
-
             show(queues, settings, offline=False)
             return
         schedule(queues, settings)

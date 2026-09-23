@@ -37,6 +37,8 @@ def main(*repos: str, offline: bool = False) -> None:
 
     --offline judges lifecycle only (no usage fetch); repos default to the one around the cwd.
     """
-    from .run import repo_queues
-
-    show(repo_queues(list(repos)), Settings(thresholds=_gate.Thresholds()), offline=offline)
+    show(
+        _queue.repo_queues(list(repos)),
+        Settings(thresholds=_gate.Thresholds()),
+        offline=offline,
+    )
