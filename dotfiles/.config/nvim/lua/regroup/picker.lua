@@ -82,6 +82,7 @@ function M.open(opts)
       define_preview = function(self, entry)
         vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, opts.preview(entry.value))
         if opts.preview_ft then vim.bo[self.state.bufnr].filetype = opts.preview_ft end
+        if opts.preview_ft == 'diff' then require('regroup.worddiff').highlight(self.state.bufnr) end
       end,
     } or nil,
     attach_mappings = function(prompt_bufnr, map)
