@@ -19,12 +19,19 @@
 
 `.cril/` is the repo's slice of my cross-repo PKM (symlinked into each repo, gitignored, never committed). The split is by tense/audience:
 - **`docs/` (committed)** = the project *as it is*, for anyone reading the code: architecture, data model, schemas, shipped-feature references, build/dev setup, benchmarks & results, anything cited externally (e.g. a paper).
-- **`.cril/` (PKM, not committed)** = everything about *changing or running* the project, for me as its driver: todos/backlogs, plans & design explorations, ideas, engineering debt, launch/marketing copy, high-level progress notes, and reusable agent prompts/playbooks.
+- **`.cril/` (PKM, not committed)** = everything about *changing or running* the project, for me as its driver: todos/backlogs, plans & design explorations, ideas, engineering debt, launch/marketing copy, high-level progress notes, and reusable agent prompts/playbooks. Prose and data only, never a script (see *One-off Scripts*).
 
 Invariants:
 - `docs/` never links into `.cril/`; `.cril/` may link into the repo — the repo stays self-contained.
 - When a `.cril/` plan ships, fold its *as-built* description into `docs/` and delete the plan (history lives in git, not stale checklists).
 - An incident, a debugging session, a one-off request and whatever it taught go to `.cril/writeups/`, todos to `.cril/todo.md` — never into the code as comments (see *Comments*).
+
+## One-off Scripts
+A script that is not part of a product has one home, set by how long it is needed:
+- **Agent-run, finished within the session** (a probe, a census, a check, a migration the agent runs itself): the session scratchpad, nowhere persistent. What it established goes to `docs/` or `.cril/writeups/`; the script is not kept.
+- **Waiting on me, or kept for one later run** (needs sudo, a physical step, a moment that has not come, or a host to be scp'd to): `$CODE_DIR/scratchpad/oneshots/<repo>-<slug>.<ext>`, its own git repo whose uv venv links dienpy, hyppy, cril and fleet as editables, so a script imports them directly. The header says what it does, what must hold before it runs, and the exact invocation from that directory (`uv run python <file>`; `uv run --with <pkg> python <file>` for an extra dependency). Delete it once it has run and its outcome is recorded.
+- **Re-runnable by design** (repeats after later changes or incidents): promote it into the owning package as a command or a flag on one; a repo without a CLI keeps it in its own committed `scripts/`.
+- `docs/` never names a oneshot: what a doc points at is a command or a `scripts/` file.
 
 ## Writing md
 - One line per paragraph. Never hard-wrap prose at a column -- wrapping is the editor's job, and hard wraps make a one-word edit reflow the whole block in the diff.
