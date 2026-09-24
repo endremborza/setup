@@ -86,7 +86,8 @@ def resolve(tool: str, need: Need, profile: str = "") -> Backend:
         raise SystemExit(
             f"profile '{name}': invalid effort '{effort}' (one of: {', '.join(EFFORTS)})"
         )
-    # profile timeout (deployment knowledge) beats the caller's workload default
+    # profile timeout (deployment knowledge) beats the caller's workload default; an
+    # explicit --timeout is applied by the caller on the resolved backend
     timeout = int(spec.get("timeout", need.timeout))
 
     def refuse(what: str) -> SystemExit:

@@ -9,8 +9,8 @@ from protocli import FILES
 
 from . import _profiles, _prompt_file
 from ._backend import Cli, Need, resolve
-from ._profiles import ProfileName
 from ._transport import launch
+from .models import Target
 
 _UNATTENDED_TIMEOUT = 10800
 
@@ -38,31 +38,34 @@ def read_prompt(file: str, raw: str) -> str | None:
         path = Path(file)
         if not path.is_file():
             raise SystemExit(f"prompt file not found: {file}")
-        return _prompt_file.split(path.read_text())[1]
+        return _prompt_file.split(path.read_text(errors="replace"))[1]
     if not sys.stdin.isatty():
         return sys.stdin.read()
     return None
 
 
 def backend(
-    profile: str,
+    profile: str = "",
     *,
     tool: str = "run",
-    timeout: int = _UNATTENDED_TIMEOUT,
+    timeout: int | None = None,
     auto: bool = False,
 ) -> Cli:
-    resolved = resolve(
-        tool, Need(timeout=timeout), profile=profile or _profiles.default_name()
-    )
+    """The cli backend for `profile` (empty: the tool's binding, then the default);
+    an explicit `timeout` overrides the profile's, which overrides the unattended default."""
+    resolved = resolve(tool, Need(timeout=_UNATTENDED_TIMEOUT), profile=profile)
     if not isinstance(resolved, Cli):
-        raise SystemExit(f"profile '{profile}' is not a claude cli profile")
+        name = profile or _profiles.for_tool(tool)
+        raise SystemExit(f"profile '{name}' is not a claude cli profile")
+    if timeout is not None:
+        resolved = dataclasses.replace(resolved, timeout=timeout)
     if auto:
-        return dataclasses.replace(resolved, permission_mode="auto")
+        resolved = dataclasses.replace(resolved, permission_mode="auto")
     return resolved
 
 
 def main(
-    profile: ProfileName,
+    profile: Target | None = None,
     file: Annotated[str, FILES] = "",
     *,
     interactive: bool = False,
@@ -71,12 +74,14 @@ def main(
     auto: bool = False,
     unattended: bool = False,
     commit: bool = False,
-    timeout: int = _UNATTENDED_TIMEOUT,
+    timeout: int | None = None,
 ) -> None:
     """Run a prompt through claude non-interactively (default) or open a session.
 
-    Non-interactive runs force --permission-mode auto and time out after --timeout
-    seconds; --auto opts an interactive session into auto mode too. --safe starts
+    The profile defaults to the `[tool] run` binding, then `default`; a name that is no
+    profile is passed to claude as its model. Non-interactive runs force
+    --permission-mode auto and time out after --timeout seconds (default: the profile's,
+    else 3 h); --auto opts an interactive session into auto mode too. --safe starts
     claude with every customization (CLAUDE.md, skills) off. --unattended appends the
     queue rules (no questions, take the recommended default, never commit, final
     report); --commit lifts the never-commit rule from them.

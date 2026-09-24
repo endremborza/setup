@@ -1,30 +1,55 @@
-"""List and refresh cached AI model IDs across API providers."""
+"""List and refresh the cached model ids per API provider; the anthropic ids complete `ai run`."""
 
 import sys
-from typing import Literal
+from typing import Annotated, Literal
 
-from . import _cache, _transport
+from protocli import Complete
 
-_PROVIDERS = ("anthropic", "google")
+from . import _cache, _profiles, _transport
+
+PROVIDERS = ("anthropic", "google")
+Provider = Literal["anthropic", "google"]
 
 
-def main(
-    *, refresh: bool = False, provider: Literal["anthropic", "google"] | None = None
+def choices() -> list[str]:
+    """What `ai run` accepts: a profile name, or a bare claude model id for the cli."""
+    return _profiles.names() + _cache.ids("anthropic")
+
+
+Target = Annotated[str, Complete(choices)]
+
+
+def update(
+    providers: tuple[str, ...] = PROVIDERS, *, force: bool = False, quiet: bool = False
 ) -> None:
-    """List available AI models; --refresh forces a re-fetch."""
-    for prov in [provider] if provider else list(_PROVIDERS):
-        if refresh or _cache.needs_refresh(prov):
-            try:
-                models = _transport.fetch_models(prov)
-                _cache.save(prov, models)
-                print(f"[{prov}] {len(models)} models cached.", file=sys.stderr)
-            except SystemExit as e:
+    """Re-fetch a provider's list once it is older than a day (or on `force`); a failed
+    fetch is reported, never raised, so a scheduler can call this every cycle."""
+    for prov in providers:
+        if not force and not _cache.needs_refresh(prov):
+            continue
+        try:
+            models = _transport.fetch_models(prov)
+        except SystemExit as e:
+            if not quiet:
                 print(f"[{prov}] skipped: {e}", file=sys.stderr)
-            except Exception as e:
-                print(f"[{prov}] fetch failed: {e}", file=sys.stderr)
+            continue
+        except Exception as e:
+            if not quiet:
+                print(
+                    f"[{prov}] fetch failed: {type(e).__name__}: {e}", file=sys.stderr
+                )
+            continue
+        _cache.save(prov, models)
+        if not quiet:
+            print(f"[{prov}] {len(models)} models cached.", file=sys.stderr)
 
+
+def main(*, refresh: bool = False, provider: Provider | None = None) -> None:
+    """List cached model ids, refreshing lists older than a day; --refresh re-fetches now."""
+    wanted = (provider,) if provider else PROVIDERS
+    update(wanted, force=refresh)
     for prov, models in _cache.load().items():
-        if provider and prov != provider:
+        if prov not in wanted:
             continue
         print(f"\n{prov}:")
         for m in models:

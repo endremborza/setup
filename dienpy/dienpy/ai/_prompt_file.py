@@ -1,13 +1,15 @@
 """Prompt files: an optional flat `key: value` frontmatter block above the prompt text.
 
 The block is `---` fenced at the top of the file; values are plain strings (lists are
-comma-separated, ` #` starts a comment). The model only ever sees the body.
+comma-separated, ` #` starts a comment). The model only ever sees the body. A leading
+`---` that is not followed by such a block, closed by a second fence, is plain text.
 """
 
 import re
 
 FENCE = "---"
 _COMMENT = re.compile(r"\s#.*$")
+_KEY = re.compile(r"^[A-Za-z_][\w-]*$")
 
 
 def split(text: str) -> tuple[dict[str, str], str]:
@@ -22,8 +24,8 @@ def split(text: str) -> tuple[dict[str, str], str]:
         if not bare:
             continue
         key, sep, value = bare.partition(":")
-        if not sep:
-            raise ValueError(f"frontmatter line without a colon: {line.rstrip()!r}")
+        if not sep or not _KEY.match(key.strip()):
+            return {}, text
         meta[key.strip()] = value.strip()
     return {}, text
 

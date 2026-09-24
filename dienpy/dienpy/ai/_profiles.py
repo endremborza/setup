@@ -17,7 +17,7 @@ LOCAL_URL = "http://localhost:8081/v1/chat/completions"
 
 HAIKU = "claude-haiku-4-5"
 SONNET = "claude-sonnet-5"
-OPUS = "claude-opus-5"
+OPUS = "claude-opus-5-5"
 FABLE = "claude-fable-5-1"
 
 
