@@ -33,6 +33,8 @@ def main(
         raise SystemExit("No text to speak")
 
     if server_is_running():
-        server_send(text, voice, speed)
-    else:
-        asyncio.run(speak_async(load_kokoro(), text, voice, speed))
+        try:
+            return server_send(text, voice, speed)
+        except OSError:
+            pass  # stale pid file and socket: synthesise locally instead
+    asyncio.run(speak_async(load_kokoro(), text, voice, speed))

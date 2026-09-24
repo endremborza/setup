@@ -5,13 +5,16 @@ dependencies = [
     "protocli>=0.2.0",
     "requests",
     "rich",
-    "tabulate",
     "anthropic>=0.86.0",
     "google-genai>=1.68.0",
     "setup",
-    "kokoro-onnx>=0.5.0",
-    "sounddevice>=0.5.5",
 ]
+
+[project.optional-dependencies]
+tts = ["kokoro-onnx>=0.5.0", "sounddevice>=0.5.5"]
+
+[dependency-groups]
+dev = ["pytest"]
 
 [project.scripts]
 dienpy = "dienpy.__main__:main"

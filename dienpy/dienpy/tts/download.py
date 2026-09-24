@@ -33,7 +33,10 @@ def main() -> None:
             r.raise_for_status()
             total = int(r.headers.get("content-length", 0)) or None
             task = progress.add_task("dl", name=name, total=total)
-            with dest.open("wb") as f:
+            # a partial file must never pass as present, so it lands under .part
+            part = dest.with_suffix(dest.suffix + ".part")
+            with part.open("wb") as f:
                 for chunk in r.iter_content(chunk_size=65536):
                     f.write(chunk)
                     progress.update(task, advance=len(chunk))
+            part.replace(dest)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import socket
@@ -57,9 +58,14 @@ def ensure_models() -> None:
         )
 
 
-def load_kokoro():
-    from kokoro_onnx import Kokoro
+_EXTRA_HINT = "the speech stack is the `tts` extra: uv tool install -e 'dienpy/[tts]'"
 
+
+def load_kokoro():
+    try:
+        from kokoro_onnx import Kokoro
+    except ImportError:
+        raise SystemExit(_EXTRA_HINT) from None
     ensure_models()
     return Kokoro(str(MODEL_PATH), str(VOICES_PATH))
 
@@ -79,19 +85,26 @@ def to_plain(text: str) -> str:
 
 
 async def speak_async(kokoro, text: str, voice: str, speed: float) -> None:
-    import sounddevice as sd
+    """Playback blocks, so it runs off the loop: kokoro synthesises the next
+    chunk on this same loop while the current one plays."""
+    try:
+        import sounddevice as sd
+    except ImportError:
+        raise SystemExit(_EXTRA_HINT) from None
 
     stream: sd.OutputStream | None = None
-    async for samples, sr in kokoro.create_stream(
-        text, voice=voice, speed=speed, lang="en-us"
-    ):
-        if stream is None:
-            stream = sd.OutputStream(samplerate=sr, channels=1, dtype="float32")
-            stream.start()
-        stream.write(samples)
-    if stream is not None:
-        stream.stop()
-        stream.close()
+    try:
+        async for samples, sr in kokoro.create_stream(
+            text, voice=voice, speed=speed, lang="en-us"
+        ):
+            if stream is None:
+                stream = sd.OutputStream(samplerate=sr, channels=1, dtype="float32")
+                stream.start()
+            await asyncio.to_thread(stream.write, samples)
+    finally:
+        if stream is not None:
+            stream.stop()
+            stream.close()
 
 
 def server_is_running() -> bool:

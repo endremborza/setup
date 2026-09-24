@@ -11,8 +11,9 @@ install: install-dienpy
 install-uv:
 	curl -LsSf https://astral.sh/uv/install.sh | sh
 
+# DIENPY_EXTRAS='[tts]' adds the speech stack (onnxruntime, ~100MB) on a workstation
 install-dienpy:
-	uv tool install -e dienpy/
+	uv tool install -e 'dienpy/$(DIENPY_EXTRAS)'
 
 setup-run:
 	uv run --directory setup python -m setup run $(PROFILE_FLAGS)
