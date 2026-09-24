@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 from _repo import git, make
-
 from dienpy.hunks import _cache, _hunks
 from dienpy.hunks import list as hunks_list
 from dienpy.hunks._config import Config
@@ -64,7 +63,8 @@ def test_scoped_entry_records_grouped_ids(tmp_path: Path) -> None:
     assert entry and entry["ids"] == ["a"] and entry["patches"] == patches
     stamp = entry["time"]
     _cache.set_entry(root, CONFIG, hunks, patches)
-    assert _cache.entry(root, CONFIG)["time"] == stamp
+    again = _cache.entry(root, CONFIG)
+    assert again and again["time"] == stamp
 
 
 def test_json_listing_survives_a_prune(tmp_path: Path, capsys, monkeypatch) -> None:

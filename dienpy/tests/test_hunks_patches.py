@@ -1,7 +1,6 @@
 """patches: sanitize prunes dead ids and merges same titles keeping the first id; selection by id, position and hunk id."""
 
 import pytest
-
 from dienpy.hunks._patches import hunk_ids, mint, sanitize, select
 
 
