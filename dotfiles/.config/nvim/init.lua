@@ -17,15 +17,50 @@ if not vim.uv.fs_stat(lazypath) then
 end
 vim.opt.rtp:prepend(lazypath)
 
-do
-  local orig_lsp_start = vim.lsp.start
-  vim.lsp.start = function(config, opts)
-    opts = opts or {}
-    local bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
-    local bufname = vim.api.nvim_buf_get_name(bufnr)
-    if not bufname:match("^/") then return nil end
-    return orig_lsp_start(config, opts)
+-- lspconfig's rust root_dir shells out to rustc and cargo on every open; the lockfile marks
+-- the workspace root without either. Files under the toolchain or the registry join the
+-- running server, so goto-definition into std never starts a second one.
+local function rust_root(fname)
+  local home = vim.fs.normalize(vim.env.HOME)
+  for _, dir in ipairs({ vim.env.CARGO_HOME or home .. '/.cargo', vim.env.RUSTUP_HOME or home .. '/.rustup' }) do
+    if vim.fs.relpath(dir, fname) then
+      local clients = vim.lsp.get_clients { name = 'rust_analyzer' }
+      if #clients > 0 then return clients[#clients].config.root_dir end
+    end
   end
+  return vim.fs.root(fname, { 'Cargo.lock', 'rust-project.json' })
+      or vim.fs.root(fname, { 'Cargo.toml' })
+      or vim.fs.root(fname, { '.git' })
+end
+
+-- one table drives the plugin's cmd trigger and its keymaps
+local MOLTEN = {
+  { 'i', 'MoltenInit', 'initialize the plugin' },
+  { 'f', 'MoltenInfo', 'plugin info' },
+  { 'l', 'MoltenEvaluateLine', 'evaluate line' },
+  { 'r', 'MoltenReevaluateCell', 're-evaluate cell' },
+  { '0', 'MoltenRestart', 'restart kernel' },
+  { 'v', 'MoltenEvaluateVisual', 'run selection', mode = 'v' },
+  { 'd', 'MoltenDelete', 'delete cell' },
+  { 'h', 'MoltenHideOutput', 'hide output' },
+  { 'o', 'MoltenShowOutput', 'show output' },
+  { 's', 'MoltenEnterOutput', 'show/enter output', prefix = 'noautocmd ' },
+  { 'n', 'MoltenNext', 'next cell' },
+  { 'b', 'MoltenPrev', 'previous cell' },
+}
+
+local function molten_spec()
+  local cmd, keys = {}, {}
+  for _, m in ipairs(MOLTEN) do
+    table.insert(cmd, m[2])
+    local rhs = m.mode == 'v' and (':<C-u>' .. m[2] .. '<CR>gv') or ('<cmd>' .. (m.prefix or '') .. m[2] .. '<CR>')
+    table.insert(keys, { '<localleader>m' .. m[1], rhs, mode = m.mode or 'n', desc = m[3], silent = true })
+  end
+  return cmd, keys
+end
+
+local function tele(fn, opts)
+  return function() require('telescope.builtin')[fn](opts) end
 end
 
 require('lazy').setup({
@@ -48,10 +83,18 @@ require('lazy').setup({
           },
         },
       },
-      'nvim-telescope/telescope.nvim',
       'hrsh7th/cmp-nvim-lsp',
     },
     config = function()
+      -- no server for fugitive://, gitsigns://, term:// and other non-file buffers
+      local orig_lsp_start = vim.lsp.start
+      vim.lsp.start = function(config, opts)
+        opts = opts or {}
+        local bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
+        if not vim.api.nvim_buf_get_name(bufnr):match("^/") then return nil end
+        return orig_lsp_start(config, opts)
+      end
+
       local capabilities = vim.lsp.protocol.make_client_capabilities()
       capabilities = require('cmp_nvim_lsp').default_capabilities(capabilities)
       capabilities = vim.tbl_deep_extend("force", capabilities, {
@@ -59,22 +102,6 @@ require('lazy').setup({
       })
 
       vim.lsp.config('*', { capabilities = capabilities })
-
-      vim.lsp.config('texlab', {
-        settings = {
-          texlab = {
-            build = {
-              executable = "latexmk",
-              args = { "-pdf", "-interaction=nonstopmode", "-synctex=1", "%f" },
-              onSave = true,
-            },
-            forwardSearch = {
-              executable = "zathura",
-              args = { "--synctex-forward", "%l:1:%f", "%p" },
-            },
-          },
-        },
-      })
 
       vim.lsp.config('pyright', {
         settings = {
@@ -86,22 +113,12 @@ require('lazy').setup({
         },
       })
 
-      local _rust_root_cache = {}
       vim.lsp.config('rust_analyzer', {
         root_dir = function(bufnr, on_dir)
           local fname = vim.api.nvim_buf_get_name(bufnr)
           if not fname:match("^/") then return end
-          local crate = vim.fs.root(fname, { 'Cargo.toml' })
-          if crate and _rust_root_cache[crate] then
-            on_dir(_rust_root_cache[crate])
-            return
-          end
-          local ws = vim.fs.root(fname, { 'Cargo.lock', 'rust-project.json' })
-          local root = ws or crate or vim.fs.root(fname, { '.git' })
-          if root then
-            if crate then _rust_root_cache[crate] = root end
-            on_dir(root)
-          end
+          local root = rust_root(fname)
+          if root then on_dir(root) end
         end,
       })
 
@@ -123,38 +140,31 @@ require('lazy').setup({
         automatic_enable = true,
       }
       vim.lsp.enable('ruff')
-      vim.lsp.set_log_level("WARN")
+      vim.lsp.log.set_level(vim.log.levels.WARN)
 
-      local tele = require('telescope.builtin')
-
-      local on_attach = function(_, bufnr)
-        local function nmap(keys, func, desc)
-          vim.keymap.set('n', keys, func, { buffer = bufnr, desc = 'LSP: ' .. desc })
-        end
-
-        nmap('<leader>rn', vim.lsp.buf.rename, '[R]e[n]ame')
-        nmap('<leader>ca', vim.lsp.buf.code_action, '[C]ode [A]ction')
-        nmap('gd', tele.lsp_definitions, '[G]oto [D]efinition')
-        nmap('gr', tele.lsp_references, '[G]oto [R]eferences')
-        nmap('gI', tele.lsp_implementations, '[G]oto [I]mplementation')
-        nmap('<leader>D', tele.lsp_type_definitions, 'Type [D]efinition')
-        nmap('<leader>ds', tele.lsp_document_symbols, '[D]ocument [S]ymbols')
-        nmap('<leader>ws', tele.lsp_dynamic_workspace_symbols, '[W]orkspace [S]ymbols')
-        nmap('K', vim.lsp.buf.hover, 'Hover Documentation')
-        nmap('<C-k>', vim.lsp.buf.signature_help, 'Signature Documentation')
-        nmap('gD', vim.lsp.buf.declaration, '[G]oto [D]eclaration')
-      end
-
+      -- telescope-backed variants of the LSP defaults (grr stays the references key);
+      -- rename, code action, hover and diagnostics use the defaults
       vim.api.nvim_create_autocmd("LspAttach", {
         callback = function(args)
-          on_attach(vim.lsp.get_client_by_id(args.data.client_id), args.buf)
+          local tb = require('telescope.builtin')
+          local function nmap(keys, func, desc)
+            vim.keymap.set('n', keys, func, { buffer = args.buf, desc = 'LSP: ' .. desc })
+          end
+          nmap('gd', tb.lsp_definitions, '[G]oto [D]efinition')
+          nmap('grr', tb.lsp_references, '[G]oto [R]eferences')
+          nmap('gI', tb.lsp_implementations, '[G]oto [I]mplementation')
+          nmap('<leader>D', tb.lsp_type_definitions, 'Type [D]efinition')
+          nmap('<leader>ds', tb.lsp_document_symbols, '[D]ocument [S]ymbols')
+          nmap('<leader>ws', tb.lsp_dynamic_workspace_symbols, '[W]orkspace [S]ymbols')
+          nmap('<C-k>', vim.lsp.buf.signature_help, 'Signature Documentation')
+          nmap('gD', vim.lsp.buf.declaration, '[G]oto [D]eclaration')
         end,
       })
     end,
   },
   {
     'hrsh7th/nvim-cmp',
-    event = "BufReadPre",
+    event = "InsertEnter",
     dependencies = {
       'hrsh7th/cmp-nvim-lsp',
       'hrsh7th/cmp-path',
@@ -200,12 +210,10 @@ require('lazy').setup({
         { "zg",        desc = "Add word to dictionary" },
         { "zw",        desc = "Mark word as wrong" },
         { "z=",        desc = "Spelling suggestions" },
-        { '<leader>c', group = '[C]ode' },
         { '<leader>d', group = '[D]ocument' },
         { '<leader>f', group = '[F]ile' },
         { '<leader>g', group = '[G]it' },
         { '<leader>i', group = '[I]nsert' },
-        { '<leader>r', group = '[R]ename' },
         { '<leader>s', group = '[S]earch' },
         { '<leader>w', group = '[W]orkspace' },
         { '<leader>t', group = '[T]oggle' },
@@ -297,6 +305,7 @@ require('lazy').setup({
   },
   {
     'nvim-telescope/telescope.nvim',
+    cmd = 'Telescope',
     dependencies = {
       'nvim-lua/plenary.nvim',
       {
@@ -306,6 +315,31 @@ require('lazy').setup({
           return vim.fn.executable 'make' == 1
         end,
       },
+    },
+    keys = {
+      { '<leader>gf', function() require('regroup.review').pick_file() end, desc = 'Review changed [F]ile' },
+      { '<leader>gb', function() require('regroup.review').pick_base() end, desc = 'Review [B]asis branch' },
+      { '<leader>go', tele('git_branches'), desc = 'Check[O]ut Branch' },
+      { '<leader>fh', tele('git_bcommits'), desc = '[F]ile commit [H]istory' },
+      { '<leader>?', tele('oldfiles'), desc = '[?] Find recently opened files' },
+      { '<leader><space>', tele('buffers'), desc = '[ ] Find existing buffers' },
+      {
+        '<leader>/',
+        function()
+          require('telescope.builtin').current_buffer_fuzzy_find(
+            require('telescope.themes').get_dropdown { winblend = 10, previewer = false })
+        end,
+        desc = '[/] Fuzzily search in current buffer',
+      },
+      { '<leader>s/', tele('live_grep', { grep_open_files = true, prompt_title = 'Live Grep in Open Files' }), desc = '[S]earch [/] in Open Files' },
+      { '<leader>ss', tele('builtin'), desc = '[S]earch [S]elect Telescope' },
+      { '<leader>sf', tele('find_files'), desc = '[S]earch [F]iles' },
+      { '<leader>st', tele('grep_string', { search = 'TODO' }), desc = '[S]earch [T]odo' },
+      { '<leader>sh', tele('help_tags'), desc = '[S]earch [H]elp' },
+      { '<leader>sw', tele('grep_string'), desc = '[S]earch current [W]ord' },
+      { '<leader>sg', tele('live_grep'), desc = '[S]earch by [G]rep' },
+      { '<leader>sd', tele('diagnostics'), desc = '[S]earch [D]iagnostics' },
+      { '<leader>sr', tele('resume'), desc = '[S]earch [R]esume' },
     },
     config = function()
       local ignore_file = vim.fn.expand("~/.config/ignore_patterns")
@@ -339,152 +373,6 @@ require('lazy').setup({
       }
 
       pcall(require('telescope').load_extension, 'fzf')
-
-      local tele_std = require('telescope.builtin')
-      local grev = require('regroup.review')
-
-      local function review_changed_file()
-        local picker
-        if grev.base == "HEAD" then
-          picker = function(opts)
-            tele_std.git_status(opts)
-          end
-        else
-          picker = function(opts)
-            tele_std.git_files(vim.tbl_extend("force", opts or {}, {
-              git_command = { "git", "diff", "--name-only", grev.base }
-            }))
-          end
-        end
-        picker({
-          attach_mappings = function(prompt_bufnr, map)
-            local actions = require("telescope.actions")
-            local action_state = require("telescope.actions.state")
-            local finders = require("telescope.finders")
-            local make_entry = require("telescope.make_entry")
-
-            local function select()
-              local entry = action_state.get_selected_entry()
-              actions.close(prompt_bufnr)
-              grev.open(entry.value)
-            end
-
-            local function refresh()
-              if grev.base ~= "HEAD" then return end
-              local p = action_state.get_current_picker(prompt_bufnr)
-              local row = p:get_selection_row()
-              local callbacks = { unpack(p._completion_callbacks) }
-              p:register_completion_callback(function(self)
-                self:set_selection(row)
-                self._completion_callbacks = callbacks
-              end)
-              local fopts = { cwd = p.cwd, split_char = "\0" }
-              fopts.entry_maker = make_entry.gen_from_git_status(fopts)
-              p:refresh(finders.new_oneshot_job({ "git", "status", "-z", "-uall", "--", "." }, fopts),
-                { reset_prompt = false })
-            end
-
-            local function stage(add)
-              local entry = action_state.get_selected_entry()
-              if not entry then return end
-              local p = action_state.get_current_picker(prompt_bufnr)
-              vim.system(add and { "git", "add", "--", entry.value }
-                or { "git", "restore", "--staged", "--", entry.value }, { cwd = p.cwd }):wait()
-              refresh()
-            end
-
-            local function commit_staged()
-              local p = action_state.get_current_picker(prompt_bufnr)
-              local cwd = p.cwd
-              actions.close(prompt_bufnr)
-              require("regroup.commit").index(cwd)
-            end
-
-            map("i", "<CR>", select)
-            map("n", "<CR>", select)
-            map("i", "<Right>", function() stage(true) end)
-            map("n", "<Right>", function() stage(true) end)
-            map("i", "<Left>", function() stage(false) end)
-            map("n", "<Left>", function() stage(false) end)
-            map("i", "<C-y>", commit_staged)
-            map("n", "<C-y>", commit_staged)
-            return true
-          end,
-        })
-      end
-
-      local function pick_review_branch()
-        tele_std.git_branches({
-          attach_mappings = function(prompt_bufnr, map)
-            local actions = require("telescope.actions")
-            local action_state = require("telescope.actions.state")
-
-            local function select_branch()
-              local entry = action_state.get_selected_entry()
-              actions.close(prompt_bufnr)
-              grev.base = entry.value
-            end
-
-            local function select_head()
-              actions.close(prompt_bufnr)
-              grev.base = "HEAD"
-            end
-
-            map("i", "<CR>", select_branch)
-            map("n", "<CR>", select_branch)
-            map("i", "<C-h>", select_head)
-            map("n", "<C-h>", select_head)
-
-            return true
-          end,
-        })
-      end
-
-      local function checkout_branch()
-        tele_std.git_branches({
-          attach_mappings = function(prompt_bufnr, map)
-            local actions = require("telescope.actions")
-            local action_state = require("telescope.actions.state")
-
-            local function select_branch()
-              local entry = action_state.get_selected_entry()
-              actions.close(prompt_bufnr)
-              vim.cmd("Git checkout " .. entry.value)
-            end
-            map("i", "<CR>", select_branch)
-            map("n", "<CR>", select_branch)
-            return true
-          end,
-        })
-      end
-
-      vim.keymap.set("n", "<leader>gf", review_changed_file, { desc = "Review changed [F]ile" })
-      vim.keymap.set("n", "<leader>gr", grev.toggle, { desc = "Toggle Git [R]eview mode" })
-      vim.keymap.set("n", "<leader>gb", pick_review_branch, { desc = "Review [B]asis branch" })
-      vim.keymap.set("n", "<leader>go", checkout_branch, { desc = "Check[O]ut Branch" })
-
-      vim.keymap.set('n', '<leader>?', tele_std.oldfiles, { desc = '[?] Find recently opened files' })
-      vim.keymap.set('n', '<leader><space>', tele_std.buffers, { desc = '[ ] Find existing buffers' })
-      vim.keymap.set('n', '<leader>/', function()
-        tele_std.current_buffer_fuzzy_find(require('telescope.themes').get_dropdown {
-          winblend = 10,
-          previewer = false,
-        })
-      end, { desc = '[/] Fuzzily search in current buffer' })
-
-      vim.keymap.set('n', '<leader>s/', function()
-        tele_std.live_grep { grep_open_files = true, prompt_title = 'Live Grep in Open Files' }
-      end, { desc = '[S]earch [/] in Open Files' })
-      vim.keymap.set('n', '<leader>ss', tele_std.builtin, { desc = '[S]earch [S]elect Telescope' })
-      vim.keymap.set('n', '<leader>sf', tele_std.find_files, { desc = '[S]earch [F]iles' })
-      vim.keymap.set('n', '<leader>st', function()
-        tele_std.grep_string { search = 'TODO' }
-      end, { desc = '[S]earch [T]odo' })
-      vim.keymap.set('n', '<leader>sh', tele_std.help_tags, { desc = '[S]earch [H]elp' })
-      vim.keymap.set('n', '<leader>sw', tele_std.grep_string, { desc = '[S]earch current [W]ord' })
-      vim.keymap.set('n', '<leader>sg', tele_std.live_grep, { desc = '[S]earch by [G]rep' })
-      vim.keymap.set('n', '<leader>sd', tele_std.diagnostics, { desc = '[S]earch [D]iagnostics' })
-      vim.keymap.set('n', '<leader>sr', tele_std.resume, { desc = '[S]earch [R]esume' })
     end,
   },
   {
@@ -561,7 +449,8 @@ require('lazy').setup({
   },
   {
     "stevearc/conform.nvim",
-    event = "BufReadPre",
+    event = "BufWritePre",
+    cmd = "ConformInfo",
     config = function()
       require("conform").setup({
         formatters_by_ft = {
@@ -569,7 +458,9 @@ require('lazy').setup({
           python = { "ruff_format" },
           javascript = { "prettierd", "prettier" },
           css = { "prettierd", "prettier" },
+          xml = { "xmllint" },
         },
+        -- a formatter that is not installed falls through to the attached LSP
         format_on_save = function(bufnr)
           local ft = vim.bo[bufnr].filetype
           return {
@@ -582,11 +473,12 @@ require('lazy').setup({
     end,
   },
   {
+    -- vimtex owns compiling and viewing; texlab stays an LSP only
     "lervag/vimtex",
     ft = { "tex", "plaintex" },
     config = function()
       vim.g.vimtex_view_method = "zathura"
-      vim.g.vimtex_compiler_method = "latexmk"
+      vim.g.vimtex_compiler_method = "tectonic"
       vim.g.vimtex_quickfix_mode = 0
       vim.g.vimtex_syntax_enabled = 1
       vim.g.vimtex_fold_enabled = 1
@@ -604,21 +496,20 @@ require('lazy').setup({
       mappings = true,
     }
   },
-  {
-    "benlubas/molten-nvim",
-    version = "^1.0.0",
-    build = ":UpdateRemotePlugins",
-    cmd = {
-      "MoltenInit", "MoltenInfo", "MoltenEvaluateLine", "MoltenReevaluateCell",
-      "MoltenRestart", "MoltenEvaluateVisual", "MoltenDelete", "MoltenHideOutput",
-      "MoltenShowOutput", "MoltenEnterOutput", "MoltenNext", "MoltenPrev",
-    },
-    init = function()
-      vim.g.molten_image_provider = nil
-      vim.g.molten_output_win_max_height = 20
-      vim.g.molten_auto_open_output = true
-    end,
-  },
+  (function()
+    local cmd, keys = molten_spec()
+    return {
+      "benlubas/molten-nvim",
+      version = "^1.0.0",
+      build = ":UpdateRemotePlugins",
+      cmd = cmd,
+      keys = keys,
+      init = function()
+        vim.g.molten_output_win_max_height = 20
+        vim.g.molten_auto_open_output = true
+      end,
+    }
+  end)(),
 }, {})
 
 vim.o.hlsearch = false
@@ -638,8 +529,6 @@ vim.wo.signcolumn = 'yes'
 vim.o.autoread = true
 vim.o.updatetime = 250
 vim.o.timeoutlen = 300
-
-vim.o.completeopt = 'menuone,noselect'
 
 vim.o.termguicolors = true
 
@@ -667,14 +556,6 @@ vim.keymap.set({ 'n', 'v' }, '<Space>', '<Nop>', { silent = true })
 vim.keymap.set('n', 'k', "v:count == 0 ? 'gk' : 'k'", { expr = true, silent = true })
 vim.keymap.set('n', 'j', "v:count == 0 ? 'gj' : 'j'", { expr = true, silent = true })
 
-vim.keymap.set('n', '[d', function()
-  vim.diagnostic.jump({ count = -1 })
-end, { desc = 'Go to previous diagnostic message' })
-
-vim.keymap.set('n', ']d', function()
-  vim.diagnostic.jump({ count = 1 })
-end, { desc = 'Go to next diagnostic message' })
-vim.keymap.set('n', '<leader>e', vim.diagnostic.open_float, { desc = 'Open floating diagnostic message' })
 vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostics list' })
 
 vim.keymap.set('n', '<leader>id', function()
@@ -695,28 +576,39 @@ vim.keymap.set('n', '<leader>ic', function()
   vim.cmd('startinsert!')
 end, { desc = '[I]nsert [C]heckbox' })
 
-local function force_refresh_gitsigns()
-  local gs = package.loaded.gitsigns
-  if gs then pcall(gs.reset_base, true) end
+-- signs and the regroup session catch up with a change made outside the buffer
+local function touch()
+  require('regroup.state').touch()
+end
+
+-- the current buffer's file, or nil after saying what could not be done
+local function current_file(mod, verb)
+  local file = vim.fn.expand(mod)
+  if file == '' then
+    vim.notify('No file to ' .. verb, vim.log.levels.WARN)
+    return nil
+  end
+  return file
+end
+
+local function yank_path(mod)
+  local path = current_file(mod, 'copy')
+  if not path then return end
+  vim.fn.setreg('+', path)
+  vim.notify('Copied ' .. path)
 end
 
 vim.keymap.set('n', '<leader>fd', function()
-  local file = vim.fn.expand('%:p')
-  if file == '' then
-    vim.notify('No file to delete', vim.log.levels.WARN)
-    return
-  end
+  local file = current_file('%:p', 'delete')
+  if not file then return end
   if vim.fn.confirm('Delete ' .. file .. '?', '&Yes\n&No', 2) ~= 1 then return end
   vim.fn.delete(file)
   vim.cmd('bdelete!')
 end, { desc = '[F]ile [D]elete' })
 
 vim.keymap.set('n', '<leader>fm', function()
-  local old = vim.fn.expand('%:p')
-  if old == '' then
-    vim.notify('No file to rename', vim.log.levels.WARN)
-    return
-  end
+  local old = current_file('%:p', 'rename')
+  if not old then return end
   -- default = bare filename → same-dir rename; type a path (sub/, ../, ~/, /) to move
   local input = vim.fn.input({ prompt = 'Rename to: ', default = vim.fn.expand('%:t'), completion = 'file' })
   if input == '' then return end
@@ -742,7 +634,7 @@ vim.keymap.set('n', '<leader>fm', function()
       vim.api.nvim_buf_delete(b, { force = true })
     end
   end
-  force_refresh_gitsigns()
+  touch()
   vim.notify('Renamed to ' .. vim.fn.fnamemodify(new, ':~:.'))
 end, { desc = '[F]ile [m]ove/rename' })
 
@@ -752,41 +644,17 @@ vim.keymap.set('n', '<leader>fc', function()
   vim.notify('Copied ' .. #lines .. ' lines to clipboard')
 end, { desc = '[F]ile [C]opy contents' })
 
-vim.keymap.set('n', '<leader>fy', function()
-  local path = vim.fn.expand('%')
-  if path == '' then
-    vim.notify('No file path to copy', vim.log.levels.WARN)
-    return
-  end
-  vim.fn.setreg('+', path)
-  vim.notify('Copied ' .. path)
-end, { desc = '[F]ile relative path [y]ank' })
-
-vim.keymap.set('n', '<leader>fY', function()
-  local path = vim.fn.expand('%:p')
-  if path == '' then
-    vim.notify('No file path to copy', vim.log.levels.WARN)
-    return
-  end
-  vim.fn.setreg('+', path)
-  vim.notify('Copied ' .. path)
-end, { desc = '[F]ile absolute path [Y]ank' })
+vim.keymap.set('n', '<leader>fy', function() yank_path('%') end, { desc = '[F]ile relative path [y]ank' })
+vim.keymap.set('n', '<leader>fY', function() yank_path('%:p') end, { desc = '[F]ile absolute path [Y]ank' })
 
 vim.keymap.set('n', '<leader>fr', function()
-  local file = vim.fn.expand('%')
-  if file == '' then
-    vim.notify('No file to restore', vim.log.levels.WARN)
-    return
-  end
+  local file = current_file('%', 'restore')
+  if not file then return end
   if vim.fn.confirm('Restore ' .. file .. ' to HEAD? (discards staged + unstaged changes)', '&Yes\n&No', 2) ~= 1 then return end
   vim.cmd('Git restore --source=HEAD --staged --worktree -- ' .. vim.fn.fnameescape(file))
   vim.cmd('edit!')
-  force_refresh_gitsigns()
+  touch()
 end, { desc = '[F]ile [R]estore to HEAD' })
-
-vim.keymap.set('n', '<leader>fh', function()
-  require('telescope.builtin').git_bcommits()
-end, { desc = '[F]ile commit [H]istory' })
 
 vim.keymap.set('n', '<leader>gs', ":Git<enter>", { desc = '[G]it [S]tatus' })
 vim.keymap.set('n', '<leader>gd', ":Gdiffsplit<enter>", { desc = '[G]it [D]iff' })
@@ -794,33 +662,32 @@ vim.keymap.set('n', '<leader>ga', ":Git add %<enter>", { desc = '[G]it [A]dd' })
 vim.keymap.set('n', '<leader>gc', ":Git commit -m \"\"<Left>", { desc = '[G]it [C]ommit' })
 vim.keymap.set('n', '<leader>gp', ":Git push<enter>", { desc = '[G]it [P]ush' })
 vim.keymap.set('n', '<leader>gl', ":Git pull<enter>", { desc = '[G]it Pul[l]' })
+vim.keymap.set('n', '<leader>gr', function() require('regroup.review').toggle() end, { desc = 'Toggle Git [R]eview mode' })
 vim.keymap.set('n', '<leader>gw', function()
   local msg = vim.fn.input('Commit: ')
   if msg == '' then return end
   vim.cmd('Git add %')
   vim.cmd('Git commit -m ' .. vim.fn.shellescape(msg))
-  force_refresh_gitsigns()
+  touch()
 end, { desc = '[G]it [W]rite' })
 vim.keymap.set("n", "<leader>gh", function()
   local file = vim.fn.expand("%")
   local line = vim.fn.line(".")
-  local start_line = math.max(0, line - 5)
-  local end_line = line + 5
-  vim.cmd(string.format("Git log -L %d,%d:%s", start_line, end_line, file))
+  vim.cmd(string.format("Git log -L %d,%d:%s", math.max(1, line - 5), line + 5, file))
 end, { desc = "[G]it commit [H]istory (log) for current line" })
 
 require('regroup').setup()
 
 local highlight_group = vim.api.nvim_create_augroup('YankHighlight', { clear = true })
 vim.api.nvim_create_autocmd('TextYankPost', {
-  callback = function() vim.highlight.on_yank() end,
+  callback = function() vim.hl.on_yank() end,
   group = highlight_group,
   pattern = '*',
 })
 
 vim.api.nvim_create_autocmd("User", {
   pattern = "FugitiveChanged",
-  callback = function() force_refresh_gitsigns() end,
+  callback = touch,
 })
 
 vim.api.nvim_create_autocmd("OptionSet", {
@@ -856,33 +723,8 @@ vim.api.nvim_create_autocmd("User", {
   end,
 })
 
-vim.api.nvim_create_autocmd({ "FocusGained", "BufEnter" }, {
-  callback = function()
-    vim.cmd('checktime')
-    local gs = package.loaded.gitsigns
-    if gs then pcall(gs.reset_base) end
-  end,
-})
-
-vim.api.nvim_create_autocmd("FileType", {
-  pattern = "nu",
-  callback = function(event) vim.bo[event.buf].commentstring = "#! /usr/bin/env %s" end,
-})
-
-vim.api.nvim_create_autocmd("BufWritePre", {
-  pattern = "*.xml",
-  callback = function()
-    local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-    local buf = 0
-    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    local input = table.concat(lines, "\n")
-
-    vim.fn.system("xmllint --noout --nonet -", input)
-    if vim.v.shell_error == 0 then return end
-
-    vim.cmd("silent %!xmllint --format -")
-    vim.api.nvim_win_set_cursor(0, { row, col })
-  end,
+vim.api.nvim_create_autocmd("FocusGained", {
+  callback = function() vim.cmd('checktime') end,
 })
 
 vim.api.nvim_create_autocmd("FileType", {
@@ -951,9 +793,12 @@ local function get_cell_range()
   return start_line, end_line
 end
 
+-- as a text object: from visual mode the selection restarts at the cell, from
+-- operator-pending mode it becomes the operator's range
 local function select_cell()
   local start, stop = get_cell_range()
   if start > stop then return end
+  if vim.fn.mode():match('^[vV\22]') then vim.cmd([[execute "normal! \<Esc>"]]) end
   vim.api.nvim_win_set_cursor(0, { start, 0 })
   vim.cmd("normal! V")
   vim.api.nvim_win_set_cursor(0, { stop, 0 })
@@ -977,22 +822,8 @@ local function molten_insert_cell_separator()
   vim.fn.append(vim.fn.line("."), vim.g.molten_cell_separator)
 end
 
-vim.keymap.set("x", "<leader>mc", ":<C-u>lua select_cell()<CR>", { silent = true, desc = "molten cell" })
-vim.keymap.set("o", "<leader>mc", select_cell, { silent = true, desc = "molten cell" })
+vim.keymap.set({ "x", "o" }, "<leader>mc", select_cell, { silent = true, desc = "molten cell" })
 vim.keymap.set("n", "<leader>mm", molten_evaluate_cell, { desc = "evaluate current cell" })
 vim.keymap.set("n", "<leader>m-", molten_insert_cell_separator, { desc = "insert cell separator" })
-
-vim.keymap.set("n", "<localleader>mi", ":MoltenInit<CR>", { silent = true, desc = "initialize the plugin" })
-vim.keymap.set("n", "<localleader>mf", ":MoltenInfo<CR>", { silent = true, desc = "plugin info" })
-vim.keymap.set("n", "<localleader>ml", ":MoltenEvaluateLine<CR>", { silent = true, desc = "evaluate line" })
-vim.keymap.set("n", "<localleader>mr", ":MoltenReevaluateCell<CR>", { silent = true, desc = "re-evaluate cell" })
-vim.keymap.set("n", "<localleader>m0", ":MoltenRestart<CR>", { silent = true, desc = "restart kernel" })
-vim.keymap.set("v", "<localleader>mv", ":<C-u>MoltenEvaluateVisual<CR>gv", { silent = true, desc = "run selection" })
-vim.keymap.set("n", "<localleader>md", ":MoltenDelete<CR>", { silent = true, desc = "molten delete cell" })
-vim.keymap.set("n", "<localleader>mh", ":MoltenHideOutput<CR>", { silent = true, desc = "hide output" })
-vim.keymap.set("n", "<localleader>mo", ":MoltenShowOutput<CR>", { silent = true, desc = "hide output" })
-vim.keymap.set("n", "<localleader>ms", ":noautocmd MoltenEnterOutput<CR>", { silent = true, desc = "show/enter output" })
-vim.keymap.set("n", "<localleader>mn", ":MoltenNext<CR>", { silent = true, desc = "next cell" })
-vim.keymap.set("n", "<localleader>mb", ":MoltenPrev<CR>", { silent = true, desc = "previous cell" })
 
 -- vim: ts=2 sts=2 sw=2 et
