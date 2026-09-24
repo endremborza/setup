@@ -1,8 +1,11 @@
-"""usage windows from the oauth payload's `limits`, and the headroom gate over them."""
+"""usage windows from the oauth payload's `limits`, the headroom gate over them, credential expiry."""
 
 import datetime
+import json
+import time
+from pathlib import Path
 
-from dienpy.claude import _gate
+from dienpy.claude import _auth, _gate
 from dienpy.claude.usage import Window, parse_windows
 
 _T = "2026-09-02T11:59:59+00:00"
@@ -64,6 +67,13 @@ def test_scoped_window_applies_to_its_model_only() -> None:
     assert _gate.pick(ws, [FABLE, OPUS], t).model == OPUS
 
 
+def test_load_at_the_ceiling_still_runs() -> None:
+    ws = parse_windows(PAYLOAD)
+    t = _gate.Thresholds(session=97)
+    assert _gate.blockers(ws, OPUS, t, need=64) == []
+    assert [w.kind for w in _gate.blockers(ws, OPUS, t, need=65)] == ["session"]
+
+
 def test_all_blocked_wakes_at_earliest_reset() -> None:
     ws = parse_windows(PAYLOAD)
     t = _gate.Thresholds(session=30, weekly=97, scoped=97)
@@ -78,3 +88,33 @@ def test_first_eligible_in_preference_order() -> None:
     assert _gate.pick(ws, [FABLE, OPUS], _gate.Thresholds()).model == OPUS
     assert _gate.pick(ws, [OPUS, FABLE], _gate.Thresholds()).model == OPUS
     assert _gate.pick(ws, [FABLE], _gate.Thresholds()).wake_at is None
+
+
+def test_expiry_is_read_and_written_in_milliseconds(
+    tmp_path: Path, monkeypatch
+) -> None:
+    ms = int(time.time() * 1000)
+    assert _auth._expired({"claudeAiOauth": {"expiresAt": ms + 3_600_000}}) is False
+    assert _auth._expired({"claudeAiOauth": {"expiresAt": ms + 30_000}}) is True
+
+    class _Reply:
+        ok = True
+
+        @staticmethod
+        def json() -> dict:
+            return {"access_token": "new", "expires_in": 3600}
+
+    import types
+
+    fake_requests = types.SimpleNamespace(post=lambda *a, **k: _Reply())
+    monkeypatch.setitem(__import__("sys").modules, "requests", fake_requests)
+    monkeypatch.setattr(_auth, "warn_if_changed", lambda *a: None)
+    path = tmp_path / "creds.json"
+    path.write_text(
+        json.dumps({"claudeAiOauth": {"refreshToken": "r", "expiresAt": 1}})
+    )
+    path.chmod(0o600)
+    _auth._refresh(path)
+    creds = json.loads(path.read_text())["claudeAiOauth"]
+    assert creds["accessToken"] == "new" and creds["expiresAt"] > ms + 3_500_000
+    assert path.stat().st_mode & 0o777 == 0o600

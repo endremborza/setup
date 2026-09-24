@@ -42,11 +42,16 @@ def load(w: Window, need: float) -> float:
     return w.percent + need if w.kind == "session" else w.percent
 
 
-def blockers(windows: list[Window], model: str, t: Thresholds, need: float = 0.0) -> list[Window]:
-    return [w for w in windows if applies(w, model) and load(w, need) >= t.limit(w)]
+def blockers(
+    windows: list[Window], model: str, t: Thresholds, need: float = 0.0
+) -> list[Window]:
+    """Windows the model may not start under: load past the ceiling (at it is still allowed)."""
+    return [w for w in windows if applies(w, model) and load(w, need) > t.limit(w)]
 
 
-def pick(windows: list[Window], models: list[str], t: Thresholds, need: float = 0.0) -> Verdict:
+def pick(
+    windows: list[Window], models: list[str], t: Thresholds, need: float = 0.0
+) -> Verdict:
     """First model in preference order with no blocking window; otherwise the union of blockers."""
     blocked: list[Window] = []
     for model in models:
