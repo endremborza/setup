@@ -67,7 +67,7 @@ def main() -> None:
         width = max((len(b.profile_label) for b in REGISTRY), default=4)
         for b in REGISTRY:
             check = f"  [check: {b.check}]" if b.check else ""
-            vfy = f"  [verify: {b.verify}]" if b.verify else ""
+            vfy = f"  [verify: {b.verify}]" if b.verify and b.verify != b.check else ""
             print(f"  [{b.profile_label:>{width}}]  {b.name}{check}{vfy}")
     elif args.cmd == "verify":
         ok = verify(profiles=_resolve_cli_profiles(args.profile), brick_name=args.brick)

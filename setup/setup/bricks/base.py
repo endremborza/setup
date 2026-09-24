@@ -1,8 +1,16 @@
-import os
+import shutil
 from pathlib import Path
 
 from setup.runner import brick
-from setup.util import apt_install, append_to_profile, run_cmd
+from setup.util import (
+    apt_install,
+    dpkg_check,
+    extended_env,
+    pinned_check,
+    run_cmd,
+    run_shell,
+)
+from setup.versions import get as _v
 
 _APT_BASE = [
     "file",
@@ -17,7 +25,6 @@ _APT_BASE = [
     "libssl-dev",
     "libncurses-dev",
     "libreadline-dev",
-    "ncurses-dev",
     "ninja-build",
     "gnupg-utils",
     "unzip",
@@ -34,48 +41,41 @@ _APT_BASE = [
     "btop",
     "libclang-dev",
     "libgraphite2-3",
+    "libxml2-utils",
     "openssh-server",
 ]
 
-_SYNC_ROOT = Path(os.environ.get("SYNC_ROOT", str(Path.home() / "synced")))
-_DIENCEPHALON = Path(
-    os.environ.get("DIEN_ROOT", str(_SYNC_ROOT / "composites/pkm/diencephalon"))
-)
+_DIENCEPHALON = Path(__file__).resolve().parents[3]
+_RUST_TAG = _v("rust")
 
 
-# check keys on the newest list addition so extending the list re-runs the
-# (idempotent) install fleet-wide on the next update.
-@brick(
-    profile="base",
-    name="apt-base",
-    check="dpkg -s libclang-dev 2>/dev/null | grep -q 'Status: install ok'",
-    verify="dpkg -s libclang-dev 2>/dev/null | grep -q 'Status: install ok'",
-)
+@brick(profile="base", name="apt-base", check=dpkg_check(*_APT_BASE))
 def install_apt_base() -> None:
     run_cmd("sudo apt-get update")
     apt_install(_APT_BASE)
 
 
-# Registered between apt-base and rust so that dotfiles/.profile is a stow symlink
-# before append_to_profile runs (which would otherwise create a conflicting real file).
 @brick(
     profile="base",
     name="restow",
     check="test -f ~/.config/environment.d/10-vars.conf",
-    verify="test -f ~/.config/environment.d/10-vars.conf",
 )
 def run_restow() -> None:
     run_cmd(f"bash {_DIENCEPHALON}/dotfiles/.local/bin/restow")
 
 
-@brick(profile="base", name="rust", check="rustc --version", verify="rustc --version")
+@brick(profile="base", name="rust", check=pinned_check("rustc --version", _RUST_TAG))
 def install_rust() -> None:
-    run_cmd("sh -c 'curl https://sh.rustup.rs -sSf | sh -s -- -y'")
-    append_to_profile('. "$HOME/.cargo/env"')
+    if shutil.which("rustup", path=extended_env()["PATH"]):
+        run_cmd(f"rustup toolchain install {_RUST_TAG}")
+        run_cmd(f"rustup default {_RUST_TAG}")
+    else:
+        run_shell(
+            "curl -fsSL https://sh.rustup.rs"
+            f" | sh -s -- -y --default-toolchain {_RUST_TAG}"
+        )
 
 
-@brick(
-    profile="base", name="rclone", check="rclone --version", verify="rclone --version"
-)
+@brick(profile="base", name="rclone", check="rclone --version")
 def install_rclone() -> None:
-    run_cmd("sh -c 'sudo -v && curl https://rclone.org/install.sh | sudo bash'")
+    run_shell("curl -fsSL https://rclone.org/install.sh | sudo bash")

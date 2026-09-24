@@ -29,7 +29,7 @@ setup-list:
 test:
 	uv run --directory setup pytest
 
-# Full base+shell+dev real build + verify (~30 min); replaces `dienpy versions upgrade-system --test`
+# Full base+shell+dev real build + verify (~30 min)
 docker-test:
 	docker build --progress=plain -f setup/tests/Dockerfile.full -t diencephalon-setup-test .
 

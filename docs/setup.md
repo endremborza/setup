@@ -6,20 +6,18 @@ Deep reference for the `setup` package: profile catalog, bootstrap, environment 
 
 A profile is an independent feature group. `base` is always implicit. Profiles compose freely — a workstation runs `shell + dev + screen + screen-apps`, a headless dev box runs `shell + dev`, a minimal server runs `shell` only. Bricks are idempotent: if `check` passes, the brick is skipped (unless `--force`).
 
-| Profile        | Bricks                                                                         | Target                | Test gate            |
-|----------------|--------------------------------------------------------------------------------|-----------------------|----------------------|
-| `base`         | apt-base, restow, rust, rclone                                                 | any Linux             | Docker (real)        |
-| `shell`        | cargo-tools (rg/dust/fd/bat/tree-sitter), nushell, lua, luarocks, jq, sc-im, neovim, fzf, tmux | any interactive box | Docker (dry; full in `Dockerfile.full`) |
-| `dev`          | tectonic, node                                                                 | dev workstation       | Docker (dry)         |
-| `screen`       | apt-desktop, user-groups, leftwm, alacritty, nerd-fonts, x11-config, timezone, grub-quiet | graphical workstation | (QEMU — not implemented) |
-| `screen-apps`  | firefox-apt, logseq, bluetooth-autoenable, autologin, network-nm               | full workstation      | (QEMU — not implemented) |
-| `wg`           | wireguard                                                                       | every fleet machine   | Docker (dry)         |
-| `web`          | caddy                                                                           | web-serving machine   | manual (fleet push)  |
-| `docker`       | docker                                                                          | machine hosting fleet apps | manual (fleet update) |
-| `edge`         | nftables-deny, unattended-upgrades                                              | public-facing server  | manual (live VPS)    |
-| `media`        | hwe-kernel, media-stack (mpv/cage/alsa/edid-decode), firefox-apt + autologin (shared); tty1 execs `tv-session` | media playback box    | manual (bench)       |
-
-`base` runs `restow` between `apt-base` and `rust` so the `.profile` stow symlink is in place before `rust` calls `append_to_profile` (otherwise that creates a conflicting real file).
+| Profile | Bricks | Target | Test gate |
+| --- | --- | --- | --- |
+| `base` | apt-base, restow, rust, rclone | any Linux | Docker (real) |
+| `shell` | cargo-tools (rg/dust/fd/bat/tree-sitter), lua, luarocks, jq, sc-im, neovim, fzf, tmux, tpm | any interactive box | Docker (dry; full in `Dockerfile.full`) |
+| `dev` | tectonic, node, bun | dev workstation | Docker (dry) |
+| `screen` | apt-desktop, user-groups, leftwm, alacritty, nerd-fonts, x11-config, timezone, grub-quiet | graphical workstation | (QEMU — not implemented) |
+| `screen-apps` | firefox-apt, logseq, bluetooth-autoenable, autologin, network-nm | full workstation | (QEMU — not implemented) |
+| `wg` | wireguard | every fleet machine | Docker (dry) |
+| `web` | caddy | web-serving machine | manual (fleet push) |
+| `docker` | docker | machine hosting fleet apps | manual (fleet update) |
+| `edge` | nftables-deny, unattended-upgrades | public-facing server | manual (live VPS) |
+| `media` | hwe-kernel, media-stack (mpv/cage/alsa/edid-decode), firefox-apt + autologin (shared); tty1 execs `tv-session` | media playback box | manual (bench) |
 
 ### Invocation
 
@@ -40,8 +38,8 @@ SETUP_PROFILES="shell dev" setup run     # env-driven
 ### Success criteria per profile
 
 - **base** — `rustc`, `rclone` respond to `--version`; `~/.config/environment.d/10-vars.conf` exists (restow ran).
-- **shell** — all base checks plus `nvim`, `fzf`, `tmux`, `lua`, `luarocks`, `jq`, `rg`, `nu`, `sc-im` respond.
-- **dev** — shell checks plus `tectonic` and `node`.
+- **shell** — all base checks plus `nvim`, `fzf`, `tmux`, `lua`, `luarocks`, `jq`, `rg`, `sc-im` respond at their pinned versions; `~/.tmux/plugins/tpm` is linked.
+- **dev** — shell checks plus `tectonic`, `node` and `bun`.
 - **screen** — `startx` launches leftwm; alacritty opens; nerd fonts listed by `fc-list`.
 - **screen-apps** — Firefox installed from Mozilla APT (not snap); Logseq linked in `~/.local/bin`; Bluetooth auto-enables on boot.
 - **wg** — `wg` responds; interface config/keys are the fleet controller's job (`/etc/wireguard` stays empty until enrollment).
@@ -149,15 +147,15 @@ Mocks `subprocess` and tests the brick registration, skip logic, profile resolut
 
 ### Docker
 
-| Recipe                           | Dockerfile                              | What                                                    |
-|----------------------------------|-----------------------------------------|---------------------------------------------------------|
-| `make docker-ci`                 | `setup/tests/Dockerfile`                | base real + shell/dev dry-run (fast CI gate)            |
-| `make docker-test`               | `setup/tests/Dockerfile.full`           | base + shell + dev real + verify (~30 min, nightly)     |
-| `make docker-bootstrap`          | `setup/tests/Dockerfile.bootstrap`      | End-to-end: clones from file://, runs `bootstrap.sh`    |
+| Recipe | Dockerfile | What |
+| --- | --- | --- |
+| `make docker-ci` | `setup/tests/Dockerfile` | base real + shell/dev dry-run (fast CI gate) |
+| `make docker-test` | `setup/tests/Dockerfile.full` | base + shell + dev real + verify (~30 min, nightly) |
+| `make docker-bootstrap` | `setup/tests/Dockerfile.bootstrap` | End-to-end: clones from file://, runs `bootstrap.sh` |
 
-### `dienpy versions upgrade-system`
+### Pins and upgrades
 
-Bumps `versions.toml` to latest upstream tags, builds a fresh image from `Dockerfile.full`, runs `setup verify -p shell -p dev` inside. Driven by dienpy, not setup directly.
+`setup/versions.toml` pins one tag per tool. A pinned brick's `check` is `pinned_check(cmd, tag)` (`setup/util.py`): it passes only when the tool prints the pinned number, so `dienpy versions bump <tool> <tag>` fails that check on every machine and the next `setup run` (or `fleet update`) rebuilds the tool at the new pin. There is no separate upgrade path — a bump is applied by the same idempotent run as a fresh install. `dienpy versions check` reports which pins are behind upstream.
 
 ### QEMU (screen / screen-apps)
 
@@ -170,5 +168,5 @@ Graphical and system-level profiles can't run in Docker. Not yet implemented —
 
 ### check vs verify
 
-- `check` decides whether to *skip* a brick (already-installed guard). Cheap.
-- `verify` confirms the result of a completed install. Run by `setup verify`. Exit code 0 iff all verify commands pass.
+- `check` decides whether to *skip* a brick (already-installed guard). Cheap. After an install the runner re-runs it, and a brick whose check still fails is reported as failed.
+- `verify` confirms the result of a completed install. Run by `setup verify`. Exit code 0 iff all verify commands pass. It defaults to `check`; a brick declares its own only when the install guard is not the right smoke test (e.g. `media-stack` checks packages, verifies binaries).

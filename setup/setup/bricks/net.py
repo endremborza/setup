@@ -2,8 +2,9 @@ import getpass
 from pathlib import Path
 
 from setup.runner import brick
-from setup.util import apt_install, run_cmd, write_system_file, ONSET_PATH
+from setup.util import apt_install, download, pinned_check, run_cmd, write_system_file
 from setup.versions import get as _v
+from setup.versions import number
 
 # Input-only hardening: default-deny inbound except lo, established, icmp,
 # ssh/http/https and the wireguard port. The forward chain is deliberately not
@@ -34,12 +35,7 @@ APT::Periodic::Unattended-Upgrade "1";
 """
 
 
-@brick(
-    profile="wg",
-    name="wireguard",
-    check="command -v wg",
-    verify="command -v wg",
-)
+@brick(profile="wg", name="wireguard", check="command -v wg")
 def install_wireguard() -> None:
     apt_install(["wireguard"])
 
@@ -54,20 +50,16 @@ def install_wireguard() -> None:
 # Caddyfile, a conffile in both packages (fleet rewrites it later in the same
 # update anyway); the prompt it suppresses would otherwise hang the run.
 _CADDY_TAG = _v("caddy")
-_CADDY_VERSION = _CADDY_TAG.lstrip("v")
-_CADDY_CHECK = f"caddy version | grep -F '{_CADDY_VERSION}'"
+_CADDY_VERSION = number(_CADDY_TAG)
 
 
-@brick(profile="web", name="caddy", check=_CADDY_CHECK, verify=_CADDY_CHECK)
+@brick(profile="web", name="caddy", check=pinned_check("caddy version", _CADDY_TAG))
 def install_caddy() -> None:
-    deb = f"caddy_{_CADDY_VERSION}_linux_amd64.deb"
-    url = f"https://github.com/caddyserver/caddy/releases/download/{_CADDY_TAG}/{deb}"
-    ONSET_PATH.mkdir(parents=True, exist_ok=True)
-    run_cmd(f"curl -fsSLO {url}", cwd=ONSET_PATH)
-    run_cmd(
-        f"sudo apt-get install -y -o Dpkg::Options::=--force-confold ./{deb}",
-        cwd=ONSET_PATH,
+    deb = download(
+        "https://github.com/caddyserver/caddy/releases/download/"
+        f"{_CADDY_TAG}/caddy_{_CADDY_VERSION}_linux_amd64.deb"
     )
+    run_cmd(f"sudo apt-get install -y -o Dpkg::Options::=--force-confold {deb}")
 
 
 @brick(

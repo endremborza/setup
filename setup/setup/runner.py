@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import subprocess
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Callable
+
+from setup.util import extended_env
 
 REGISTRY: list[Brick] = []
 
@@ -33,9 +34,17 @@ def brick(
     check: str | None = None,
     verify: str | None = None,
 ) -> Callable:
+    """`verify` defaults to `check`: the install guard is also the smoke test."""
+
     def decorator(fn: Callable[[], None]) -> Callable[[], None]:
         REGISTRY.append(
-            Brick(fn=fn, name=name, profile=profile, check=check, verify=verify)
+            Brick(
+                fn=fn,
+                name=name,
+                profile=profile,
+                check=check,
+                verify=check if verify is None else verify,
+            )
         )
         return fn
 
@@ -43,7 +52,9 @@ def brick(
 
 
 def run_check(cmd: str) -> tuple[bool, str]:
-    r = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    r = subprocess.run(
+        cmd, shell=True, capture_output=True, text=True, env=extended_env(), check=False
+    )
     return r.returncode == 0, (r.stdout + r.stderr).strip()
 
 
@@ -66,13 +77,17 @@ def _bricks_for(profiles: Iterable[str] | None, brick_name: str | None) -> list[
 
 
 def _invoke(b: Brick) -> bool:
+    """An install counts only if its own check passes afterwards."""
     try:
         b.fn()
-        print(f"[ ok ] {b.name}")
-        return True
-    except Exception as e:
+    except (Exception, SystemExit) as e:
         print(f"[FAIL] {b.name}: {e}")
         return False
+    if b.check and not check_passes(b.check):
+        print(f"[FAIL] {b.name}: check still fails after install: {b.check}")
+        return False
+    print(f"[ ok ] {b.name}")
+    return True
 
 
 def run(

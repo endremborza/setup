@@ -33,6 +33,11 @@ tag = "3.7c"
 source = "github:tmux/tmux"
 checked = "2026-09-08"
 
+[tpm]
+tag = "v3.1.0"
+source = "github:tmux-plugins/tpm"
+checked = "2026-09-13"
+
 [alacritty]
 tag = "v0.17.0"
 source = "github:alacritty/alacritty"
@@ -47,6 +52,11 @@ checked = "2026-09-08"
 tag = "0.10.15"
 source = "github:logseq/logseq"
 checked = "2026-04-19"
+
+[nvm]
+tag = "v0.40.3"
+source = "github:nvm-sh/nvm"
+checked = "2026-09-13"
 
 [bun]
 tag = "bun-v1.4.2"

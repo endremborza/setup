@@ -45,12 +45,13 @@ from setup.util import apt_install
 @brick(
     profile="shell",
     name="my-tool",
-    check="my-tool --version",   # passes → brick is skipped
-    verify="my-tool --version",  # used by `setup verify`
+    check="my-tool --version",   # passes → brick is skipped; re-run after the install, and doubles as `verify`
 )
 def install_my_tool() -> None:
     apt_install(["my-tool"])
 ```
+
+A pinned tool uses `check=pinned_check("my-tool --version", _v("my-tool"))`, which passes only at the pinned version, so a bump re-runs the brick. Pass `verify=` only when the install guard is not the right smoke test.
 
 Then import the module from `setup/bricks/__init__.py` so the decorator runs at import.
 
@@ -62,25 +63,25 @@ Rules:
 
 ### Versions
 
-Pinned tags live in `setup/versions.toml`. The toml is the source of truth — `setup/setup/versions.py` does load/dump round-trip (no line-level patching). Brick modules import `from setup.versions import get as _v` and read tags at module-load time.
+Pinned tags live in `setup/versions.toml`. The toml is the source of truth — `setup/setup/versions.py` does load/dump round-trip (no line-level patching). Brick modules import `from setup.versions import get as _v` and read tags at module-load time; URLs that want the bare number use `number(tag)`.
 
-`dienpy versions` (in `dienpy/dienpy/versions/`) is the management front end: list, check upstream, bump, dry-run upgrade, live upgrade. It composes the brick registry — version ownership lives in dienpy, not setup.
+`dienpy versions` (in `dienpy/dienpy/versions/`) is the management front end: list, check upstream, bump. Applying a bump is `setup run`: the pinned checks fail and the bricks rebuild — the toml is the only upgrade state, nothing per machine.
 
 ## Stow integration
 
-`dotfiles/.local/bin/restow` stows this repo's `dotfiles/` to `~` with `--no-folding`. A private companion (`hypothalamus`) stows alongside — GNU stow merges directories, so both contribute files to `~/.local/bin/` etc. as long as filenames don't collide.
+`dotfiles/.local/bin/restow` stows this repo's `dotfiles/` to `~` with `--no-folding` (`dotfiles/.claude/` separately, to `$SHARE_DIR/.claude`). A private companion (`hypothalamus`) stows alongside — GNU stow merges directories, so both contribute files to `~/.local/bin/` etc. as long as filenames don't collide.
 
 ## Three-layer env vars
 
-| Layer | File              | Source                                  | Content                                |
-|-------|-------------------|-----------------------------------------|----------------------------------------|
-| 1     | `~/.vars`         | diencephalon                            | Base paths, tool config, non-secret    |
-| 2     | `~/.secret-vars`  | hypothalamus/secrets                    | API keys, tokens                       |
-| 3     | `~/.local-vars`   | hypothalamus/local-dotfiles/host-$(hn)  | Machine-specific (GPU, hardware, port) |
+| Layer | File | Source | Content |
+| --- | --- | --- | --- |
+| 1 | `~/.vars` | diencephalon | Base paths, tool config, non-secret |
+| 2 | `~/.secret-vars` | hypothalamus/secrets | API keys, tokens |
+| 3 | `~/.local-vars` | hypothalamus/local-dotfiles/host-$(hn) | Machine-specific (GPU, hardware, port) |
 
-Each layer can reference earlier ones. `.profile` and `.xinitrc` source them in order. `restow` regenerates `~/.config/environment.d/{10,20,30}-*.conf` so systemd user services see the same env.
+Each layer can reference earlier ones. `.profile` sources them in order; everything a login starts inherits them. `restow` regenerates `~/.config/environment.d/{10,20,30}-*.conf` from the files alone so systemd user services see the same env (`$` escaped as `$$`); the stowed `99-path.conf` puts `~/.local/bin` and `~/.cargo/bin` on their PATH.
 
-Full boot-to-desktop propagation flow (including tmux/dbus/import-environment gotchas) is in [docs/setup.md](docs/setup.md#environment-propagation).
+Full boot-to-desktop propagation flow (including the tmux and dbus gotchas) is in [docs/setup.md](docs/setup.md#environment-propagation).
 
 ## nvim config
 

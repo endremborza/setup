@@ -33,17 +33,17 @@ make install
 
 A profile is an independent feature group. `base` is always implicit; layer others as needed.
 
-| Profile        | Installs                                                          |
-|----------------|-------------------------------------------------------------------|
-| `base`         | apt-base, restow, rust, rclone                                    |
-| `shell`        | cargo-tools, nushell, lua, luarocks, jq, sc-im, neovim, fzf, tmux |
-| `dev`          | tectonic, node                                                    |
-| `screen`       | xorg, leftwm, alacritty, nerd-fonts, X11 config                   |
-| `screen-apps`  | firefox-apt, logseq, bluetooth, autologin, network-nm             |
-| `wg`           | wireguard (interface config is the enroller's job)                |
-| `web`          | caddy (Caddyfile + service state are the fleet controller's job)  |
-| `edge`         | nftables default-deny input, unattended-upgrades                  |
-| `media`        | HWE kernel, cage, mpv, firefox, tty1 autologin — TV kiosk box     |
+| Profile | Installs |
+| --- | --- |
+| `base` | apt-base, restow, rust, rclone |
+| `shell` | cargo-tools, lua, luarocks, jq, sc-im, neovim, fzf, tmux, tpm |
+| `dev` | tectonic, node, bun |
+| `screen` | xorg, leftwm, alacritty, nerd-fonts, X11 config |
+| `screen-apps` | firefox-apt, logseq, bluetooth, autologin, network-nm |
+| `wg` | wireguard (interface config is the enroller's job) |
+| `web` | caddy (Caddyfile + service state are the fleet controller's job) |
+| `edge` | nftables default-deny input, unattended-upgrades |
+| `media` | HWE kernel, cage, mpv, firefox, tty1 autologin — TV kiosk box |
 
 ```bash
 setup run                                # base only
@@ -58,26 +58,25 @@ Bricks are idempotent: if a brick's `check` command passes, it's skipped. Use `-
 ## Makefile
 
 | Target | Description |
-|--------|-------------|
-| `make install`              | Install `dienpy` as a uv tool (drags in `setup` editable) |
-| `make setup-run`            | `uv run setup run` for `$PROFILES` (default: `shell`)     |
-| `make setup-verify`         | Verify bricks in `$PROFILES`                               |
-| `make setup-list`           | List all registered bricks                                 |
-| `make test`                 | Pytest suite for the `setup` package                      |
-| `make docker-ci`            | Fast CI gate: base real + shell/dev dry-run               |
-| `make docker-test`          | Full real build + verify (~30 min)                        |
-| `make docker-bootstrap`     | End-to-end test of `bootstrap.sh`                         |
+| --- | --- |
+| `make install` | Install `dienpy` as a uv tool (drags in `setup` editable); `DIENPY_EXTRAS='[tts]'` adds speech |
+| `make setup-run` | `uv run setup run` for `$PROFILES` (default: `shell`) |
+| `make setup-verify` | Verify bricks in `$PROFILES` |
+| `make setup-list` | List all registered bricks |
+| `make test` | Pytest suite for the `setup` package |
+| `make docker-ci` | Fast CI gate: base real + shell/dev dry-run |
+| `make docker-test` | Full real build + verify (~30 min) |
+| `make docker-bootstrap` | End-to-end test of `bootstrap.sh` |
 
 ## Version management
 
 Pinned versions live in `setup/versions.toml`. Managed via `dienpy versions`:
 
 ```bash
-dienpy versions list                    # show pinned + installed
+dienpy versions list                    # show pins
 dienpy versions check                   # fetch latest tags from upstream
 dienpy versions bump <tool> <tag>       # pin a specific tag
-dienpy versions upgrade-system          # dry-run preview
-dienpy versions upgrade-system --live   # install where pinned ≠ installed
+setup run -p shell -p dev               # bricks whose installed version is off the pin rebuild
 ```
 
 ## dienpy CLI

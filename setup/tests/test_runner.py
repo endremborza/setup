@@ -3,7 +3,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from setup.runner import REGISTRY, Brick, run, verify
 
 
@@ -25,38 +24,23 @@ def make_brick(
     return fn, s
 
 
-def test_run_includes_base_implicitly():
-    fn_base, _ = make_brick("apt", profile="base")
-    fn_shell, _ = make_brick("tmux", profile="shell")
-    fn_dev, _ = make_brick("node", profile="dev")
+@pytest.mark.parametrize(
+    ("profiles", "expected"),
+    [
+        (None, {"apt"}),
+        (["shell"], {"apt", "tmux"}),
+        (["shell", "dev"], {"apt", "tmux", "node"}),
+    ],
+)
+def test_run_resolves_profiles_with_base_implicit(profiles, expected):
+    fns = {
+        name: make_brick(name, profile=profile)[0]
+        for name, profile in (("apt", "base"), ("tmux", "shell"), ("node", "dev"))
+    }
 
-    run(profiles=["shell"])
+    run(profiles=profiles)
 
-    fn_base.assert_called_once()
-    fn_shell.assert_called_once()
-    fn_dev.assert_not_called()
-
-
-def test_run_multiple_profiles():
-    fn_base, _ = make_brick("apt", profile="base")
-    fn_shell, _ = make_brick("tmux", profile="shell")
-    fn_dev, _ = make_brick("node", profile="dev")
-
-    run(profiles=["shell", "dev"])
-
-    fn_base.assert_called_once()
-    fn_shell.assert_called_once()
-    fn_dev.assert_called_once()
-
-
-def test_run_no_profiles_only_base():
-    fn_base, _ = make_brick("apt", profile="base")
-    fn_shell, _ = make_brick("tmux", profile="shell")
-
-    run(profiles=None)
-
-    fn_base.assert_called_once()
-    fn_shell.assert_not_called()
+    assert {name for name, fn in fns.items() if fn.called} == expected
 
 
 def test_run_single_brick_by_name():
@@ -99,6 +83,23 @@ def test_run_force_ignores_check():
         run(profiles=None, force=True)
 
     fn.assert_called_once()
+
+
+def test_run_fails_when_check_still_fails_after_install(capsys):
+    fn, _ = make_brick("checked", profile="base", check="false")
+
+    assert run(profiles=None) is False
+
+    fn.assert_called_once()
+    assert "still fails after install" in capsys.readouterr().out
+
+
+def test_run_passes_when_install_makes_check_pass(tmp_path):
+    marker = tmp_path / "installed"
+    fn = MagicMock(side_effect=lambda: marker.touch())
+    REGISTRY.append(Brick(fn=fn, name="m", profile="base", check=f"test -e {marker}"))
+
+    assert run(profiles=None) is True
 
 
 def test_run_dry_run_skips_execution():

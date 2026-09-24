@@ -1,4 +1,4 @@
-"""Pinned tool version management (check, bump, list, upgrade-system)."""
+"""Pinned tool version management (list, check upstream, bump)."""
 
 from protocli import Dispatcher
 
@@ -8,6 +8,5 @@ _dispatcher = Dispatcher(
         "list": "dienpy.versions.list",
         "check": "dienpy.versions.check",
         "bump": "dienpy.versions.bump",
-        "upgrade-system": "dienpy.versions.upgrade_system",
     },
 )

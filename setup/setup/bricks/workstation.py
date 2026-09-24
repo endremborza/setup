@@ -1,14 +1,24 @@
 from __future__ import annotations
 
-import os
+import getpass
+import re
 import subprocess
 from pathlib import Path
 
 from setup.runner import brick
-from setup.util import apt_install, run_cmd, write_system_file, ONSET_PATH
+from setup.util import (
+    ONSET_PATH,
+    apt_install,
+    fetch,
+    link_bin,
+    pinned_check,
+    run_cmd,
+    write_system_file,
+)
 from setup.versions import get as _v
 
 _LOGSEQ_VERSION = _v("logseq")
+_LOGSEQ_LINK = Path.home() / ".local/bin/Logseq"
 
 _RFKILL_SERVICE = """\
 [Unit]
@@ -45,8 +55,8 @@ Pin: release o=Ubuntu
 Pin-Priority: -1
 """
 
-# Mozilla version starts "DDD.D..." (e.g. 150.0.3~build1). The snap shim starts
-# with an epoch ("1:1snap1-..."), so an unanchored "starts with digits-dot" check
+# Mozilla's version starts "DDD.D..." (e.g. 150.0.3~build1); the snap shim's
+# starts with an epoch ("1:1snap1-..."), so a leading digits-dot match
 # distinguishes them.
 _FIREFOX_CHECK = (
     r"dpkg-query -W -f='${Version}' firefox 2>/dev/null | grep -qE '^[0-9]+\.[0-9]+'"
@@ -79,36 +89,40 @@ def setup_firefox_apt() -> None:
     apt_install(["firefox"])
 
 
-@brick(profile="screen-apps", name="logseq", check=f"test -L ~/.local/bin/Logseq")
+# the versioned unpack dir is the link target, so `readlink` names the installed version
+@brick(
+    profile="screen-apps",
+    name="logseq",
+    check=pinned_check(f"readlink {_LOGSEQ_LINK}", _LOGSEQ_VERSION),
+)
 def install_logseq() -> None:
-    zip_name = f"Logseq-linux-x64-{_LOGSEQ_VERSION}.zip"
-    url = f"https://github.com/logseq/logseq/releases/download/{_LOGSEQ_VERSION}/{zip_name}"
-    ONSET_PATH.mkdir(parents=True, exist_ok=True)
-    run_cmd(f"curl -ROL {url}", cwd=ONSET_PATH)
-    dest_dir = f"Logseq-linux-x64-{_LOGSEQ_VERSION}"
-    run_cmd(f"unzip -o {zip_name} -d {dest_dir}", cwd=ONSET_PATH)
-    app = ONSET_PATH / dest_dir / "Logseq-linux-x64" / "Logseq"
-    link = Path.home() / ".local/bin/Logseq"
-    link.unlink(missing_ok=True)
-    link.symlink_to(app)
+    name = f"Logseq-linux-x64-{_LOGSEQ_VERSION}"
+    fetch(
+        f"https://github.com/logseq/logseq/releases/download/{_LOGSEQ_VERSION}/{name}.zip",
+        ONSET_PATH / name,
+    )
+    link_bin(ONSET_PATH / name / "Logseq-linux-x64" / "Logseq", _LOGSEQ_LINK.name)
 
 
+_BT_CONF = Path("/etc/bluetooth/main.conf")
 _BT_CHECK = (
-    "grep -q '^AutoEnable=true' /etc/bluetooth/main.conf"
+    f"grep -q '^AutoEnable=true' {_BT_CONF}"
     " && systemctl is-enabled -q rfkill-unblock.service"
 )
 
 
-@brick(profile="screen-apps", name="bluetooth-autoenable", check=_BT_CHECK, verify=_BT_CHECK)
+# bluez ships the line under [Policy], commented or not; only that line is
+# rewritten, so the setting stays in the section bluez reads it from.
+@brick(profile="screen-apps", name="bluetooth-autoenable", check=_BT_CHECK)
 def configure_bluetooth() -> None:
-    bt_conf = Path("/etc/bluetooth/main.conf")
-    if bt_conf.exists():
-        text = bt_conf.read_text()
-        if "AutoEnable=true" not in text:
-            text = text.replace("#AutoEnable=true", "AutoEnable=true")
-            if "AutoEnable=true" not in text:
-                text += "\nAutoEnable=true\n"
-            write_system_file(bt_conf, text)
+    current = _BT_CONF.read_text()
+    text, n = re.subn(
+        r"^#?AutoEnable=.*$", "AutoEnable=true", current, flags=re.MULTILINE
+    )
+    if not n:
+        raise SystemExit(f"no AutoEnable line in {_BT_CONF}")
+    if text != current:
+        write_system_file(_BT_CONF, text)
     write_system_file(
         Path("/etc/systemd/system/rfkill-unblock.service"), _RFKILL_SERVICE
     )
@@ -125,14 +139,9 @@ _AUTOLOGIN_CHECK = (
 
 # A media box is a kiosk: tty1 logs its user in and ~/.profile execs
 # $TTY1_SESSION, so the screen is up from power-on and respawns when it exits.
-@brick(
-    profile=("screen-apps", "media"),
-    name="autologin",
-    check=_AUTOLOGIN_CHECK,
-    verify=_AUTOLOGIN_CHECK,
-)
+@brick(profile=("screen-apps", "media"), name="autologin", check=_AUTOLOGIN_CHECK)
 def configure_autologin() -> None:
-    user = os.environ.get("USER", os.getlogin())
+    user = getpass.getuser()
     override_dir = Path("/etc/systemd/system/getty@tty1.service.d")
     subprocess.run(["sudo", "mkdir", "-p", str(override_dir)], check=True)
     write_system_file(
@@ -150,7 +159,7 @@ _NM_CHECK = (
 )
 
 
-@brick(profile="screen-apps", name="network-nm", check=_NM_CHECK, verify=_NM_CHECK)
+@brick(profile="screen-apps", name="network-nm", check=_NM_CHECK)
 def configure_network() -> None:
     write_system_file(
         Path("/etc/netplan/00-installer-config.yaml"), _NETPLAN, mode="600"
