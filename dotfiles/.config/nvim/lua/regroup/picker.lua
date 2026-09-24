@@ -1,6 +1,15 @@
 local M = {}
 
--- Selection, multi-selection, in-place refresh and i+n binding for a telescope picker.
+-- telescope opts for a regroup picker: near full screen, the preview wider than the list
+function M.layout(opts)
+  return vim.tbl_deep_extend('force', {
+    layout_strategy = 'horizontal',
+    layout_config = { width = 0.99, height = 0.99, preview_width = 0.6 },
+  }, opts or {})
+end
+
+-- Selection, multi-selection, in-place refresh, i+n binding and preview scrolling
+-- (<C-j>/<C-k>, half a page) for a telescope picker.
 -- `make_finder` rebuilds the finder for refresh(); pass nil when the picker never refreshes.
 function M.tools(prompt_bufnr, map, make_finder)
   local action_state = require('telescope.actions.state')
@@ -45,6 +54,9 @@ function M.tools(prompt_bufnr, map, make_finder)
     end
   end
 
+  tools.bind('<C-j>', 'scroll preview down', actions.preview_scrolling_down)
+  tools.bind('<C-k>', 'scroll preview up', actions.preview_scrolling_up)
+
   return tools
 end
 
@@ -72,7 +84,7 @@ function M.open(opts)
     }
   end
 
-  pickers.new({}, {
+  pickers.new(M.layout(), {
     prompt_title = opts.title,
     default_selection_index = opts.default_index,
     finder = make_finder(first),
@@ -81,6 +93,8 @@ function M.open(opts)
       title = opts.preview_title,
       define_preview = function(self, entry)
         vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, opts.preview(entry.value))
+        vim.wo[self.state.winid].wrap = true
+        vim.wo[self.state.winid].linebreak = true
         if opts.preview_ft then vim.bo[self.state.bufnr].filetype = opts.preview_ft end
         if opts.preview_ft == 'diff' then require('regroup.worddiff').highlight(self.state.bufnr) end
       end,

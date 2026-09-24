@@ -1,3 +1,5 @@
+local picker = require('regroup.picker')
+
 local M = {}
 
 M.base = 'HEAD'
@@ -105,7 +107,7 @@ function M.pick_file()
   local tele = require('telescope.builtin')
   local action_state = require('telescope.actions.state')
   local function attach(prompt_bufnr, map)
-    local t = require('regroup.picker').tools(prompt_bufnr, map, function()
+    local t = picker.tools(prompt_bufnr, map, function()
       local finders = require('telescope.finders')
       local p = action_state.get_current_picker(prompt_bufnr)
       local fopts = { cwd = p.cwd, split_char = '\0' }
@@ -136,17 +138,19 @@ function M.pick_file()
     return true
   end
   if M.base == 'HEAD' then
-    tele.git_status({ attach_mappings = attach })
+    tele.git_status(picker.layout { attach_mappings = attach })
   else
-    tele.git_files({ git_command = { 'git', 'diff', '--name-only', M.base }, attach_mappings = attach })
+    tele.git_files(picker.layout {
+      git_command = { 'git', 'diff', '--name-only', M.base }, attach_mappings = attach,
+    })
   end
 end
 
 -- the branch the review diffs against; <C-h> goes back to HEAD
 function M.pick_base()
-  require('telescope.builtin').git_branches({
+  require('telescope.builtin').git_branches(picker.layout {
     attach_mappings = function(prompt_bufnr, map)
-      local t = require('regroup.picker').tools(prompt_bufnr, map)
+      local t = picker.tools(prompt_bufnr, map)
       t.bind('<CR>', 'review against this branch', function()
         local branch = t.selected()
         if not branch then return end

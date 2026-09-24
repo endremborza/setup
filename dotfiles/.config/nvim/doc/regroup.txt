@@ -36,7 +36,10 @@ GLOBAL                                                         *regroup-keys*
     :RegroupBranches                     patch branches
     :RegroupGraveyard                    buried patches
 
-RUN PICKER                              (? in normal mode lists all keys)
+EVERY PICKER                            (? in normal mode lists all keys)
+    <C-j> / <C-k>  scroll the preview down / up half a page
+
+RUN PICKER
     <CR>  review this run    <C-e>  extend it
     <C-t>  graveyard         <C-x>  patch branches
 
