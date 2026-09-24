@@ -34,12 +34,6 @@ DIENCEPHALON_ROOT = CENTERS["diencephalon"]
 HYPOTHALAMUS_ROOT = CENTERS["hypothalamus"]
 LOGOS_ROOT = CENTERS["logos"]
 
-PDF_STORE = FOLIOS_DIR / "pile"
 PAPERS_FOLIO_DIR = FOLIOS_DIR / "papers"
-REPO_STORE = ASSETS_DIR / "repos"
-STANDALONE_ANALYSIS_BASES = DATA_DIR / "standalone"
 
 LOGS_DIR = env_path("LOGS_DIR", str(SYNC_ROOT / "logs"))
-
-REMOTE_NAME = "gdrive"
-REMOTE_ROOT = "rcloned"
