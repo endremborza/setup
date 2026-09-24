@@ -6,12 +6,12 @@ from .._git import Repo
 from ..constants import DIENCEPHALON_ROOT
 from ._shared import LAZY_LOCK, nvim_version
 
-_DOTFILES_NVIM = DIENCEPHALON_ROOT / "dotfiles" / ".config" / "nvim"
 _NVIM_PATHSPEC = "dotfiles/.config/nvim/"
 
 
 def _changed_nvim_files(repo: Repo) -> list[str]:
-    out = repo.out("status", "--porcelain", "--", _NVIM_PATHSPEC)
+    # raw, not out: a stripped first line would lose its status column
+    out = repo.raw("status", "--porcelain", "--", _NVIM_PATHSPEC)
     return [line[3:] for line in out.splitlines() if line.strip()]
 
 
@@ -26,8 +26,8 @@ def _format_plugin_versions(lock: dict[str, dict], top_n: int = 20) -> str:
     return "\n".join(lines)
 
 
-def main(*, message: str = "", dry_run: bool = False, all: bool = False) -> None:
-    """Commit nvim config with plugin version snapshot."""
+def main(*, message: str = "", dry_run: bool = False) -> None:
+    """Commit every changed file under dotfiles/.config/nvim with a plugin version snapshot."""
     if not LAZY_LOCK.exists():
         raise SystemExit(f"lazy-lock.json not found at {LAZY_LOCK}")
     if not DIENCEPHALON_ROOT.exists():
@@ -42,21 +42,17 @@ def main(*, message: str = "", dry_run: bool = False, all: bool = False) -> None
         f"{_format_plugin_versions(lock)}\n"
     )
 
+    repo = Repo(DIENCEPHALON_ROOT)
+    paths = _changed_nvim_files(repo)
+    if not paths:
+        raise SystemExit("No changes to nvim config found in dotfiles.")
+
     if dry_run:
+        print("=== Files ===\n" + "\n".join(paths))
         print("=== Commit message preview ===")
         print(commit_msg)
         return
 
-    repo = Repo(DIENCEPHALON_ROOT)
-    if not _changed_nvim_files(repo):
-        raise SystemExit("No changes to nvim config found in dotfiles.")
-
-    staged = _NVIM_PATHSPEC if all else f"{_NVIM_PATHSPEC}init.lua"
-    repo.add("--", staged)
-    print(f"Staged {staged}")
-
-    if (_DOTFILES_NVIM / "lazy-lock.json").exists():
-        repo.add("--", f"{_NVIM_PATHSPEC}lazy-lock.json")
-
-    repo.commit(commit_msg)
+    # only these paths go in, so unrelated staged work stays out of the commit
+    repo.commit_paths(paths, commit_msg)
     print(f"Committed: {repo.out('log', '--oneline', '-1')}")
