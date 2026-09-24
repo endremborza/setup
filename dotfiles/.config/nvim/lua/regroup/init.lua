@@ -25,13 +25,12 @@ local function matching(runs, tokens)
 end
 
 local function context(tokens)
-  local git = require('regroup.git')
   local state = require('regroup.state')
 
-  local ok, root = pcall(git.root)
-  if not ok then return vim.notify(root, vim.log.levels.ERROR) end
-  local ok2, data = pcall(state.fetch, root)
-  if not ok2 then return vim.notify('regroup: ' .. data, vim.log.levels.ERROR) end
+  local root = require('regroup.git').try_root()
+  if not root then return end
+  local ok, data = pcall(state.fetch, root)
+  if not ok then return vim.notify('regroup: ' .. data, vim.log.levels.ERROR) end
   if #data.hunks == 0 then
     return vim.notify('no uncommitted changes in ' .. vim.fs.basename(root), vim.log.levels.INFO)
   end
@@ -112,6 +111,17 @@ function M.setup()
   vim.api.nvim_create_user_command('RegroupBranches', function()
     require('regroup.ui').pick_branches()
   end, {})
+
+  -- the session navigates on its last listing; saves and outside changes refresh it async
+  local group = vim.api.nvim_create_augroup('regroup', { clear = true })
+  vim.api.nvim_create_autocmd('BufWritePost', {
+    group = group,
+    callback = function(args) require('regroup.state').sync(vim.api.nvim_buf_get_name(args.buf)) end,
+  })
+  vim.api.nvim_create_autocmd('FocusGained', {
+    group = group,
+    callback = function() require('regroup.state').sync() end,
+  })
 
   vim.keymap.set('n', '<leader>gg', function()
     local state = require('regroup.state')

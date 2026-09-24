@@ -4,6 +4,10 @@ M.current = nil
 
 local git = require('regroup.git')
 
+function M.notify(msg, level)
+  vim.notify(msg, level or vim.log.levels.INFO)
+end
+
 function M.key(config)
   return table.concat({ config.granularity, config.model, config.context }, '|')
 end
@@ -20,10 +24,14 @@ function M.decode(raw)
   return data
 end
 
-function M.fetch(root)
-  local data = M.decode(git.engine_ok(root, { 'list', '--json' }))
+local function listing(raw)
+  local data = M.decode(raw)
   data.last = nil_or(data.last)
   return data
+end
+
+function M.fetch(root)
+  return listing(git.engine_ok(root, { 'list', '--json' }))
 end
 
 -- cached runs, newest first
@@ -34,6 +42,12 @@ function M.runs(data)
   end
   table.sort(out, function(a, b) return (a.time or 0) > (b.time or 0) end)
   return out
+end
+
+-- gitsigns diffs against a base it caches per buffer; a write outside the buffer moves it
+function M.refresh_signs()
+  local gs = package.loaded.gitsigns
+  if gs then pcall(gs.reset_base, true) end
 end
 
 -- Patch tables are held by open pickers and st.pos, so a fresh listing is carried into
@@ -116,6 +130,47 @@ end
 
 function M.refresh(st)
   take(st, M.fetch(st.root))
+end
+
+local function refresh_async(st)
+  git.engine(st.root, { 'list', '--json' }, function(res)
+    if res.code ~= 0 or M.current ~= st then return end
+    local ok, data = pcall(listing, res.stdout)
+    if ok then take(st, data) end
+  end)
+end
+
+-- The engine's patch commands act on the run it last used; a shell or agent may have
+-- moved that since the listing, so the session re-points it before writing.
+function M.point(st)
+  if not st.drifted then return true end
+  local c = st.config
+  local res = git.engine(st.root, { 'use', c.granularity, c.model, c.context })
+  if res.code ~= 0 then return false, git.output(res) end
+  st.drifted = false
+  return true
+end
+
+-- after an engine write: the session, the signs and the buffers catch up
+function M.after_write(root)
+  local st = M.current
+  if st and (not root or st.root == root) then
+    local ok, err = pcall(M.refresh, st)
+    if not ok then M.notify('regroup: stale view — ' .. tostring(err), vim.log.levels.ERROR) end
+  end
+  M.refresh_signs()
+  vim.cmd('checktime')
+end
+
+-- after a change made elsewhere (a save, a git command, another window): the same, async
+function M.sync(file)
+  local st = M.current
+  if st and (not file or vim.startswith(file, st.root .. '/')) then refresh_async(st) end
+end
+
+function M.touch()
+  M.refresh_signs()
+  M.sync()
 end
 
 return M

@@ -7,7 +7,8 @@ The engine runs in the shell (tab-completed): >
 <
 Results land in .git/regroup-cache.json. nvim parses no diff and writes no git
 state: it reads `hunks list --json` and every action below is a `hunks patch`,
-`hunks branch` or `hunks run --extend` call on the run it is showing.
+`hunks branch`, `hunks graveyard` or `hunks run --extend` call on the run it is
+showing (the engine is re-pointed at that run first whenever a shell moved it).
 
 A patch is a set of hunks with a commit title and message. Every patch ends
 committed on the current branch (<C-y>), committed on a new patch branch
@@ -15,10 +16,14 @@ committed on the current branch (<C-y>), committed on a new patch branch
 squashed commit (<C-l>, or from :RegroupBranches); its history stays under
 refs/landed/<name>, never pushed.
 
+The session navigates on its last listing; a save, a git command or a focus
+change refreshes it in the background, an engine write refreshes it at once.
+
 EDITING WHILE REVIEWING                                        *regroup-edit*
 Fixing something inside a hunk changes its id: the hunk leaves its patch and
 shows up under "(unassigned new changes)". <C-e> has the model place it
-(`hunks run --extend`, run async), <C-o> in the hunk picker moves it by hand.
+(`hunks run --extend`, run async, a notification tells when it is done and
+<leader>gg reopens the picker), <C-o> in the hunk picker moves it by hand.
 Or commit the patch first and fix on the branch — the landing squashes it.
 
 GLOBAL                                                         *regroup-keys*

@@ -269,100 +269,31 @@ local function rel_age(t)
   return math.floor(d / 86400 + 0.5) .. 'd'
 end
 
-local function picker_tools(prompt_bufnr, map, make_finder)
-  local action_state = require('telescope.actions.state')
-  local tools = {}
-
-  function tools.selected()
-    local entry = action_state.get_selected_entry()
-    return entry and entry.value
-  end
-
-  -- the multi-selection (<Tab>), or the entry under the cursor
-  function tools.picked()
-    local p = action_state.get_current_picker(prompt_bufnr)
-    local out = {}
-    for _, entry in ipairs(p:get_multi_selection()) do table.insert(out, entry.value) end
-    if #out == 0 and tools.selected() then out = { tools.selected() } end
-    return out
-  end
-
-  function tools.refresh()
-    local p = action_state.get_current_picker(prompt_bufnr)
-    local row = p:get_selection_row()
-    local callbacks = { unpack(p._completion_callbacks) }
-    p:register_completion_callback(function(self)
-      self:set_selection(row)
-      self._completion_callbacks = callbacks
-    end)
-    p:refresh(make_finder(), { reset_prompt = false })
-  end
-
-  function tools.bind(key, desc, fn)
-    for _, mode in ipairs({ 'i', 'n' }) do
-      map(mode, key, fn, { desc = desc })
-    end
-  end
-
-  return tools
-end
-
-local function telescope()
-  return require('telescope.pickers'), require('telescope.finders'),
-      require('telescope.config').values, require('telescope.previewers'), require('telescope.actions')
-end
-
-function M.move_hunk(h, from)
+function move_hunk(h, from)
   local st = state.current
   local targets_ = vim.tbl_filter(function(p) return p ~= from end, st.patches)
-  if #targets_ == 0 then return notify('no other patch to move into', vim.log.levels.WARN) end
-  local pickers, finders, conf, previewers, actions = telescope()
-  pickers.new({}, {
-    prompt_title = ('move %s:%d →'):format(h.path, h.new_start),
-    finder = finders.new_table {
-      results = targets_,
-      entry_maker = function(p)
-        return {
-          value = p,
-          display = ('%2d hunks  %s'):format(#live_recs(st, p), p.title),
-          ordinal = p.title .. ' ' .. (p.message or ''),
-        }
-      end,
-    },
-    sorter = conf.generic_sorter({}),
-    previewer = previewers.new_buffer_previewer {
-      title = 'patch',
-      define_preview = function(self, entry)
-        patch_preview(st, entry.value, self.state.bufnr)
-      end,
-    },
-    attach_mappings = function(prompt_bufnr, map)
-      local t = picker_tools(prompt_bufnr, map, nil)
-      t.bind('<CR>', 'move hunk here', function()
-        local p = t.selected()
-        if not p then return end
-        actions.close(prompt_bufnr)
+  if #targets_ == 0 then return notify('no other patch to move into', WARN) end
+  picker.open {
+    title = ('move %s:%d →'):format(h.path, h.new_start),
+    results = function() return targets_ end,
+    entry = function(p)
+      return { display = ('%2d hunks  %s'):format(#p.live, p.title), ordinal = p.title .. ' ' .. (p.message or '') }
+    end,
+    preview = patch_lines, preview_ft = 'diff', preview_title = 'patch',
+    keys = {
+      { '<CR>', 'move hunk here', function(p)
         local ok, out = engine(st, { 'patch', 'move', h.id, p.id })
         if ok then notify(out) end
-        M.pick_hunks(from)
-      end)
-      return true
-    end,
-  }):find()
+        pick_hunks(from)
+      end, close = true },
+    },
+  }
 end
 
-function M.pick_patches(opts)
-  opts = opts or {}
-  local st = state.current
-  if not st then
-    return notify('no regroup session — run :Regroup', vim.log.levels.WARN)
-  end
-  local pickers, finders, conf, previewers, actions = telescope()
-
-  local function entry_maker(p)
-    local live = live_recs(st, p)
-    local files = files_of(live)
-    local n = #live
+local function patch_entry(st)
+  return function(p)
+    local n = #p.live
+    local files = files_of(p.live)
     local tag
     if n == 0 then
       tag = '· gone'
@@ -370,227 +301,142 @@ function M.pick_patches(opts)
       tag = '? new'
     else
       local staged = 0
-      for _, h in ipairs(live) do
+      for _, h in ipairs(p.live) do
         if st.staged[h.id] then staged = staged + 1 end
       end
       tag = (staged == n and '● ' or staged > 0 and '◐ ' or '') .. n .. ' hunk' .. (n == 1 and '' or 's')
     end
-    local paths = {}
-    for _, f in ipairs(files) do table.insert(paths, f.path) end
+    local paths = vim.tbl_map(function(f) return f.path end, files)
     return {
-      value = p,
       display = ('%-10s %-8s %s'):format(tag,
         n > 0 and (#files .. ' file' .. (#files == 1 and '' or 's')) or '', p.title),
       ordinal = table.concat({ p.title, p.message or '', table.concat(paths, ' ') }, ' '),
     }
   end
+end
 
-  local function make_finder()
-    return finders.new_table { results = display_patches(st), entry_maker = entry_maker }
-  end
-
+function pick_patches(opts)
+  opts = opts or {}
+  local st = state.current
+  if not st then return no_session() end
   local select_index
   if opts.select then
-    for i, p in ipairs(display_patches(st)) do
-      if same_patch(p, opts.select) then select_index = i end
+    for i, p in ipairs(st.shown) do
+      if p == opts.select then select_index = i end
     end
   end
-
-  local function each_picked(t, fn)
-    for _, p in ipairs(t.picked()) do fn(p) end
-    t.refresh()
+  local function then_refresh(fn)
+    return function(v, t)
+      fn(v)
+      t.refresh()
+    end
   end
-
-  pickers.new({}, {
-    prompt_title = ('%s @%s · patches [%s] — ? for keys'):format(
+  picker.open {
+    title = ('%s @%s · patches [%s] — ? for keys'):format(
       vim.fs.basename(st.root), st.branch ~= '' and st.branch or 'detached', st.key),
-    default_selection_index = select_index,
-    finder = make_finder(),
-    sorter = conf.generic_sorter({}),
-    previewer = previewers.new_buffer_previewer {
-      title = 'patch',
-      define_preview = function(self, entry)
-        patch_preview(st, entry.value, self.state.bufnr)
-      end,
+    default_index = select_index,
+    results = function() return st.shown end,
+    entry = patch_entry(st),
+    preview = patch_lines, preview_ft = 'diff', preview_title = 'patch',
+    keys = {
+      { '<CR>', 'browse patch (then ]g/[g)', function(p) goto_hunk(p, 1) end, close = true },
+      { '<C-h>', 'hunks of patch', pick_hunks, close = true },
+      { '<C-s>', 'stage', then_refresh(function(ps) act(st, ps, 'stage') end), picked = true },
+      { '<C-u>', 'unstage', then_refresh(function(ps) act(st, ps, 'unstage') end), picked = true },
+      { '<C-d>', 'discard (revert to HEAD)', then_refresh(function(ps) discard(st, ps) end), picked = true },
+      { '<C-t>', 'bury (stash to graveyard)', then_refresh(function(ps) bury(st, ps) end), picked = true },
+      { '<C-y>', 'commit on the current branch', commit_patch, close = true },
+      { '<C-x>', 'new patch branch from the picked patches', function(ps) branch_new(st, ps) end, picked = true, close = true },
+      { '<C-l>', 'land the current branch (squash onto main)', function() land_current(st) end, any = true, close = true },
+      { '<C-e>', 'extend run (place unassigned hunks)', function() extend_run(st.root, st.config) end, any = true, close = true },
     },
-    attach_mappings = function(prompt_bufnr, map)
-      local t = picker_tools(prompt_bufnr, map, make_finder)
-      t.bind('<CR>', 'browse patch (then ]g/[g)', function()
-        local p = t.selected()
-        if not p then return end
-        actions.close(prompt_bufnr)
-        M.goto_hunk(p, 1)
-      end)
-      t.bind('<C-h>', 'hunks of patch', function()
-        local p = t.selected()
-        if not p then return end
-        actions.close(prompt_bufnr)
-        M.pick_hunks(p)
-      end)
-      t.bind('<C-s>', 'stage', function() each_picked(t, function(p) M.stage(st, p) end) end)
-      t.bind('<C-u>', 'unstage', function() each_picked(t, function(p) M.unstage(st, p) end) end)
-      t.bind('<C-d>', 'discard (revert to HEAD)', function() each_picked(t, function(p) M.discard(st, p) end) end)
-      t.bind('<C-t>', 'bury (stash to graveyard)', function() each_picked(t, function(p) M.bury(st, p) end) end)
-      t.bind('<C-y>', 'commit on the current branch', function()
-        local p = t.selected()
-        if not p then return end
-        actions.close(prompt_bufnr)
-        M.commit_patch(p)
-      end)
-      t.bind('<C-x>', 'new patch branch from the picked patches', function()
-        local picked = t.picked()
-        if #picked == 0 then return end
-        actions.close(prompt_bufnr)
-        M.branch_new(st, picked)
-      end)
-      t.bind('<C-l>', 'land the current branch (squash onto main)', function()
-        actions.close(prompt_bufnr)
-        M.land_current(st)
-      end)
-      t.bind('<C-e>', 'extend run (place unassigned hunks)', function()
-        actions.close(prompt_bufnr)
-        M.extend_run(st.root, st.config)
-      end)
-      return true
-    end,
-  }):find()
+  }
 end
 
-function M.pick_hunks(p)
+function pick_hunks(p)
   local st = state.current
-  local pickers, finders, conf, previewers, actions = telescope()
-
-  local function make_results()
-    local out = {}
-    for i, h in ipairs(live_recs(st, p)) do
-      table.insert(out, { i = i, h = h })
-    end
-    return out
-  end
-
-  local function entry_maker(it)
-    return {
-      value = it,
-      display = ('%s %s:%d  %s'):format(
-        st.staged[it.h.id] and '●' or ' ', it.h.path, it.h.new_start, first_change(it.h)),
-      ordinal = it.h.path .. ' ' .. first_change(it.h),
-    }
-  end
-
-  local function make_finder()
-    return finders.new_table { results = make_results(), entry_maker = entry_maker }
-  end
-
-  pickers.new({}, {
-    prompt_title = ('%s — <C-g> back'):format(p.title),
-    finder = make_finder(),
-    sorter = conf.generic_sorter({}),
-    previewer = previewers.new_buffer_previewer {
-      title = 'hunk',
-      define_preview = function(self, entry)
-        vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false,
-          vim.split(entry.value.h.text, '\n', { plain = true }))
-        vim.bo[self.state.bufnr].filetype = 'diff'
-      end,
-    },
-    attach_mappings = function(prompt_bufnr, map)
-      local t = picker_tools(prompt_bufnr, map, make_finder)
-      local function on_hunk(fn)
-        return function()
-          local it = t.selected()
-          if not (it and it.h) then return end
-          fn(it)
-        end
+  local function hunk_action(verb)
+    return function(it, t)
+      if verb == 'discard'
+          and not confirm(('Discard %s:%d? This reverts it to HEAD.'):format(it.h.path, it.h.new_start), true) then
+        return
       end
-      t.bind('<CR>', 'jump to hunk', on_hunk(function(it)
-        actions.close(prompt_bufnr)
-        M.goto_hunk(p, it.i)
-      end))
-      t.bind('<C-g>', 'back to patches', function()
-        actions.close(prompt_bufnr)
-        M.pick_patches({ select = p })
-      end)
-      t.bind('<C-o>', 'move hunk to another patch', on_hunk(function(it)
-        actions.close(prompt_bufnr)
-        M.move_hunk(it.h, p)
-      end))
-      t.bind('<C-s>', 'stage hunk', on_hunk(function(it) M.stage_hunk(st, it.h); t.refresh() end))
-      t.bind('<C-u>', 'unstage hunk', on_hunk(function(it) M.unstage_hunk(st, it.h); t.refresh() end))
-      t.bind('<C-d>', 'discard hunk', on_hunk(function(it) M.discard_hunk(st, it.h); t.refresh() end))
-      return true
+      engine(st, { 'patch', verb, it.h.id })
+      t.refresh()
+    end
+  end
+  picker.open {
+    title = ('%s — <C-g> back'):format(p.title),
+    results = function()
+      local out = {}
+      for i, h in ipairs(p.live) do out[i] = { i = i, h = h } end
+      return out
     end,
-  }):find()
+    entry = function(it)
+      return {
+        display = ('%s %s:%d  %s'):format(
+          st.staged[it.h.id] and '●' or ' ', it.h.path, it.h.new_start, first_change(it.h)),
+        ordinal = it.h.path .. ' ' .. first_change(it.h),
+      }
+    end,
+    preview = function(it) return vim.split(it.h.text, '\n', { plain = true }) end,
+    preview_ft = 'diff', preview_title = 'hunk',
+    keys = {
+      { '<CR>', 'jump to hunk', function(it) goto_hunk(p, it.i) end, close = true },
+      { '<C-g>', 'back to patches', function() pick_patches({ select = p }) end, any = true, close = true },
+      { '<C-o>', 'move hunk to another patch', function(it) move_hunk(it.h, p) end, close = true },
+      { '<C-s>', 'stage hunk', hunk_action('stage') },
+      { '<C-u>', 'unstage hunk', hunk_action('unstage') },
+      { '<C-d>', 'discard hunk', hunk_action('discard') },
+    },
+  }
 end
 
+-- buried patches: the engine's stashes, addressed by commit hash
 function M.pick_graveyard()
-  local ok, root = pcall(git.root)
-  if not ok then return notify(root, vim.log.levels.ERROR) end
-  local gy = require('regroup.graveyard')
-  if #gy.list(root) == 0 then
-    return notify('graveyard is empty (no regroup stashes)', vim.log.levels.INFO)
+  local root = git.try_root()
+  if not root then return end
+  local function entries()
+    local res = git.engine(root, { 'graveyard', 'list', '--json' })
+    if res.code ~= 0 then
+      notify('regroup: ' .. git.output(res), ERROR)
+      return {}
+    end
+    return state.decode(res.stdout)
   end
-  local pickers, finders, conf, previewers, actions = telescope()
-
-  local function make_finder()
-    return finders.new_table {
-      results = gy.list(root),
-      entry_maker = function(e)
-        return {
-          value = e,
-          display = ('%-12s %-16s %s'):format(e.gd, e.age, e.title),
-          ordinal = e.title,
-        }
-      end,
-    }
+  local function restore(e)
+    local res = git.engine(root, { 'graveyard', 'restore', e.hash })
+    if res.code ~= 0 then return notify('regroup: ' .. git.output(res), ERROR) end
+    state.after_write(root)
+    notify('restored from graveyard: ' .. e.title)
   end
-
-  local function reload()
-    local st = state.current
-    if st and st.root == root then state.refresh(st) end
-    refresh_signs()
-    vim.cmd('checktime')
-  end
-
-  pickers.new({}, {
-    prompt_title = ('%s · graveyard'):format(vim.fs.basename(root)),
-    finder = make_finder(),
-    sorter = conf.generic_sorter({}),
-    previewer = previewers.new_buffer_previewer {
-      title = 'buried changes',
-      define_preview = function(self, entry)
-        vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false,
-          vim.split(gy.show(root, entry.value), '\n', { plain = true }))
-        vim.bo[self.state.bufnr].filetype = 'diff'
-      end,
-    },
-    attach_mappings = function(prompt_bufnr, map)
-      local t = picker_tools(prompt_bufnr, map, make_finder)
-      t.bind('<CR>', 'restore (pop back into worktree)', function()
-        local e = t.selected()
-        if not e then return end
-        actions.close(prompt_bufnr)
-        local ok2, err = pcall(gy.pop, root, e)
-        if not ok2 then return notify(err, vim.log.levels.ERROR) end
-        reload()
-        notify('restored from graveyard: ' .. e.title)
-      end)
-      t.bind('<C-d>', 'delete forever', function()
-        local e = t.selected()
-        if not e then return end
+  picker.open {
+    title = ('%s · graveyard'):format(vim.fs.basename(root)),
+    empty = 'graveyard is empty (no regroup stashes)',
+    results = entries,
+    entry = function(e)
+      return { display = ('%-12s %-16s %s'):format(e.ref, e.age, e.title), ordinal = e.title }
+    end,
+    preview = function(e)
+      local res = git.git(root, { 'stash', 'show', '-p', e.hash })
+      return vim.split(res.code == 0 and res.stdout or git.output(res), '\n', { plain = true })
+    end,
+    preview_ft = 'diff', preview_title = 'buried changes',
+    keys = {
+      { '<CR>', 'restore (pop back into worktree)', restore, close = true },
+      { '<C-d>', 'delete forever', function(e, t)
         if not confirm(('Delete "%s" from the graveyard forever?'):format(e.title), true) then return end
-        local ok2, err = pcall(gy.drop, root, e)
-        if not ok2 then return notify(err, vim.log.levels.ERROR) end
+        local res = git.engine(root, { 'graveyard', 'drop', e.hash })
+        if res.code ~= 0 then return notify('regroup: ' .. git.output(res), ERROR) end
         notify('deleted from graveyard: ' .. e.title)
         t.refresh()
-      end)
-      return true
-    end,
-  }):find()
+      end },
+    },
+  }
 end
 
 function M.pick_runs(ctx)
   local root, data, runs = ctx.root, ctx.data, ctx.runs
-  local pickers, finders, conf, previewers, actions = telescope()
   local live = {}
   for _, h in ipairs(data.hunks) do live[h.id] = true end
   for _, run in ipairs(runs) do
@@ -599,147 +445,95 @@ function M.pick_runs(ctx)
       if live[id] then run.covered = run.covered + 1 end
     end
   end
-
-  pickers.new({}, {
-    prompt_title = ('%s · regroup runs (%d current hunks) — ? for keys'):format(
-      vim.fs.basename(root), #data.hunks),
-    finder = finders.new_table {
-      results = runs,
-      entry_maker = function(run)
-        return {
-          value = run,
-          display = ('%-30s %d patches  covers %d/%d  %s ago'):format(
-            run.key, #run.patches, run.covered, #data.hunks, rel_age(run.time)),
-          ordinal = run.key,
-        }
-      end,
-    },
-    sorter = conf.generic_sorter({}),
-    previewer = previewers.new_buffer_previewer {
-      title = 'run',
-      define_preview = function(self, entry)
-        local lines = {}
-        for _, p in ipairs(entry.value.patches) do
-          local n = 0
-          for _, id in ipairs(p.hunks) do
-            if live[id] then n = n + 1 end
-          end
-          table.insert(lines, ('%2d/%-2d %s'):format(n, #p.hunks, p.title))
-        end
-        vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
-      end,
-    },
-    attach_mappings = function(prompt_bufnr, map)
-      local t = picker_tools(prompt_bufnr, map, nil)
-      t.bind('<CR>', 'review this run', function()
-        local run = t.selected()
-        if not run then return end
-        actions.close(prompt_bufnr)
-        M.open_run(root, run.config)
-      end)
-      t.bind('<C-e>', 'extend run (place unassigned hunks)', function()
-        local run = t.selected()
-        if not run then return end
-        actions.close(prompt_bufnr)
-        M.extend_run(root, run.config)
-      end)
-      t.bind('<C-t>', 'graveyard', function()
-        actions.close(prompt_bufnr)
-        M.pick_graveyard()
-      end)
-      t.bind('<C-x>', 'patch branches', function()
-        actions.close(prompt_bufnr)
-        M.pick_branches()
-      end)
-      return true
+  picker.open {
+    title = ('%s · regroup runs (%d current hunks) — ? for keys'):format(vim.fs.basename(root), #data.hunks),
+    results = function() return runs end,
+    entry = function(run)
+      return {
+        display = ('%-30s %d patches  covers %d/%d  %s ago'):format(
+          run.key, #run.patches, run.covered, #data.hunks, rel_age(run.time)),
+        ordinal = run.key,
+      }
     end,
-  }):find()
+    preview = function(run)
+      local lines = {}
+      for _, p in ipairs(run.patches) do
+        local n = 0
+        for _, id in ipairs(p.hunks) do
+          if live[id] then n = n + 1 end
+        end
+        table.insert(lines, ('%2d/%-2d %s'):format(n, #p.hunks, p.title))
+      end
+      return lines
+    end,
+    preview_title = 'run',
+    keys = {
+      { '<CR>', 'review this run', function(run) M.open_run(root, run.config) end, close = true },
+      { '<C-e>', 'extend run (place unassigned hunks)', function(run) extend_run(root, run.config) end, close = true },
+      { '<C-t>', 'graveyard', M.pick_graveyard, any = true, close = true },
+      { '<C-x>', 'patch branches', function() M.pick_branches() end, any = true, close = true },
+    },
+  }
 end
 
--- Make the run current for the engine too, so the shell's `hunks patch …` acts on the same one.
-function M.open_run(root, config)
-  local res = git.engine(root, { 'use', config.granularity, config.model, config.context })
-  if res.code ~= 0 then return notify('regroup: ' .. git.output(res), vim.log.levels.ERROR) end
-  state.load(root, config)
-  M.pick_patches()
+-- Open a run's patch picker from `data` (a listing already fetched) or a fresh one; the
+-- engine is pointed at the run when it is showing another.
+function M.open_run(root, config, data)
+  local ok, st = pcall(state.load, root, config, data)
+  if not ok then return notify('regroup: ' .. tostring(st), ERROR) end
+  if not st then return notify('regroup: run no longer in the cache', WARN) end
+  local pointed, err = state.point(st)
+  if not pointed then return notify('regroup: ' .. err, ERROR) end
+  pick_patches()
 end
 
 function M.pick_branches()
-  local ok, root = pcall(git.root)
-  if not ok then return notify(root, vim.log.levels.ERROR) end
-  local pickers, finders, conf, previewers, actions = telescope()
-
+  local root = git.try_root()
+  if not root then return end
   local function rows()
     local res = git.engine(root, { 'branch', 'show', '--json' })
     if res.code ~= 0 then
-      notify('regroup: ' .. git.output(res), vim.log.levels.ERROR)
+      notify('regroup: ' .. git.output(res), ERROR)
       return {}
     end
     return state.decode(res.stdout)
   end
-
-  local function make_finder()
-    return finders.new_table {
-      results = rows(),
-      entry_maker = function(b)
-        return {
-          value = b,
-          display = ('%s %-30s %3d commits  %s%s'):format(
-            b.current and '*' or ' ', b.name, b.commits, b.stat, b.worktree ~= '' and ('  [' .. b.worktree .. ']') or ''),
-          ordinal = b.name,
-        }
-      end,
-    }
-  end
-
-  if #rows() == 0 then return notify('no patch branches', vim.log.levels.INFO) end
-
-  pickers.new({}, {
-    prompt_title = ('%s · patch branches — ? for keys'):format(vim.fs.basename(root)),
-    finder = make_finder(),
-    sorter = conf.generic_sorter({}),
-    previewer = previewers.new_buffer_previewer {
-      title = 'commits ahead',
-      define_preview = function(self, entry)
-        local res = git.engine(root, { 'branch', 'show', entry.value.name })
-        vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false,
-          vim.split(vim.trim(res.stdout or ''), '\n', { plain = true }))
-      end,
-    },
-    attach_mappings = function(prompt_bufnr, map)
-      local t = picker_tools(prompt_bufnr, map, make_finder)
-      t.bind('<CR>', 'switch to branch', function()
-        local b = t.selected()
-        if not b then return end
-        actions.close(prompt_bufnr)
-        local res = git.git(root, { 'switch', b.name })
-        if res.code ~= 0 then return notify(git.output(res), vim.log.levels.ERROR) end
-        vim.cmd('checktime')
+  picker.open {
+    title = ('%s · patch branches — ? for keys'):format(vim.fs.basename(root)),
+    empty = 'no patch branches',
+    results = rows,
+    entry = function(b)
+      return {
+        display = ('%s %-30s %3d commits  %s%s'):format(
+          b.current and '*' or ' ', b.name, b.commits, b.stat, b.worktree ~= '' and ('  [' .. b.worktree .. ']') or ''),
+        ordinal = b.name,
+      }
+    end,
+    preview = function(b)
+      if b.commits == 0 then return {} end
+      local res = git.git(root, { 'log', '--oneline', '--no-decorate', '-n', tostring(b.commits), b.name })
+      return vim.split(vim.trim(res.stdout or ''), '\n', { plain = true })
+    end,
+    preview_title = 'commits ahead',
+    keys = {
+      { '<CR>', 'switch to branch', function(b)
+        local res = git.engine(root, { 'branch', 'checkout', b.name })
+        if res.code ~= 0 then return notify('regroup: ' .. git.output(res), ERROR) end
+        state.after_write(root)
         notify('on ' .. b.name)
-      end)
-      t.bind('<C-l>', 'land (squash onto main)', function()
-        local b = t.selected()
-        if not b then return end
-        actions.close(prompt_bufnr)
-        if confirm(('Land %s as one squashed commit?'):format(b.name)) then
-          land(root, b.name, function()
-            local st = state.current
-            if st and st.root == root then state.refresh(st) end
-          end)
-        end
-      end)
-      t.bind('<C-d>', 'drop (archive under refs/dropped)', function()
-        local b = t.selected()
-        if not b then return end
+      end, close = true },
+      { '<C-l>', 'land (squash onto main)', function(b)
+        if confirm(('Land %s as one squashed commit?'):format(b.name)) then land(root, b.name) end
+      end, close = true },
+      { '<C-d>', 'drop (archive under refs/dropped)', function(b, t)
         if not confirm(('Drop %s without landing?'):format(b.name), true) then return end
         local res = git.engine(root, { 'branch', 'drop', b.name })
-        if res.code ~= 0 then return notify(git.output(res), vim.log.levels.ERROR) end
+        if res.code ~= 0 then return notify('regroup: ' .. git.output(res), ERROR) end
         notify(vim.trim(res.stdout))
         t.refresh()
-      end)
-      return true
-    end,
-  }):find()
+      end },
+    },
+  }
 end
 
 return M

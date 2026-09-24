@@ -6,6 +6,15 @@ function M.root()
   return vim.trim(res.stdout)
 end
 
+-- the repo root, or nil after telling the user why
+function M.try_root()
+  local ok, root = pcall(M.root)
+  if ok then return root end
+  vim.notify(root, vim.log.levels.ERROR)
+  return nil
+end
+
+-- read-only git: the engine owns every write
 function M.git(root, args, opts)
   local cmd = { 'git', '-C', root }
   vim.list_extend(cmd, args)

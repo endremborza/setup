@@ -1,17 +1,10 @@
 local M = {}
 
 local git = require('regroup.git')
+local state = require('regroup.state')
 
 local NAME = 'regroup://commit'
-
-local function notify(msg, level)
-  vim.notify(msg, level or vim.log.levels.INFO)
-end
-
-function M.refresh_signs()
-  local gs = package.loaded.gitsigns
-  if gs then pcall(gs.reset_base, true) end
-end
+local notify = state.notify
 
 -- Scratch commit buffer: `seed` is the editable message, `comments` the '#'-prefixed
 -- context listing what is being committed. Comment lines are stripped before `on_write`
@@ -67,7 +60,7 @@ end
 function M.run(root, msg)
   local res = git.git(root, { 'commit', '-F', '-' }, { stdin = msg })
   assert(res.code == 0, 'git commit failed:\n' .. git.output(res))
-  M.refresh_signs()
+  state.after_write(root)
   return vim.trim(git.git(root, { 'rev-parse', '--short', 'HEAD' }).stdout)
 end
 

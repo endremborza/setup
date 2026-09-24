@@ -2,7 +2,7 @@ local M = {}
 
 M.base = 'HEAD'
 
-local left, right
+local left, right, status
 
 function M.active()
   return left ~= nil and right ~= nil
@@ -51,11 +51,16 @@ local function refile(file)
   split_current()
 end
 
+-- closes only the windows review mode opened: the base side and the status pane
 function M.close()
-  vim.api.nvim_set_current_win(right)
-  vim.cmd('only')
-  vim.cmd('diffoff')
-  left, right = nil, nil
+  for _, w in ipairs({ left, status }) do
+    if w and vim.api.nvim_win_is_valid(w) then vim.api.nvim_win_close(w, false) end
+  end
+  if right and vim.api.nvim_win_is_valid(right) then
+    vim.api.nvim_set_current_win(right)
+    vim.cmd('diffoff')
+  end
+  left, right, status = nil, nil, nil
 end
 
 function M.toggle()
@@ -64,6 +69,7 @@ function M.toggle()
     return
   end
   vim.cmd('botright Git')
+  status = vim.api.nvim_get_current_win()
   vim.cmd('resize 15')
   vim.cmd('normal! G')
   vim.cmd('wincmd k')
@@ -91,6 +97,69 @@ function M.jump(file, line)
   end
   pcall(vim.api.nvim_win_set_cursor, 0, { line, 0 })
   vim.cmd('normal! zvzz')
+end
+
+-- Changed files (against the index in HEAD mode, against M.base otherwise): <CR> opens
+-- one in the review diff, <Right>/<Left> stage and unstage it, <C-y> commits the index.
+function M.pick_file()
+  local tele = require('telescope.builtin')
+  local action_state = require('telescope.actions.state')
+  local function attach(prompt_bufnr, map)
+    local t = require('regroup.picker').tools(prompt_bufnr, map, function()
+      local finders = require('telescope.finders')
+      local p = action_state.get_current_picker(prompt_bufnr)
+      local fopts = { cwd = p.cwd, split_char = '\0' }
+      fopts.entry_maker = require('telescope.make_entry').gen_from_git_status(fopts)
+      return finders.new_oneshot_job({ 'git', 'status', '-z', '-uall', '--', '.' }, fopts)
+    end)
+    local function cwd() return action_state.get_current_picker(prompt_bufnr).cwd end
+    local function stage(add)
+      local entry = action_state.get_selected_entry()
+      if not entry then return end
+      vim.system(add and { 'git', 'add', '--', entry.value }
+        or { 'git', 'restore', '--staged', '--', entry.value }, { cwd = cwd() }):wait()
+      if M.base == 'HEAD' then t.refresh() end
+    end
+    t.bind('<CR>', 'open in the review diff', function()
+      local entry = action_state.get_selected_entry()
+      if not entry then return end
+      t.close()
+      M.open(entry.path)
+    end)
+    t.bind('<Right>', 'stage file', function() stage(true) end)
+    t.bind('<Left>', 'unstage file', function() stage(false) end)
+    t.bind('<C-y>', 'commit the index', function()
+      local root = cwd()
+      t.close()
+      require('regroup.commit').index(root)
+    end)
+    return true
+  end
+  if M.base == 'HEAD' then
+    tele.git_status({ attach_mappings = attach })
+  else
+    tele.git_files({ git_command = { 'git', 'diff', '--name-only', M.base }, attach_mappings = attach })
+  end
+end
+
+-- the branch the review diffs against; <C-h> goes back to HEAD
+function M.pick_base()
+  require('telescope.builtin').git_branches({
+    attach_mappings = function(prompt_bufnr, map)
+      local t = require('regroup.picker').tools(prompt_bufnr, map)
+      t.bind('<CR>', 'review against this branch', function()
+        local branch = t.selected()
+        if not branch then return end
+        t.close()
+        M.base = branch
+      end)
+      t.bind('<C-h>', 'review against HEAD', function()
+        t.close()
+        M.base = 'HEAD'
+      end)
+      return true
+    end,
+  })
 end
 
 return M
