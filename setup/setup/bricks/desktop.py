@@ -33,7 +33,6 @@ _APT_DESKTOP = [
     "xbindkeys",
     "libnotify-bin",
     "wmctrl",
-    "dbus-x11",
     "xorg",
     "polybar",
     "dunst",

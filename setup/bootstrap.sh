@@ -26,6 +26,16 @@ done
 DIENCEPHALON_URL="${DIENCEPHALON_URL:-https://github.com/endremborza/setup}"
 DIEN_ROOT="$SYNC_ROOT/composites/pkm/diencephalon"
 
+# The var layers derive every path from ~/synced; a root elsewhere is reached through that symlink.
+if [ "$(readlink -f -- "$SYNC_ROOT")" != "$(readlink -f -- "$HOME/synced")" ]; then
+    if [ -e "$HOME/synced" ] || [ -L "$HOME/synced" ]; then
+        echo "~/synced exists but is not $SYNC_ROOT" >&2
+        exit 1
+    fi
+    mkdir -p "$SYNC_ROOT"
+    ln -s "$SYNC_ROOT" "$HOME/synced"
+fi
+
 sudo apt-get update -qq
 sudo apt-get install -y curl git stow make
 

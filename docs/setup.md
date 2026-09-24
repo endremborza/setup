@@ -68,70 +68,55 @@ Push further in one shot: `PROFILES="shell dev" bash bootstrap.sh`.
 
 ### Three layers
 
-| Layer | File              | Source                                  | Content                            |
-|-------|-------------------|-----------------------------------------|------------------------------------|
-| 1     | `~/.vars`         | diencephalon                            | Base paths, tool config            |
-| 2     | `~/.secret-vars`  | hypothalamus/secrets                    | API keys, tokens                   |
-| 3     | `~/.local-vars`   | hypothalamus/local-dotfiles/host-$(hn)  | Machine-specific (GPU, ports, hw)  |
+| Layer | File | Source | Content |
+| --- | --- | --- | --- |
+| 1 | `~/.vars` | diencephalon | Base paths, tool config |
+| 2 | `~/.secret-vars` | hypothalamus/secrets | API keys, tokens |
+| 3 | `~/.local-vars` | hypothalamus/local-dotfiles/host-$(hn) | Machine-specific (GPU, ports, hw, `TIMEZONE`, `TTY1_SESSION`) |
 
-Each layer can reference earlier ones. Loaded in order by `.profile` and `.xinitrc`.
+Each layer can reference earlier ones. `.profile` loads them in order; everything a login starts (X, tmux, services) inherits them from there. `~/synced` is the one root — symlink it where the tree lives elsewhere, since every derived path and the generated `environment.d` come from it.
 
 ### Boot-to-desktop flow
 
 ```
 tty1 login
   └─ .profile
-       ├─ sources .bashrc
-       ├─ adds ~/bin, ~/.local/bin to PATH
-       ├─ sources ~/.local/bin/env (uv), ~/.cargo/env
+       ├─ sources .bashrc (unmanaged; uv's ~/.local/bin/env lives there)
+       ├─ prepends ~/bin, ~/.local/bin, ~/.elan/bin (guarded: tmux logins source this again), sources ~/.cargo/env
        ├─ sources .vars → .secret-vars → .local-vars
        └─ if no DISPLAY on tty1: exec $TTY1_SESSION (default startx; "none" stays in the console; a kiosk names its launcher)
             └─ .xinitrc
                  ├─ xrdb, setxkbmap, xset
-                 ├─ sources .vars → .secret-vars → .local-vars (again, for X)
-                 ├─ exports XDG_SESSION_TYPE=x11, XDG_CURRENT_DESKTOP=LeftWM
-                 ├─ systemctl --user import-environment    # shell env → systemd
-                 ├─ dbus-update-activation-environment --systemd DISPLAY XAUTHORITY
+                 ├─ exports XDG_SESSION_TYPE=x11, XDG_CURRENT_DESKTOP=LeftWM, DBUS_SESSION_BUS_ADDRESS (the systemd user bus)
+                 ├─ dbus-update-activation-environment --systemd DISPLAY XAUTHORITY XDG_SESSION_TYPE XDG_CURRENT_DESKTOP
                  ├─ starts graphical-session{-pre,}.target
-                 └─ dbus-run-session leftwm
-                      └─ themes/current/up
-                           ├─ sources .profile
-                           ├─ starts dunst, polybar
-                           └─ user runs lwup
+                 └─ leftwm
+                      └─ themes/current/up: loads the theme, starts polybar
 ```
 
 ### systemd integration
 
-**environment.d (static).** `restow` auto-generates `~/.config/environment.d/{10,20,30}-*.conf` by shell-expanding each layer. Loaded once by `systemd --user` at manager startup. Changes require `systemctl --user daemon-reload` + service restart, or a full re-login.
+**environment.d (static).** `restow` generates `~/.config/environment.d/{10,20,30}-*.conf` from the three layers in a clean shell, so their content depends on the files alone; a literal `$` is written `$$` because environment.d expands `$VAR` itself. The stowed `99-path.conf` puts `~/.local/bin` and `~/.cargo/bin` on the manager's PATH. `restow` ends with `systemctl --user daemon-reload`, which re-reads them; a running service sees changes on restart.
 
-**import-environment (dynamic).** `.xinitrc` runs `systemctl --user import-environment` after X starts, pushing the live shell env (including `DISPLAY`, `XAUTHORITY`, XDG overrides) into systemd so subsequently-started services see them.
+**Display access (dynamic).** `.xinitrc` runs `dbus-update-activation-environment --systemd` with the four display variables: bus-activated apps and (`--systemd`) user services started afterwards see them. Nothing imports the whole shell environment.
 
-**dbus.** `.xinitrc` also runs `dbus-update-activation-environment --systemd DISPLAY XAUTHORITY` so dbus-activated services get display access.
+**One bus.** The X session runs on the systemd user bus (`$XDG_RUNTIME_DIR/bus`). dunst is a bus-activated user service (`dunst.service`, `PartOf=graphical-session.target`), so nothing starts or kills it by hand.
 
 ### tmux gotcha
 
-tmux captures env when its **server** starts (first session). The `update-environment` option propagates from the **attaching client** to the session on `attach-session` or `new-session`.
-
-Problem: `lwup` creates `main-bg` before/without a client that has `DISPLAY` set, so the tmux server inherits an env without it, and `new-window` does *not* trigger `update-environment` — only attach does.
-
-Fix: `.tmux.conf` adds session-level vars via `update-environment`, and `lwup` sets the global tmux env explicitly after session creation:
-
-```bash
-tmux set-environment -g DISPLAY "$DISPLAY"
-tmux set-environment -g XAUTHORITY "$XAUTHORITY"
-```
+tmux captures env when its **server** starts (first session). `update-environment` (`DISPLAY` and `XAUTHORITY` are in its default) propagates from the **attaching client** on `attach-session`/`new-session`; `new-window` does not trigger it. A launcher that creates a session without an attached client and then adds windows has to `tmux set-environment -g DISPLAY … XAUTHORITY …` itself.
 
 ### XDG_SESSION_TYPE
 
-logind sets `XDG_SESSION_TYPE=tty` when logging in via tty1 + `startx`, and never updates it. Some apps (including snap-confined ones) check this. `.xinitrc` exports `XDG_SESSION_TYPE=x11` before `import-environment`. Only affects the env, not the actual logind session type (`loginctl` still reports `tty`).
+logind sets `XDG_SESSION_TYPE=tty` when logging in via tty1 + `startx`, and never updates it. Some apps (including snap-confined ones) check this. `.xinitrc` exports `XDG_SESSION_TYPE=x11` and pushes it to systemd with the display variables. Only affects the env, not the actual logind session type (`loginctl` still reports `tty`).
 
 ### Headless stations
 
 - `.profile` sources vars but does not exec a session (no tty1 or DISPLAY already set, or `TTY1_SESSION=none` in `.local-vars`).
-- Services rely solely on `environment.d` files generated by `restow`.
+- Services rely solely on `environment.d`.
 - No `DISPLAY`/`XAUTHORITY`/`XDG_SESSION_TYPE`. tmux has no display vars.
 
-Run `restow` after any `.vars/.secret-vars/.local-vars` change, then `systemctl --user daemon-reload`.
+Run `restow` after any `.vars/.secret-vars/.local-vars` change; a running service picks it up on restart.
 
 ### Debugging
 

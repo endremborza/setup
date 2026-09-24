@@ -2,9 +2,8 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH="/root/.local/bin:/root/.cargo/bin:${PATH}"
 
-# bootstrap.sh installs sudo/curl/git/stow/make itself; we only need git+curl
-# to exist beforehand so the apt-get update inside bootstrap.sh can run
-# under sudo without a chicken-and-egg.
+# bootstrap.sh installs curl/git/stow/make itself through sudo, so sudo (and a
+# passwordless rule) must exist before it runs.
 RUN apt-get update && apt-get install -y sudo curl git && \
     rm -rf /var/lib/apt/lists/* && \
     echo 'root ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
@@ -12,8 +11,8 @@ RUN apt-get update && apt-get install -y sudo curl git && \
 # Stage the diencephalon repo as a local clone source for bootstrap.sh.
 COPY . /tmp/diencephalon-src
 
-# End-to-end: default (tier-less) path — git clone to canonical layout,
-# skeleton-.profile removal, restow, make setup-run.
+# End-to-end: git clone to the canonical layout, blocking files moved aside,
+# restow, make setup-run.
 RUN DIENCEPHALON_URL=/tmp/diencephalon-src bash /tmp/diencephalon-src/setup/bootstrap.sh
 
 # Independent verify (PROFILES= → just base).
