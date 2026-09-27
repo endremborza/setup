@@ -1,0 +1,12 @@
+#!/bin/sh
+# unit-run UNIT — start a user unit and follow its journal until the start job returns (a oneshot: until it has run).
+# The window opens before the start, so no early line is missed; the follower gets a second to drain the last ones.
+set -u
+[ $# -eq 1 ] || { echo "usage: unit-run UNIT" >&2; exit 2; }
+since=$(date '+%F %T')
+journalctl --user -fu "$1" --since "$since" -o cat &
+systemctl --user start "$1"
+rc=$?
+sleep 1
+kill $!
+exit $rc
