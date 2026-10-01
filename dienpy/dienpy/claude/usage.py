@@ -2,11 +2,21 @@
 
 import datetime
 import os
+import select
+import sys
+import termios
 import time
+import tty
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from . import _auth as auth
+
+if TYPE_CHECKING:
+    from rich.console import Console, Group, RenderableType
 
 _USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 _SPANS = {
@@ -84,62 +94,102 @@ def windows(creds_path: Path | None = None) -> list[Window]:
     return parse_windows(get_usage(creds_path))
 
 
-def main(*, watch: bool = False, interval: int = 300) -> None:
-    """Show or watch Claude usage windows (5h session, weekly, weekly per scoped model)."""
-    from rich.console import Console, Group
-    from rich.live import Live
-    from rich.progress import BarColumn, Progress, TextColumn
+def _render(
+    ws: Sequence[Window], updated: datetime.datetime | None, *footer: "RenderableType"
+) -> "Group":
+    from rich.console import Group
+    from rich.progress_bar import ProgressBar
     from rich.rule import Rule
+    from rich.table import Table
+
+    grid = Table.grid(padding=(0, 1))
+    for w in ws:
+        for kind, pct in (("Usage", w.percent), ("Time", w.time_percent)):
+            if pct is not None:
+                grid.add_row(
+                    f"[bold]{w.label} {kind}",
+                    f"{pct:>5.1f}%",
+                    ProgressBar(total=100, completed=pct, width=40),
+                )
+    stamp = updated.strftime("%Y-%m-%d %H:%M:%S") if updated else "never"
+    status = [f"Last updated: {stamp}"]
+    for w in ws:
+        if w.resets_at:
+            fmt = "%H:%M" if w.kind == "session" else "%a %H:%M"
+            status.append(f"{w.label} resets {w.resets_at.astimezone().strftime(fmt)}")
+    return Group(
+        Rule("[bold]Claude Code Usage[/bold]"),
+        grid,
+        "",
+        f"[dim]{'  |  '.join(status)}[/dim]",
+        *footer,
+    )
+
+
+@contextmanager
+def _cbreak(fd: int) -> Iterator[None]:
+    saved = termios.tcgetattr(fd)
+    tty.setcbreak(fd)
+    try:
+        yield
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, saved)
+
+
+def _keys(fd: int, timeout: float) -> str:
+    ready, _, _ = select.select([fd], [], [], timeout)
+    return os.read(fd, 64).decode(errors="ignore") if ready else ""
+
+
+def _watch(console: "Console", interval: int) -> None:
+    """Alternate-screen view redrawn from home every frame, so a resize cannot leave a stale copy behind.
+
+    The fetch deadline is wall-clock and the key wait is capped at a second, so a resume from suspend refetches at once.
+    """
+    from rich.live import Live
+    from rich.text import Text
+
+    fd = sys.stdin.fileno()
+    ws: list[Window] = []
+    updated: datetime.datetime | None = None
+    error = ""
+    busy = False
+    due = 0.0
+
+    def frame() -> "Group":
+        left = max(0, int(due - time.time()))
+        state = "refreshing…" if busy else f"next in {left // 60}:{left % 60:02d}"
+        keys = f"[dim][bold]r[/bold] refresh  [bold]q[/bold] quit  ·  {state}[/dim]"
+        problem = Text(error, style="red", no_wrap=True, overflow="ellipsis")
+        return _render(ws, updated, keys, problem)
+
+    with _cbreak(fd), Live(get_renderable=frame, console=console, screen=True) as live:
+        while True:
+            if time.time() >= due:
+                busy = True
+                live.refresh()
+                try:
+                    ws, updated, error = windows(), datetime.datetime.now(), ""
+                except Exception as e:
+                    error = f"{type(e).__name__}: {e}"
+                busy = False
+                due = time.time() + interval
+            key = _keys(fd, 1.0)
+            if "q" in key:
+                return
+            if "r" in key:
+                due = 0.0
+
+
+def main(*, watch: bool = False, interval: int = 300) -> None:
+    """Show or watch Claude usage windows (5h session, weekly, weekly per scoped model); r refreshes and q quits the watch."""
+    from rich.console import Console
 
     console = Console()
-    os.system("clear")
-    progress = Progress(
-        TextColumn("[bold]{task.fields[label]}"),
-        TextColumn("{task.percentage:>5.1f}%"),
-        BarColumn(bar_width=40),
-        expand=False,
-    )
-    tasks: dict[str, tuple[int, int]] = {}
-    resets: list[str] = []
-
-    def render() -> Group:
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        return Group(
-            Rule("[bold]Claude Code Usage[/bold]"),
-            progress,
-            "",
-            f"[dim]Last updated: {timestamp}  |  {'  |  '.join(resets)}[/dim]",
-        )
-
-    def update_values() -> None:
-        resets.clear()
-        for w in windows():
-            if w.label not in tasks:
-                tasks[w.label] = (
-                    progress.add_task("", total=100, label=f"{w.label} Usage"),
-                    progress.add_task("", total=100, label=f"{w.label} Time"),
-                )
-            usage_task, time_task = tasks[w.label]
-            progress.update(usage_task, completed=w.percent)
-            progress.update(time_task, completed=w.time_percent or 0.0)
-            if w.resets_at:
-                fmt = "%H:%M" if w.kind == "session" else "%a %H:%M"
-                resets.append(
-                    f"{w.label} resets {w.resets_at.astimezone().strftime(fmt)}"
-                )
-
-    if watch:
-        try:
-            with Live(render(), refresh_per_second=4, console=console) as live:
-                while True:
-                    try:
-                        update_values()
-                    except Exception as e:
-                        print(type(e).__name__)
-                    live.update(render())
-                    time.sleep(interval)
-        except KeyboardInterrupt:
-            console.print("\n[bold yellow]Stopped watching.[/bold yellow]")
-    else:
-        update_values()
-        console.print(render())
+    if not watch:
+        console.print(_render(windows(), datetime.datetime.now()))
+        return
+    try:
+        _watch(console, interval)
+    except KeyboardInterrupt:
+        pass
