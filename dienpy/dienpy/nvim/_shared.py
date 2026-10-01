@@ -38,6 +38,7 @@ def run_headless(
     prefix: str,
     timeout: float,
     env: dict[str, str] | None = None,
+    flags: tuple[str, ...] = (),
 ) -> Headless:
     """Run `lua` in a headless nvim; `data` is the JSON the script prints after `prefix`."""
     with tempfile.NamedTemporaryFile(suffix=".lua", mode="w", delete=False) as tmp:
@@ -47,7 +48,7 @@ def run_headless(
     start = time.monotonic()
     try:
         res = subprocess.run(
-            ["nvim", "--headless", "-c", f"luafile {lua_path}"],
+            ["nvim", "--headless", *flags, "-c", f"luafile {lua_path}"],
             capture_output=True,
             text=True,
             timeout=timeout,
