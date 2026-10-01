@@ -125,3 +125,4 @@ Lives at `dotfiles/.config/nvim/init.lua`. Uses lazy.nvim + mason + mason-lspcon
 - `dienpy nvim verify [--perf]` — headless LSP check against test projects. Config at `~/.config/nvim-verify.json`.
 - `dienpy nvim commit [--dry-run]` — commit nvim dotfiles with plugin version snapshot.
 - `dienpy nvim release_notes` — fetch GitHub release notes for plugins. Needs `GITHUB_TOKEN`.
+- `dienpy nvim keymaps [file] [--json]` — the live keymaps that carry a desc, tagged config / plugin / default, as nvim holds them in a buffer of `file` (default `$MYVIMRC`) with its LSP and gitsigns attached, plus which-key's group names.

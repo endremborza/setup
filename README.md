@@ -86,6 +86,7 @@ See [`dienpy/AGENTS.md`](dienpy/AGENTS.md) for the full module list.
 ```bash
 dienpy nvim release_notes      # plugin changelog digest
 dienpy nvim verify --perf      # headless LSP health check
+dienpy nvim keymaps            # live keymaps with descs, by origin
 dienpy hunks run               # partition the diff into patches
 ```
 
