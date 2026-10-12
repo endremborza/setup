@@ -136,6 +136,7 @@ The loop is a library: `feed.schedule(repos: list[RepoQueue], settings, usage=�
 
 - `constants.py` derives the canonical paths from `SYNC_ROOT` (default `$HOME/synced`), each through `env_path` so the matching `.vars` export wins — use these, don't hardcode paths
 - `_git.py` holds every git invocation in the ecosystem — `Repo(path)` bound to a repo, module-level `run`/`clone` for the repo-less calls; cril, hyppy and fleet import it rather than reaching for `subprocess`. `setup/` is the exception: it stays dependency-free because it runs before dienpy is installed
+- `_out.py` lays out every CLI's tables: `table(rows, head, align=, dim=, clip=, indent=, plain=)` and `section(title, note)` render through rich (already here for `claude usage`) with cells as plain text, styling dropped and no width limit when piped, and only the last column wrapping or clipping on a narrow terminal; `plain=True` is the same layout for text that is not terminal output (fzf input, a commit message). `md_table`/`md_row` write markdown in the compact form. cril, hyppy and fleet import it rather than padding f-strings
 - Per-module state files go under the relevant synced directory or `~/.config/`
 
 ## Environment
