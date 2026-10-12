@@ -7,13 +7,13 @@
 # _proto_register_aliases has run after all aliases are defined.
 
 _proto_complete() {
-    _proto_reply "$1" "${COMP_WORDS[@]:1:COMP_CWORD-1}"
+    _proto_reply "$1"
 }
 
 _proto_alias_complete() {
     local -a words
     _proto_alias_words "$1" words || return
-    _proto_reply "${words[@]}" "${COMP_WORDS[@]:1:COMP_CWORD-1}"
+    _proto_reply "${words[@]}"
 }
 
 # Registers alias completion for every alias expanding to one simple command
@@ -29,23 +29,30 @@ _proto_register_aliases() {
     done
 }
 
-# $1 = tool, rest = argv before the cursor; the partial word is filtered here.
+# $1 = tool, rest = its leading argv; the typed words follow from COMP_WORDS,
+# and the partial word under the cursor is filtered here.
 _proto_reply() {
-    local cur="${COMP_WORDS[COMP_CWORD]}"
+    local -a typed candidates
+    local w
+    # read without -r drops each escaping backslash, as the shell will: the
+    # tool sees argv, not the escaped text completion inserted.
+    for w in "${COMP_WORDS[@]:1:COMP_CWORD}"; do
+        IFS= read w <<<"$w"
+        typed+=("$w")
+    done
+    local cur=${typed[-1]}
     local IFS=$'\n'
-    local -a candidates
-    mapfile -t candidates < <("$1" --complete "${@:2}" 2>/dev/null)
+    mapfile -t candidates < <("$1" --complete "${@:2}" "${typed[@]:0:${#typed[@]}-1}" 2>/dev/null)
     [[ ${#candidates[@]} -eq 0 ]] && return
     if [[ ${#candidates[@]} -eq 1 && "${candidates[0]}" == $'\eFILES' ]]; then
         COMPREPLY=()
         compopt -o default -o filenames
         return
     fi
-    local cur_plain="${cur//\\ / }"
     COMPREPLY=()
     local c i
     for c in "${candidates[@]}"; do
-        [[ "$c" == "$cur_plain"* ]] && COMPREPLY+=("$c")
+        [[ "$c" == "$cur"* ]] && COMPREPLY+=("$c")
     done
     [[ ${#COMPREPLY[@]} -eq 0 ]] && return
     # Candidates quote themselves: -o filenames would append / to a name that
