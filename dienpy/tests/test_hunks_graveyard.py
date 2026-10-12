@@ -25,14 +25,14 @@ def test_bury_list_restore_drop(
     root = str(repo)
     seed(repo)
     a1, a2 = ids(_hunks.parse(root), "a.txt")
-    bury.main("p1")
+    bury.main("1")
     (row,) = _entries(capsys)
     assert row["title"] == "a first" and row["ref"] == "stash@{0}"
     assert ids(_hunks.parse(root), "a.txt") == [a2]
     restore.main(row["hash"][:7])
     assert ids(_hunks.parse(root, staged=True), "a.txt") == [a1]
     assert _entries(capsys) == []
-    bury.main("p1")
+    bury.main("1")
     (row,) = _entries(capsys)
     drop.main(row["hash"])
     assert not git(repo, "stash", "list")

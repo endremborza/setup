@@ -1,7 +1,7 @@
-"""patches: sanitize prunes dead ids and merges same titles keeping the first id; selection by id, position and hunk id."""
+"""patches: sanitize prunes dead ids and merges same titles keeping the first id; selection by patch id and hunk id."""
 
 import pytest
-from dienpy.hunks._patches import hunk_ids, mint, sanitize, select
+from dienpy.hunks._patches import hunk_ids, sanitize, select
 
 
 def test_sanitize_prunes_and_merges() -> None:
@@ -29,16 +29,14 @@ def test_sanitize_prunes_and_merges() -> None:
     assert patches[0]["hunks"] == ["x", "dead"]  # input untouched
 
 
-def test_mint_and_select() -> None:
-    patches = mint(
-        [{"title": "a", "hunks": ["b" * 12]}, {"title": "b", "hunks": ["1" * 12]}]
-    )
-    assert all(len(p["id"]) == 6 for p in patches)
-    assert select(patches, ("2", patches[0]["id"])) == [patches[1], patches[0]]
-    with pytest.raises(SystemExit, match="no patch"):
-        select(patches, ("nope",))
-    digits = [{"id": "p1", "hunks": []}, {"id": "000001", "hunks": []}]
-    assert select(digits, ("000001", "1")) == [digits[1], digits[0]]
+def test_select() -> None:
+    patches = [
+        {"id": "1", "title": "a", "hunks": ["b" * 12]},
+        {"id": "4", "title": "b", "hunks": ["1" * 12]},
+    ]
+    assert select(patches, ("4", "1")) == [patches[1], patches[0]]
+    with pytest.raises(SystemExit, match="no patch '2'"):
+        select(patches, ("2",))
     live = {"b" * 12, "1" * 12}
     assert hunk_ids(patches, ("1", "1" * 12, "b" * 12), live, live) == [
         "b" * 12,

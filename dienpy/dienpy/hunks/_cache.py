@@ -1,9 +1,9 @@
 """regroup cache (.git/regroup-cache.json) — schema owner; nvim reads it through `hunks list --json`.
 
 `analyses` is keyed by config (`granularity|model|context`); an entry holds the patches,
-the hunk ids they cover, its config and time; `last` is the config the shell and nvim
-act on — the run written last, or the one `use` picked. Every hunks command prunes
-entries that no longer describe any live hunk.
+the hunk ids they cover, its config, time and the next patch id to mint; `last` is the
+config the shell and nvim act on — the run written last, or the one `use` picked. Every
+hunks command prunes entries that no longer describe any live hunk.
 """
 
 import dataclasses
@@ -14,10 +14,11 @@ import time
 from pathlib import Path
 from typing import Any
 
+from . import _patches
 from ._config import Config
 from ._hunks import Hunk
 
-VERSION = 4
+VERSION = 5
 
 
 def _path(root: str) -> Path:
@@ -99,16 +100,18 @@ def set_entry(
     """Write the entry and make its run current; `time` only advances when the content changed.
 
     `ids` records what the patches cover, a subset of the live diff for a `--path` run.
+    A patch without an id gets the run's next number, in place, so the caller holds it too.
     """
     data = load(root) or {"version": VERSION, "analyses": {}}
     data["last"] = dataclasses.asdict(config)
+    prev = data["analyses"].get(config.key) or {}
     grouped = {hid for p in patches for hid in p["hunks"]}
     payload = {
         "ids": [h.id for h in hunks if h.id in grouped],
         "patches": patches,
         "config": dataclasses.asdict(config),
+        "next": _patches.mint(patches, prev.get("next", 1)),
     }
-    prev = data["analyses"].get(config.key) or {}
     unchanged = prev.get("time") and all(prev.get(k) == v for k, v in payload.items())
     payload["time"] = prev["time"] if unchanged else int(time.time())
     data["analyses"][config.key] = payload

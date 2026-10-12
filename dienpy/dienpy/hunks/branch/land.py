@@ -44,9 +44,7 @@ def _message(root: str, onto: str, name: str, count: int) -> str:
 
 def _split(root: str, config: _config.Config, backend: ai.Backend) -> list[str]:
     repo(root).out("reset", "-q")
-    patches = _patches.mint(
-        _engine.partition(root, _hunks.parse(root), config, backend)
-    )
+    patches = _engine.partition(root, _hunks.parse(root), config, backend)
     out = []
     for p in patches:
         live, index = _hunks.parse(root), _hunks.parse(root, staged=True)

@@ -1,11 +1,10 @@
 """Patch-list helpers shared by the hunks commands: ids, sanitizing, selection, printing.
 
-A patch is `{id, title, message, hunks, mixed?}`; its id is minted here once, when the
-model's output is accepted, and is what nvim and the CLI address it by.
+A patch is `{id, title, message, hunks, mixed?}`; its id is a number minted once, when the
+patch enters a run, never reused within that run, and is what nvim and the CLI address it by.
 """
 
 import re
-import secrets
 from typing import Annotated
 
 from protocli import Complete
@@ -13,10 +12,13 @@ from protocli import Complete
 _HUNK_ID = re.compile(r"^[0-9a-f]{12}(~\d+)?$")
 
 
-def mint(patches: list[dict]) -> list[dict]:
+def mint(patches: list[dict], next_id: int) -> int:
+    """Number the patches that have no id yet, from `next_id`; returns the next free number."""
     for p in patches:
-        p.setdefault("id", secrets.token_hex(3))
-    return patches
+        if "id" not in p:
+            p["id"] = str(next_id)
+            next_id += 1
+    return next_id
 
 
 def sanitize(patches: list[dict], live: set[str]) -> list[dict]:
@@ -42,17 +44,12 @@ def sanitize(patches: list[dict], live: set[str]) -> list[dict]:
 
 
 def select(patches: list[dict], tokens: tuple[str, ...]) -> list[dict]:
-    """Patches named by id or 1-based position, in the order given."""
-    out = []
-    for tok in tokens:
-        found = [p for p in patches if p["id"] == tok]
-        if found:
-            out.append(found[0])
-        elif tok.isdigit() and 1 <= int(tok) <= len(patches):
-            out.append(patches[int(tok) - 1])
-        else:
-            raise SystemExit(f"no patch '{tok}' in the current run")
-    return out
+    """Patches named by id, in the order given."""
+    by_id = {p["id"]: p for p in patches}
+    missing = [t for t in tokens if t not in by_id]
+    if missing:
+        raise SystemExit(f"no patch '{missing[0]}' in the current run")
+    return [by_id[t] for t in tokens]
 
 
 def hunk_ids(
@@ -78,11 +75,11 @@ def message(p: dict) -> str:
 
 
 def print_patches(patches: list[dict], live: set[str]) -> None:
-    for i, p in enumerate(patches, 1):
+    for p in patches:
         n = sum(1 for h in p["hunks"] if h in live)
-        print(f"{i:2d} {p['id']}  {n:2d} hunks  {p['title']}")
+        print(f"{p['id']:>2}  {n:2d} hunks  {p['title']}")
         for m in p.get("mixed") or []:
-            print(f"                 mixed {m['hunk']}: {m['note']}")
+            print(f"    mixed {m['hunk']}: {m['note']}")
 
 
 def completions() -> list[str]:

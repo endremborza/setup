@@ -63,9 +63,9 @@ def seed(repo: Path) -> dict[str, str]:
     a1, a2 = ids(hunks, "a.txt")
     b1 = ids(hunks, "b.txt")[0]
     patches = [
-        {"id": "p1", "title": "a first", "message": "body one", "hunks": [a1]},
-        {"id": "p2", "title": "a second", "message": "", "hunks": [a2]},
-        {"id": "p3", "title": "b edit", "message": "", "hunks": [b1]},
+        {"title": "a first", "message": "body one", "hunks": [a1]},
+        {"title": "a second", "message": "", "hunks": [a2]},
+        {"title": "b edit", "message": "", "hunks": [b1]},
     ]
     config = _config.Config("normal", "sonnet", "bare")
     _cache.set_entry(root, config, hunks, patches)

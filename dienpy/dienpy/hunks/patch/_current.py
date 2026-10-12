@@ -1,5 +1,5 @@
 """The run every patch command acts on: the last-used config's cached entry, sanitized
-against the live diff — the one listing `use` prints and `patch <position>` selects from."""
+against the live diff — the one listing `use` prints and `patch <id>` selects from."""
 
 from dataclasses import dataclass, field
 from functools import cached_property

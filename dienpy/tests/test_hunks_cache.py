@@ -67,6 +67,17 @@ def test_scoped_entry_records_grouped_ids(tmp_path: Path) -> None:
     assert again and again["time"] == stamp
 
 
+def test_patch_ids_are_never_reused(tmp_path: Path) -> None:
+    (tmp_path / ".git").mkdir()
+    root = str(tmp_path)
+    first = [{"title": "a", "hunks": ["a"]}, {"title": "b", "hunks": ["b"]}]
+    _cache.set_entry(root, CONFIG, [_h("a"), _h("b")], first)
+    assert [p["id"] for p in first] == ["1", "2"]
+    second = [first[0], {"title": "c", "hunks": ["c"]}]
+    _cache.set_entry(root, CONFIG, [_h("a"), _h("c")], second)
+    assert [p["id"] for p in second] == ["1", "3"]
+
+
 def test_json_listing_survives_a_prune(tmp_path: Path, capsys, monkeypatch) -> None:
     """nvim parses `list --json` stdout: prune's diagnostic must not land in it."""
     repo = make(tmp_path)

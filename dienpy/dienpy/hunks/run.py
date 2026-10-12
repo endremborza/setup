@@ -102,7 +102,7 @@ def main(
         patches = _patches.sanitize(
             _engine.merge_placement(_fresh(root, config, live), groups, existing), live
         )
-        _cache.set_entry(root, config, all_hunks, _patches.mint(patches))
+        _cache.set_entry(root, config, all_hunks, patches)
         patches = _engine.describe_stale(root, patches, all_hunks, config, backend)
     else:
         if extend:
@@ -118,5 +118,5 @@ def main(
         )
         patches = _patches.sanitize(kept_patches + groups, live)
 
-    _cache.set_entry(root, config, all_hunks, _patches.mint(patches))
+    _cache.set_entry(root, config, all_hunks, patches)
     _patches.print_patches(patches, live)

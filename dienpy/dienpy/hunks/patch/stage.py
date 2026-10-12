@@ -1,4 +1,4 @@
-"""Stage patches (by id or position) or single hunks (by id)."""
+"""Stage patches or single hunks (by id)."""
 
 from .. import _apply, _patches
 from . import _current

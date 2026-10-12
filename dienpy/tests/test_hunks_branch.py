@@ -19,7 +19,7 @@ def test_new_then_land(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys) 
     repo = make(tmp_path)
     monkeypatch.chdir(repo)
     _seed(repo)
-    new.main("feat", "p1", "p2")
+    new.main("feat", "1", "2")
     assert git(repo, "branch", "--show-current") == "feat"
     assert _log(repo, "main..feat") == ["a second", "a first"]
     assert git(repo, "log", "-1", "--format=%b", "feat~1") == "body one"
@@ -45,7 +45,7 @@ def test_land_split(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = make(tmp_path)
     monkeypatch.chdir(repo)
     _seed(repo)
-    new.main("feat", "p1", "p2")
+    new.main("feat", "1", "2")
     git(repo, "stash", "-u", "-q")  # a clean tree, so the split sees only the branch
 
     def fake_partition(root, hunks, config, backend):
@@ -67,7 +67,7 @@ def test_conflict_is_undone(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     repo = make(tmp_path)
     monkeypatch.chdir(repo)
     _seed(repo)
-    new.main("feat", "p1")
+    new.main("feat", "1")
     git(repo, "stash", "-u", "-q")
     git(repo, "switch", "-q", "main")
     a = (repo / "a.txt").read_text().splitlines()
@@ -87,7 +87,7 @@ def test_drop_archives(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = make(tmp_path)
     monkeypatch.chdir(repo)
     _seed(repo)
-    new.main("junk", "p3")
+    new.main("junk", "3")
     tip = git(repo, "rev-parse", "junk")
     git(repo, "stash", "-u", "-q")
     drop.main("junk")
@@ -102,7 +102,7 @@ def test_worktree_branch(
     repo = make(tmp_path)
     monkeypatch.chdir(repo)
     _seed(repo)
-    new.main("side", "p1", "p3", worktree=True)
+    new.main("side", "1", "3", worktree=True)
     wt = tmp_path / "repo-side"
     assert wt.is_dir() and git(repo, "branch", "--show-current") == "main"
     assert _log(repo, "main..side") == ["b edit", "a first"]
@@ -145,7 +145,7 @@ def test_checkout_and_refusals(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     repo = make(tmp_path)
     monkeypatch.chdir(repo)
     _seed(repo)
-    new.main("side", "p3", worktree=True)
+    new.main("side", "3", worktree=True)
     with pytest.raises(SystemExit, match="checked out in"):
         checkout.main("side")
     with pytest.raises(SystemExit, match="default branch"):
@@ -168,9 +168,9 @@ def test_reused_branch_name_archives_apart(
     repo = make(tmp_path)
     monkeypatch.chdir(repo)
     _seed(repo)
-    new.main("feat", "p1")
+    new.main("feat", "1")
     land.main(message="one")
-    new.main("feat", "p2")
+    new.main("feat", "2")
     land.main(message="two")
     refs = git(repo, "for-each-ref", "--format=%(refname)", "refs/landed").split()
     assert refs == ["refs/landed/feat", "refs/landed/feat-2"]
