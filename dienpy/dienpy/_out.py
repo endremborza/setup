@@ -1,9 +1,10 @@
 """Tables and section headers for every CLI in the ecosystem.
 
-Terminal output goes through rich: cells are plain text (a release name's
-`[PublicHD]` is not markup), styling drops away when piped, and piped output
-is never wrapped or squeezed to a guessed width. `plain` renders the same
-layout as text for something other than the terminal (fzf input, a commit
+On a terminal a table goes through rich: aligned, styled, cells as plain
+text (a release name's `[PublicHD]` is not markup). Piped, it is
+tab-separated rows for `cut -f`/`awk -F'\t'`: no header, no styling, every
+column kept, so a field's number never depends on the data. `plain` keeps the
+aligned layout as unstyled text wherever it goes (fzf input, a commit
 message). Markdown output is the compact form: `| a | b |`, `| --- |`, no
 padding.
 """
@@ -19,13 +20,21 @@ if TYPE_CHECKING:
 
 _PIPED_WIDTH = 1 << 16
 _MD_ALIGN = {"<": ":--", ">": "--:", "^": ":-:"}
+_FIELD_BREAKS = str.maketrans("\t\n\r", "   ")
+
+
+@cache
+def _tty() -> bool:
+    from rich.console import Console
+
+    return Console().is_terminal
 
 
 @cache
 def _console(plain: bool) -> Console:
     from rich.console import Console
 
-    tty = not plain and Console().is_terminal
+    tty = not plain and _tty()
     return Console(
         markup=False,
         highlight=False,
@@ -52,7 +61,8 @@ def table(
     indent: int = 0,
     plain: bool = False,
 ) -> str:
-    """Rows as aligned columns two spaces apart, empty when there are none.
+    """Rows as aligned columns two spaces apart, empty when there are none;
+    tab-separated when piped (see the module docstring).
 
     `align` holds one `<`/`>` per column (left by default), `dim` the indices
     of secondary columns; a column empty in every row takes no space. On a
@@ -65,6 +75,11 @@ def table(
     if not lines:
         return ""
     n = max(len(head), *map(len, lines))
+    if not plain and not _tty():
+        return "\n".join(
+            "\t".join(c.translate(_FIELD_BREAKS) for c in [*r, *[""] * (n - len(r))])
+            for r in lines
+        )
     grid = [[*r, *[""] * (n - len(r))] for r in ([head] if head else []) + lines]
     widths = [max(map(cell_len, col)) for col in zip(*grid, strict=True)]
     keep = [i for i in range(n) if widths[i]]
