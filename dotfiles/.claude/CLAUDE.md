@@ -65,6 +65,12 @@ A script that is not part of a product has one home, set by how long it is neede
 - Prefer composition and small, focused functions
 - If a new feature supersedes or subsumes a previous one, the previous one should be replaced and deleted unless performance is harmed, but in all cases deletion should be brought up and considered
 
+## One Literal per Value
+- A value defined in code (a limit, default, cap, threshold, count) is written as a literal exactly once, at its definition. Nothing else restates it: not docstrings, tool or CLI descriptions, help strings, comments, `docs/`, UI copy, error messages or tests.
+- Text that has to show the number interpolates it from the definition: format the docstring or string from the constant, serve it, or generate it. Prose that cannot interpolate (`docs/`, comments) names the constant (`MAX_PAPERS_LIMIT`) and never adds its value, not even in parentheses.
+- Tests assert against the constant. A test that checks that a text repeats the number guards a duplicate instead of removing it.
+- After adding or changing a constant, grep its value across docs, docstrings and copy before calling the change done.
+
 ## Comments
 - A comment describes a mechanism that is not evident from reading the code, or a constraint that still holds. Present tense, about the thing, not about the work that produced it.
 - Never write the story: no incident, outage, debugging session, review remark, or request ("as requested", "you asked for", "after the report"), no dates, no commit/PR/issue references, no "changed from / used to / previously / for now / until we". Git holds the history and `.cril/` holds the writeups, todos and plans — code holds neither.
