@@ -277,7 +277,10 @@ function move_hunk(h, from)
     title = ('move %s:%d →'):format(h.path, h.new_start),
     results = function() return targets_ end,
     entry = function(p)
-      return { display = ('%2d hunks  %s'):format(#p.live, p.title), ordinal = p.title .. ' ' .. (p.message or '') }
+      return {
+        display = ('%2s  %2d hunks  %s'):format(p.id, #p.live, p.title),
+        ordinal = table.concat({ p.id, p.title, p.message or '' }, ' '),
+      }
     end,
     preview = patch_lines, preview_ft = 'diff', preview_title = 'patch',
     keys = {
@@ -308,9 +311,9 @@ local function patch_entry(st)
     end
     local paths = vim.tbl_map(function(f) return f.path end, files)
     return {
-      display = ('%-10s %-8s %s'):format(tag,
+      display = ('%2s  %-10s %-8s %s'):format(p.id, tag,
         n > 0 and (#files .. ' file' .. (#files == 1 and '' or 's')) or '', p.title),
-      ordinal = table.concat({ p.title, p.message or '', table.concat(paths, ' ') }, ' '),
+      ordinal = table.concat({ p.id, p.title, p.message or '', table.concat(paths, ' ') }, ' '),
     }
   end
 end
@@ -462,7 +465,7 @@ function M.pick_runs(ctx)
         for _, id in ipairs(p.hunks) do
           if live[id] then n = n + 1 end
         end
-        table.insert(lines, ('%2d/%-2d %s'):format(n, #p.hunks, p.title))
+        table.insert(lines, ('%2s  %2d/%-2d %s'):format(p.id, n, #p.hunks, p.title))
       end
       return lines
     end,

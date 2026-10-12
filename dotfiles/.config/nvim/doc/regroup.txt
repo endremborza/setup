@@ -44,6 +44,7 @@ RUN PICKER
     <C-t>  graveyard         <C-x>  patch branches
 
 PATCH PICKER                            (<Tab> marks several, one engine call)
+    the first column is the patch id, the number `hunks patch` names it by
     <CR>  browse patch
     <C-h>  hunk list
     <C-s> / <C-u> / <C-d>  stage / unstage / discard (revert to HEAD)
