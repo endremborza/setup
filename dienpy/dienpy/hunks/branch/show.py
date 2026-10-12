@@ -4,6 +4,7 @@ import json as _json
 from pathlib import Path
 
 from dienpy._git import find_root
+from dienpy._out import table
 
 from .._hunks import repo
 from . import _ops
@@ -68,10 +69,16 @@ def main(
             else f"no patch branches beyond {onto}"
         )
     elif archived:
-        for r in rows:
-            print(f"{r['ref']:<40} {r['tip']}  {r['date']}")
+        print(table((r["ref"], r["tip"], r["date"]) for r in rows))
     else:
-        for r in rows:
-            mark = "*" if r["current"] else " "
-            wt = f"  [{r['worktree']}]" if r["worktree"] else ""
-            print(f"{mark} {r['name']:<30} {r['commits']:3d} commits  {r['stat']}{wt}")
+        cells = (
+            (
+                "*" if r["current"] else "",
+                r["name"],
+                f"{r['commits']} commits",
+                r["stat"],
+                f"[{r['worktree']}]" if r["worktree"] else "",
+            )
+            for r in rows
+        )
+        print(table(cells, align="<<>"))

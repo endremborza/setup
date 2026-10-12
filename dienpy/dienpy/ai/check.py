@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from .._out import table
 from . import _profiles
 from ._profiles import ProfileName
 
@@ -50,12 +51,12 @@ _CHECKS = {"openai": _check_openai, "api": _check_api, "cli": _check_cli}
 
 
 def main(profile: ProfileName | None = None) -> None:
-    failed = False
+    rows = []
     for name in [profile] if profile else _profiles.names():
         spec = _profiles.get(name)
         check = _CHECKS.get(str(spec.get("kind", "")))
         problem = check(spec) if check else f"unknown kind '{spec.get('kind')}'"
-        print(f"{name:<12} {'ok' if problem is None else f'FAIL  {problem}'}")
-        failed = failed or problem is not None
-    if failed:
+        rows.append((name, "ok" if problem is None else "FAIL", problem or ""))
+    print(table(rows))
+    if any(status == "FAIL" for _, status, _ in rows):
         sys.exit(1)

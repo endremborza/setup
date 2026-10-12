@@ -7,6 +7,7 @@ from typing import Annotated
 from protocli import FILES
 
 from .._git import find_root
+from .._out import table
 from ..claude import _gate
 from ..constants import LOGS_DIR
 from . import _queue
@@ -89,10 +90,14 @@ def main(
             )
         )
     if dry_run:
-        print(f"repo      {repo.root}\nhunks     {' '.join(repo.hunks) or '(skipped)'}")
-        for i, j in enumerate(jobs, 1):
-            print(
-                f"job {i:<5} {j}  profiles={','.join(j.profiles)} need={j.need:.0f} commit={j.commit}"
+        rows = [("repo", repo.root), ("hunks", " ".join(repo.hunks) or "(skipped)")]
+        rows += [
+            (
+                f"job {i}",
+                f"{j}  profiles={','.join(j.profiles)} need={j.need:.0f} commit={j.commit}",
             )
+            for i, j in enumerate(jobs, 1)
+        ]
+        print(table(rows))
         return
     run(repo, jobs, settings)

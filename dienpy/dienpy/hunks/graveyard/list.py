@@ -3,6 +3,7 @@
 import json as _json
 
 from dienpy._git import find_root
+from dienpy._out import table
 
 from . import _entries
 
@@ -14,5 +15,5 @@ def main(*, json: bool = False) -> None:
         return
     if not rows:
         print("graveyard is empty")
-    for e in rows:
-        print(f"{e['hash'][:7]}  {e['ref']:<10} {e['age']:<16} {e['title']}")
+        return
+    print(table((e["hash"][:7], e["ref"], e["age"], e["title"]) for e in rows))

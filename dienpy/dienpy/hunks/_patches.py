@@ -9,6 +9,8 @@ from typing import Annotated
 
 from protocli import Complete
 
+from dienpy._out import table
+
 _HUNK_ID = re.compile(r"^[0-9a-f]{12}(~\d+)?$")
 
 
@@ -75,11 +77,16 @@ def message(p: dict) -> str:
 
 
 def print_patches(patches: list[dict], live: set[str]) -> None:
+    """One row per patch, its mixed hunks as indented rows under the title."""
+    rows = []
     for p in patches:
         n = sum(1 for h in p["hunks"] if h in live)
-        print(f"{p['id']:>2}  {n:2d} hunks  {p['title']}")
-        for m in p.get("mixed") or []:
-            print(f"    mixed {m['hunk']}: {m['note']}")
+        rows.append((p["id"], f"{n} hunks", p["title"]))
+        rows += [
+            ("", "", f"  mixed {m['hunk']}: {m['note']}") for m in p.get("mixed") or []
+        ]
+    if rows:
+        print(table(rows, align=">>"))
 
 
 def completions() -> list[str]:

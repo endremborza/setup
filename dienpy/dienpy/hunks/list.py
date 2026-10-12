@@ -4,6 +4,7 @@ import datetime
 import json as _json
 
 from dienpy._git import find_root
+from dienpy._out import table
 
 from . import _cache, _hunks
 
@@ -34,6 +35,7 @@ def main(*, json: bool = False) -> None:
     rows = sorted(
         data["analyses"].items(), key=lambda kv: kv[1].get("time") or 0, reverse=True
     )
+    lines = []
     for key, e in rows:
         covered = len(current.intersection(e["ids"]))
         when = e.get("time")
@@ -42,7 +44,12 @@ def main(*, json: bool = False) -> None:
             if when
             else "?"
         )
-        print(
-            f"{key:<30} {len(e['patches'])} patches  "
-            f"covers {covered}/{len(current)} hunks  {stamp}"
+        lines.append(
+            (
+                key,
+                f"{len(e['patches'])} patches",
+                f"covers {covered}/{len(current)} hunks",
+                stamp,
+            )
         )
+    print(table(lines, align="<>>"))

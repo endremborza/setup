@@ -3,6 +3,7 @@
 import json
 
 from .._git import Repo
+from .._out import table
 from ..constants import DIENCEPHALON_ROOT
 from ._shared import LAZY_LOCK, nvim_version
 
@@ -16,11 +17,11 @@ def _changed_nvim_files(repo: Repo) -> list[str]:
 
 
 def _format_plugin_versions(lock: dict[str, dict], top_n: int = 20) -> str:
-    items = sorted(lock.items())[:top_n]
-    lines = [
-        f"  {name:<40} {info['commit'][:10]}  ({info.get('branch', '')})"
-        for name, info in items
+    rows = [
+        (name, info["commit"][:10], f"({info.get('branch', '')})")
+        for name, info in sorted(lock.items())[:top_n]
     ]
+    lines = [table(rows, indent=2, plain=True)]
     if len(lock) > top_n:
         lines.append(f"  ... and {len(lock) - top_n} more (see lazy-lock.json)")
     return "\n".join(lines)
