@@ -8,7 +8,7 @@ from ._config import GRANULARITIES, Config
 from ._hunks import Hunk
 from ._prompt import context_lines
 
-MAX_PROMPT_CHARS = 300000
+MAX_PROMPT_CHARS = 400000
 
 _TOOLS = ("Read", "Grep", "Glob")
 
