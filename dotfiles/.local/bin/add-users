@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# add-users KEYS_DIR [DATA_ROOT...] — a login per file in KEYS_DIR, named after
+# the file without .pub: a bash account, the file's public keys merged into its
+# authorized_keys, and an owned DATA_ROOT/<user> on each data disk. Every file
+# is checked before anything changes, and a re-run converges. Elevates via sudo.
+# Key files are written as their user, so a symlink in a home reaches nothing
+# that user could not already write.
+set -euo pipefail
+shopt -s nullglob
+
+usage() { echo "usage: add-users KEYS_DIR [DATA_ROOT...]" >&2; exit 2; }
+die() { echo "add-users: $*" >&2; exit 1; }
+
+[ $# -ge 1 ] || usage
+keys_dir=$1
+shift
+data_roots=("$@")
+[ -d "$keys_dir" ] || die "$keys_dir is not a directory"
+for root in "${data_roots[@]}"; do
+    [ -d "$root" ] || die "data root $root is not a directory"
+done
+[ "$EUID" -eq 0 ] || exec sudo -- "$0" "$keys_dir" "${data_roots[@]}"
+
+if [ -t 1 ]; then
+    bold=$'\e[1m' dim=$'\e[2m' green=$'\e[32m' yellow=$'\e[33m' reset=$'\e[0m'
+else
+    bold='' dim='' green='' yellow='' reset=''
+fi
+declare -A counts=([created]=0 [updated]=0 [unchanged]=0)
+
+key_lines() { grep -vE '^[[:space:]]*(#|$)' "$1" || true; }
+fingerprint() { local fp; fp=$(ssh-keygen -lf - <<<"$1" 2>/dev/null) && echo "${fp#* }"; }
+as_user() { local user=$1; shift; runuser -u "$user" -- "$@"; }
+
+# LABEL KIND STATUS DETAIL; KIND new|changed|same picks the colour, and the
+# first two mark the user being added (add_user's $state) as updated.
+row() {
+    local color
+    case $2 in
+        new) color=$green ;;
+        changed) color=$yellow ;;
+        same) color=$dim ;;
+    esac
+    [ "$2" = same ] || [ "$state" = created ] || state=updated
+    printf '  %-8s %s%-8s%s %s\n' "$1" "$color" "$3" "$reset" "$4"
+}
+
+check_file() {
+    local file=$1 user=$2 line found=0
+    [[ $user =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || die "$file: '$user' is not a valid user name"
+    while IFS= read -r line; do
+        fingerprint "$line" >/dev/null || die "$file: not a public key: ${line:0:50}"
+        found=1
+    done < <(key_lines "$file")
+    [ $found -eq 1 ] || die "$file: no keys"
+}
+
+add_user() {
+    local user=$1 file=$2 state=unchanged
+    printf '%s%s%s\n' "$bold" "$user" "$reset"
+
+    if id -u "$user" >/dev/null 2>&1; then
+        row account same exists "uid $(id -u "$user")"
+    else
+        useradd --create-home --shell /bin/bash --user-group "$user"
+        state=created
+        row account new created "uid $(id -u "$user")"
+    fi
+
+    local shell home owner
+    IFS=: read -r _ _ _ _ _ home shell < <(getent passwd "$user")
+    owner=$(id -u "$user"):$(id -g "$user")
+    if [ "$shell" = /bin/bash ]; then
+        row shell same ok /bin/bash
+    else
+        usermod --shell /bin/bash "$user"
+        row shell changed changed "$shell → /bin/bash"
+    fi
+
+    local ak=$home/.ssh/authorized_keys have line fp
+    as_user "$user" install -d -m 700 "$home/.ssh"
+    as_user "$user" touch "$ak"
+    as_user "$user" chmod 600 "$ak"
+    have=$(as_user "$user" ssh-keygen -lf "$ak" 2>/dev/null | awk '{print $2}' || true)
+    while IFS= read -r line; do
+        fp=$(fingerprint "$line")
+        if grep -qxF "${fp%% *}" <<<"$have"; then
+            row key same present "$fp"
+        else
+            [ -z "$(as_user "$user" tail -c1 "$ak")" ] || echo | as_user "$user" tee -a "$ak" >/dev/null
+            printf '%s\n' "$line" | as_user "$user" tee -a "$ak" >/dev/null
+            row key new added "$fp"
+        fi
+    done < <(key_lines "$file")
+
+    local root dir was
+    for root in "${data_roots[@]}"; do
+        dir=${root%/}/$user
+        if [ ! -e "$dir" ]; then
+            install -d -o "$user" -g "$(id -g "$user")" "$dir"
+            row data new created "$dir"
+        elif was=$(stat -c %u:%g "$dir") && [ "$was" != "$owner" ]; then
+            chown -h "$owner" "$dir"
+            row data changed chowned "$dir  $was → $user"
+        else
+            row data same ok "$dir"
+        fi
+    done
+
+    ((++counts[$state]))
+}
+
+users=() files=()
+for file in "$keys_dir"/*; do
+    [ -f "$file" ] || continue
+    user=$(basename "$file" .pub)
+    check_file "$file" "$user"
+    [[ " ${users[*]} " != *" $user "* ]] || die "$file: a second key file for $user"
+    users+=("$user") files+=("$file")
+done
+[ ${#users[@]} -gt 0 ] || die "no key files in $keys_dir"
+
+for i in "${!users[@]}"; do
+    add_user "${users[$i]}" "${files[$i]}"
+done
+echo
+printf '%s%d created%s, %s%d updated%s, %d unchanged\n' \
+    "$green" "${counts[created]}" "$reset" "$yellow" "${counts[updated]}" "$reset" "${counts[unchanged]}"
