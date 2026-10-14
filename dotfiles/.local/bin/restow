@@ -23,7 +23,8 @@ if [ -d "$HYPO_ROOT" ]; then
     fi
 fi
 
-if [ -d "$SHARE_DIR" ]; then
+# SHARE_DIR exists on every station (UV_TOOL_DIR lives in it); its .claude only where the share is synced.
+if [ -d "$SHARE_DIR/.claude" ]; then
     cd "$DIEN_ROOT/dotfiles"
     restow -t "$SHARE_DIR/.claude" .claude
 fi
