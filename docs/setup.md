@@ -17,7 +17,7 @@ A profile is an independent feature group. `base` is always implicit. Profiles c
 | `web` | caddy | web-serving machine | manual (fleet push) |
 | `docker` | docker | machine hosting fleet apps | manual (fleet update) |
 | `edge` | nftables-deny, unattended-upgrades | public-facing server | manual (live VPS) |
-| `media` | hwe-kernel, media-stack (mpv/cage/alsa/edid-decode), firefox-apt + autologin (shared); tty1 execs `tv-session` | media playback box | manual (bench) |
+| `media` | hwe-kernel, media-stack (mpv/cage/alsa/edid-decode), jellyfin-shim, firefox-ublock (policy force-installing uBlock Origin), steam, firefox-apt + autologin (shared); tty1 execs `tv-session` | media playback box | manual (bench) |
 
 ### Invocation
 
