@@ -69,7 +69,7 @@ Pinned tags live in `setup/versions.toml`. The toml is the source of truth — `
 
 ## Stow integration
 
-`dotfiles/.local/bin/restow` stows this repo's `dotfiles/` to `~` with `--no-folding` (`dotfiles/.claude/` separately, to `$SHARE_DIR/.claude`). A private companion (`hypothalamus`) stows alongside — GNU stow merges directories, so both contribute files to `~/.local/bin/` etc. as long as filenames don't collide.
+`dotfiles/.local/bin/restow` stows this repo's `dotfiles/` to `~` with `--no-folding` (`dotfiles/.claude/` separately, to `$SHARE_DIR/.claude` where that directory exists). A private companion (`hypothalamus`) stows alongside — GNU stow merges directories, so both contribute files to `~/.local/bin/` etc. as long as filenames don't collide.
 
 ## Three-layer env vars
 
