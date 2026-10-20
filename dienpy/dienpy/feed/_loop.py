@@ -1,7 +1,7 @@
 """The unattended loop: gate on usage, run one job, close the regroup cache, record, repeat.
 
-Two front doors share one job runner: `run` takes an explicit list of jobs for the
-current repo; `schedule` picks the best eligible prompt across repo queues each cycle.
+Two front doors share one job runner: `work` (and `run` around it) takes an explicit list
+of jobs for one repo; `schedule` picks the best eligible prompt across repo queues each cycle.
 One job at a time; a repo is locked (`.git/feed.lock`, flock) while its job runs. A job is
 a prompt file (a claude session with the unattended suffix, streamed to a log, resumed
 once after a usage limit) or a shell command (run as is, the chosen profile in
@@ -17,7 +17,7 @@ import shlex
 import subprocess
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -55,6 +55,7 @@ class Settings:
         False  # explicit mode: cycle the job list, `poll` seconds between cycles
     )
     once: bool = False  # scheduler: stop after one job
+    until: datetime.datetime | None = None  # explicit mode: start no job from then on
 
 
 @dataclass(frozen=True)
@@ -392,10 +393,23 @@ class _Lock:
         self.release()
 
 
-def run(
+def _await(job: Job, s: Settings, usage: UsageFn) -> tuple[str, list[Window]] | None:
+    """(profile, windows) once the job fits; None when `s.until` passes first."""
+    while s.until is None or _now() < s.until:
+        ws = _usage(usage, s.poll)
+        profile, why = _queue.headroom(job.profiles, job.need, ws, s.thresholds)
+        if profile:
+            return profile, ws
+        _say(f"{why}; next look in {s.poll // 60} min")
+        _sleep_until(s.until, s.poll)
+    return None
+
+
+def work(
     repo: RepoQueue, jobs: list[Job], s: Settings, usage: UsageFn = windows
-) -> None:
-    """Explicit queue on one repo, in order; `s.repeat` cycles it."""
+) -> Iterator[tuple[Job, Result]]:
+    """Explicit queue on one repo, in order, each finished job as it lands; `s.repeat`
+    cycles it, `s.until` stops it before the next start."""
     with _Lock(repo.root):
         cycle = 0
         while True:
@@ -404,21 +418,24 @@ def run(
                 _say(
                     f"job {i}/{len(jobs)}{f' (cycle {cycle})' if s.repeat else ''}: {job}"
                 )
-                while True:
-                    ws = _usage(usage, s.poll)
-                    profile, why = _queue.headroom(
-                        job.profiles, job.need, ws, s.thresholds
-                    )
-                    if profile:
-                        break
-                    _say(f"{why}; next look in {s.poll // 60} min")
-                    _sleep_until(None, s.poll)
-                run_job(repo, job, s, profile, usage, ws)
+                fit = _await(job, s, usage)
+                if fit is None:
+                    _say(f"past {_local(s.until)}; {job.name} and the rest stay unrun")
+                    return
+                profile, ws = fit
+                yield job, run_job(repo, job, s, profile, usage, ws)
             if not s.repeat:
                 break
             _say(f"cycle {cycle} done; next in {s.poll // 60} min")
             time.sleep(s.poll)
         _say(f"queue done: {len(jobs)} job(s); logs in {s.log_base / repo.name}")
+
+
+def run(
+    repo: RepoQueue, jobs: list[Job], s: Settings, usage: UsageFn = windows
+) -> None:
+    for _ in work(repo, jobs, s, usage):
+        pass
 
 
 @dataclass(frozen=True)

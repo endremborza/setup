@@ -8,7 +8,7 @@ from dienpy.ai import _profiles
 from dienpy.claude import _gate
 from dienpy.claude.usage import Window
 from dienpy.feed import Job, RepoQueue, Settings, run_jobs
-from dienpy.feed._loop import _cost, _Lock, choose
+from dienpy.feed._loop import _cost, _Lock, choose, work
 from dienpy.feed._queue import Candidate, Meta
 from test_ai_launch import fake_claude
 
@@ -34,6 +34,19 @@ def test_cmd_job_gets_profile_env_and_row(tmp_path: Path) -> None:
     rows = (tmp_path / "log" / tmp_path.name / "runs.md").read_text().splitlines()
     assert "| echo-FEED" in rows[-1] and "| opux | ok | hunks skipped" in rows[-1]
     assert _Lock(tmp_path).held() is False
+
+
+def test_work_starts_no_job_past_until(tmp_path: Path) -> None:
+    (tmp_path / ".git").mkdir()
+    marker = tmp_path / "seen"
+    repo = RepoQueue(root=tmp_path, hunks=())
+    jobs = [Job(cmd=f"echo {n} >> {marker}", profiles=("opux",)) for n in (1, 2)]
+    now = datetime.datetime.now(UTC)
+    s = Settings(log_base=tmp_path / "log", until=now + datetime.timedelta(hours=1))
+    assert [j for j, _ in work(repo, jobs, s, usage=lambda: WS)] == jobs
+    past = Settings(log_base=tmp_path / "log", until=now)
+    assert list(work(repo, jobs, past, usage=lambda: WS)) == []
+    assert marker.read_text().split() == ["1", "2"]
 
 
 def test_cmd_job_times_out_and_takes_its_children_along(tmp_path: Path) -> None:
