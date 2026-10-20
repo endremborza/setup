@@ -74,4 +74,4 @@ The seam has two rules the engine and the plugin both keep: a `--json` payload o
 
 ## Integrations
 
-`cril housekeeping --hunks` shells out to `dienpy hunks run --path` to pre-partition one subtree inside a larger diff. `dienpy feed run` closes every unattended session with `run --extend` on the dims it was given (a full run when nothing is cached).
+`cril housekeeping --hunks` shells out to `dienpy hunks run --path` to pre-partition one subtree inside a larger diff. `dienpy feed` (`run` and `playbook`) closes every unattended session with `run --extend` on the dims it was given (a full run when nothing is cached).

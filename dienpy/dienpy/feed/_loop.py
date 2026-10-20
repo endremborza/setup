@@ -281,6 +281,10 @@ def _wrapped_prompt(job: Job, profile: str, wrap: str, timeout: int) -> str:
 _WRAP_GRACE = 300
 
 
+def label(outcome: ai.Outcome) -> str:
+    return "ok" if outcome.ok else f"failed ({outcome.subtype or outcome.returncode})"
+
+
 def _cost(before: Window | None, after: Window | None) -> float | None:
     """Session-% between two readings of one window; None once the window reset in between.
     An idle window before the run (no reset stamp yet) is the same window at 0."""
@@ -323,7 +327,7 @@ def run_job(
     minutes = (time.monotonic() - started) / 60
     drift = _close(repo.root, repo.hunks)
     after = _peek(usage)
-    state = "ok" if outcome.ok else f"failed ({outcome.subtype or outcome.returncode})"
+    state = label(outcome)
     report = (
         log.report(outcome, f"{job.name} — {profile} — {state}")
         if outcome.result.strip()
