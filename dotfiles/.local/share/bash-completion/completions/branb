@@ -1,0 +1,2 @@
+source "${BASH_SOURCE%/*}/_proto_complete"
+complete -F _proto_complete branb
