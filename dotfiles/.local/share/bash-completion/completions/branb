@@ -1,2 +1,1 @@
-source "${BASH_SOURCE%/*}/_proto_complete"
-complete -F _proto_complete branb
+eval "$("${BASH_SOURCE##*/}" --bash-completion 2>/dev/null)"
