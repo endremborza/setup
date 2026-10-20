@@ -11,7 +11,7 @@ from .._out import table
 from ..claude import _gate
 from ..constants import LOGS_DIR
 from . import _queue
-from ._loop import Job, Settings, run, schedule
+from ._loop import Job, Settings, prompt_job, run, schedule
 from .list import show
 
 _T = _gate.Thresholds()
@@ -67,20 +67,10 @@ def main(
     repo = _queue.load_repo(Path(find_root()))
     if hunks is not None:
         repo = dataclasses.replace(repo, hunks=tuple(hunks))
-    jobs = []
-    for p in prompts:
-        path = Path(p).resolve()
-        if not path.is_file():
-            raise SystemExit(f"prompt file not found: {p}")
-        meta = _queue.meta_of(path)
-        jobs.append(
-            Job(
-                prompt=path,
-                profiles=tuple(profiles) or meta.profiles or repo.profiles,
-                need=meta.need if need is None else need,
-                commit=commit or meta.commit,
-            )
-        )
+    jobs = [
+        prompt_job(repo, Path(p).resolve(), tuple(profiles), need, commit)
+        for p in prompts
+    ]
     if cmd:
         jobs.append(
             Job(

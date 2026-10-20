@@ -75,6 +75,25 @@ class Job:
         return str(self.prompt) if self.prompt is not None else self.cmd
 
 
+def prompt_job(
+    repo: RepoQueue,
+    path: Path,
+    profiles: tuple[str, ...] = (),
+    need: float | None = None,
+    commit: bool = False,
+) -> Job:
+    """A prompt file as a job: the overrides, else its frontmatter, else the repo's profiles."""
+    if not path.is_file():
+        raise SystemExit(f"prompt file not found: {path}")
+    meta = _queue.meta_of(path)
+    return Job(
+        prompt=path,
+        profiles=profiles or meta.profiles or repo.profiles,
+        need=meta.need if need is None else need,
+        commit=commit or meta.commit,
+    )
+
+
 @dataclass(frozen=True)
 class Result:
     outcome: ai.Outcome
