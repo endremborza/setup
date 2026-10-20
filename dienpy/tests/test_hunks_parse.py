@@ -1,6 +1,7 @@
 """parse: kinds, duplicate-hunk ids, index and worktree views agree on content, range diffs, odd paths and bytes."""
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -22,6 +23,19 @@ def test_kinds_and_positions(tmp_path: Path) -> None:
         by_path["new_bin"].kind == "untracked" and "Binary" in by_path["new_bin"].text
     )
     assert all(len(h.id) == 12 for h in hunks)
+
+
+def test_same_size_edit_in_the_index_second(tmp_path: Path) -> None:
+    repo = make(tmp_path)  # untracked files route parse through the scratch index
+    then = int(os.stat(repo / "a.txt").st_mtime) - 5
+    write(repo, "c.txt", ["one"])
+    os.utime(repo / "c.txt", (then, then))
+    git(repo, "add", "c.txt")
+    git(repo, "commit", "-qm", "c")
+    os.utime(repo / ".git" / "index", (then, then))
+    write(repo, "c.txt", ["two"])
+    os.utime(repo / "c.txt", (then, then))
+    assert len(ids(_hunks.parse(str(repo)), "c.txt")) == 1
 
 
 def test_duplicate_hunks_get_suffix(tmp_path: Path) -> None:

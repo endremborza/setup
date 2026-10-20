@@ -225,7 +225,9 @@ def _worktree_diff(r: Repo) -> tuple[str, set[str]]:
     os.close(fd)
     try:
         if index.exists():
-            shutil.copyfile(index, tmp)
+            # git rechecks the content of entries no older than the index file; copy2
+            # keeps the index's mtime, so a same-size edit in that second still shows
+            shutil.copy2(index, tmp)
         else:
             os.unlink(
                 tmp
