@@ -90,7 +90,8 @@ A script that is not part of a product has one home, set by how long it is neede
   - Unless specific performance requirements are noted
 - Type hints required, pyright works on my nvim setup
 - Tools: ruff does my formatting on my nvim, uv manages environments in .venv
-  - never use pip, always use uv, for scripts try uv run by default (if .venv available, which will almost always be true in projects using python) us uv run for python scripts. otherwise /mnt/data/pytools is a globally used environment that can be used with some commonly used packages installed
+  - never use pip or a bare python/python3; every Python call goes through uv: `uv run python -c '...'`, `uv run python script.py` (the project's .venv when there is one), `uv run --with <pkg> python ...` for packages the environment lacks (they come from the uv cache)
+  - a standalone script kept in a repo declares its dependencies in a PEP 723 header and runs as `uv run script.py`
 - Prefer dataclasses for structured data
 - Prefer functional design with minimal mutations for data heavy workloads
 
