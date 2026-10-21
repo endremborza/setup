@@ -33,6 +33,9 @@ A script that is not part of a product has one home, set by how long it is neede
 - **Re-runnable by design** (repeats after later changes or incidents): promote it into the owning package as a command or a flag on one; a repo without a CLI keeps it in its own committed `scripts/`.
 - `docs/` never names a oneshot: what a doc points at is a command or a `scripts/` file.
 
+## Data Stores
+A directory of data outside a repo (a dataset, a bench corpus, a game library, a spool, a cache) goes where hypothalamus `docs/synced-layout.md` *Where a store goes* puts it, by whether it can be rebuilt and how fast it is read. Never a new top-level directory under `/mnt/data` or a NAS share; the env var that points a tool at its store goes in the host's `.local-vars`.
+
 ## Writing md
 - One line per paragraph. Never hard-wrap prose at a column -- wrapping is the editor's job, and hard wraps make a one-word edit reflow the whole block in the diff.
 - Same for list items and table rows: one line each, however long.
