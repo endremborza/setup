@@ -15,7 +15,6 @@ DATA_DIR = env_path("DATA_DIR", str(SYNC_ROOT / "data"))
 ASSETS_DIR = env_path("ASSETS_DIR", str(SYNC_ROOT / "assets"))
 MEDIA_DIR = env_path("MEDIA_DIR", str(SYNC_ROOT / "media"))
 SHARE_DIR = env_path("SHARE_DIR", str(SYNC_ROOT / "share"))
-ARCHIVE_DIR = env_path("ARCHIVE_DIR", str(SYNC_ROOT / "archive"))
 
 # The three PKM centers. Names and env keys match .vars, which exports the same
 # three so a shell override reaches Python. PKM_REL is the layout under SYNC_ROOT,
