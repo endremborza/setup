@@ -7,18 +7,10 @@ from pathlib import Path
 
 from setup.runner import brick
 from setup.util import (
-    ONSET_PATH,
     apt_install,
-    fetch,
-    link_bin,
-    pinned_check,
     run_cmd,
     write_system_file,
 )
-from setup.versions import get as _v
-
-_LOGSEQ_VERSION = _v("logseq")
-_LOGSEQ_LINK = Path.home() / ".local/bin/Logseq"
 
 _RFKILL_SERVICE = """\
 [Unit]
@@ -87,21 +79,6 @@ def setup_firefox_apt() -> None:
         subprocess.run(["sudo", "apt-get", "purge", "-y", "firefox"], check=True)
     run_cmd("sudo apt-get update")
     apt_install(["firefox"])
-
-
-# the versioned unpack dir is the link target, so `readlink` names the installed version
-@brick(
-    profile="screen-apps",
-    name="logseq",
-    check=pinned_check(f"readlink {_LOGSEQ_LINK}", _LOGSEQ_VERSION),
-)
-def install_logseq() -> None:
-    name = f"Logseq-linux-x64-{_LOGSEQ_VERSION}"
-    fetch(
-        f"https://github.com/logseq/logseq/releases/download/{_LOGSEQ_VERSION}/{name}.zip",
-        ONSET_PATH / name,
-    )
-    link_bin(ONSET_PATH / name / "Logseq-linux-x64" / "Logseq", _LOGSEQ_LINK.name)
 
 
 _BT_CONF = Path("/etc/bluetooth/main.conf")

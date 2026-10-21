@@ -39,7 +39,7 @@ A profile is an independent feature group. `base` is always implicit; layer othe
 | `shell` | cargo-tools, lua, luarocks, jq, sc-im, neovim, fzf, tmux, tpm |
 | `dev` | tectonic, node, bun |
 | `screen` | xorg, leftwm, alacritty, nerd-fonts, X11 config |
-| `screen-apps` | firefox-apt, logseq, bluetooth, autologin, network-nm |
+| `screen-apps` | firefox-apt, bluetooth, autologin, network-nm |
 | `wg` | wireguard (interface config is the enroller's job) |
 | `web` | caddy (Caddyfile + service state are the fleet controller's job) |
 | `edge` | nftables default-deny input, unattended-upgrades |

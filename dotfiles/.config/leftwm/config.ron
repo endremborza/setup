@@ -41,7 +41,6 @@
     ],
     window_rules: [
         ( window_class: "Navigator", spawn_on_tag: 1 ),
-        ( window_class: "logseq", spawn_on_tag: 4 ),
         
     ],
     disable_current_tag_swap: false,
