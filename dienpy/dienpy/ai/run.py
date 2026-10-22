@@ -18,7 +18,7 @@ _UNATTENDED_RULES = (
     "You are running unattended inside an automated queue: no human is present, and nothing you print is read until later.",
     "- There is no one to ask and AskUserQuestion is unavailable. For every decision take the option you would have recommended, and record the choice where the task says decisions go (the plan section, or your final report).",
     "- Never stop early to wait for input. If you are truly blocked, write what blocked you and what you tried into your final report, then stop.",
-    "- End with a final report: what landed, what was measured, what remains and why.",
+    "- End with a final report of what the diff cannot show, one line each: what was measured, decisions you took that the owner may reverse, what you could not verify, what remains and why. Never recount the changes themselves.",
 )
 _NO_COMMIT = "- Never commit, push or amend: the human reviews and commits from the patches you leave behind."
 
