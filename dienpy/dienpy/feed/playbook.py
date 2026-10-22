@@ -22,12 +22,13 @@ from ._loop import Job, Result, Settings, _peek, label, prompt_job, strict, work
 # an `until` value -> the usage window whose reset ends the run
 UNTIL = {"weekly-reset": "weekly_all"}
 _GUIDE_NEED = 10.0
-_GUIDE_SYSTEM = """A playbook run has just ended: it finished, hit its deadline, or its owner stopped it. Write the guide the owner reads first: what the run produced and how to go through it.
-- Read the playbook for intent, then the job reports and the files the run touched. Open what you need; edit nothing.
-- Lead with reading order: the one file to open first and why, then the rest, each with its path and one line on what it holds.
-- Flag what needs the owner: claims a job marked unverified, decisions a job took on its own, anything that looks wrong or thin.
-- Close with what did not happen (failed, interrupted, unrun jobs) and why, when the reports say.
-- Terse markdown read raw in nvim: short bullets, compact unpadded tables, no preamble. Your final message is the guide itself."""
+_GUIDE_DECISIONS = 8
+_GUIDE_SYSTEM = f"""A playbook run has just ended: it finished, hit its deadline, or its owner stopped it. The owner reviews its changes as patches; the guide lists only what they must decide, so the review starts from a few answers instead of a read.
+- Read the playbook for intent, then the job reports and the diff. Open what you need; edit nothing.
+- At most {_GUIDE_DECISIONS} decisions, most consequential first: a change a job made on a judgment the owner may reverse, a claim no job verified, an action proposed outside the run's reach, a question a job could not settle. Leave out what the diff shows plainly and anything the owner cannot act on.
+- Each decision is one numbered line: the question, its options as a), b), ... with the recommended one first, and the file:line it concerns.
+- Then one line per job that failed, was interrupted or did not run, with why.
+- No reading order, no summary of the changes, no run facts (they are appended below the guide). Markdown read raw in nvim; your final message is the guide itself."""
 
 
 @dataclass(frozen=True)
