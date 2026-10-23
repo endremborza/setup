@@ -146,4 +146,6 @@ A directory of data outside a repo (a dataset, a bench corpus, a game library, a
 - Test behavior, not implementation details.
 - Avoid redundant tests.
 - Prefer simple unit tests over heavy integration scaffolding unless instructed.
-  
+
+# Private tools
+@~/synced/composites/pkm/hypothalamus/AGENTS.global.md
