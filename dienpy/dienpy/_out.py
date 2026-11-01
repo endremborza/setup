@@ -1,4 +1,4 @@
-"""Tables and section headers for every CLI in the ecosystem.
+"""Tables, section headers and the y/N prompt for every CLI in the ecosystem.
 
 On a terminal a table goes through rich: aligned, styled, cells as plain
 text (a release name's `[PublicHD]` is not markup). Piped, it is
@@ -113,6 +113,14 @@ def section(title: str, note: str = "") -> str:
     return _render(
         Text.assemble("── ", (title, "bold"), (f"  {note}" if note else "", "dim"))
     )
+
+
+def confirm(question: str) -> bool:
+    """`question [y/N]`: anything but y is no, end of input included."""
+    try:
+        return input(f"{question} [y/N] ").strip().lower() == "y"
+    except EOFError:
+        return False
 
 
 def md_row(cells: Iterable[object]) -> str:
