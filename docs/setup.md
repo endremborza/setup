@@ -15,6 +15,7 @@ A profile is an independent feature group. `base` is always implicit. Profiles c
 | `screen-apps` | firefox-apt, bluetooth-autoenable, autologin, network-nm | full workstation | (QEMU — not implemented) |
 | `wg` | wireguard | every fleet machine | Docker (dry) |
 | `web` | caddy | web-serving machine | manual (fleet push) |
+| `web-dns` | caddy-desec | web server proving certificates by DNS challenge (with `web` + `docker`) | manual (fleet update) |
 | `docker` | docker | machine hosting fleet apps | manual (fleet update) |
 | `edge` | nftables-deny, unattended-upgrades | public-facing server | manual (live VPS) |
 | `media` | hwe-kernel, media-stack (mpv/cage/alsa/edid-decode), jellyfin-shim, firefox-ublock (policy force-installing uBlock Origin), steam, firefox-apt + autologin (shared); tty1 execs `tv-session` | media playback box | manual (bench) |
@@ -43,7 +44,8 @@ SETUP_PROFILES="shell dev" setup run     # env-driven
 - **screen** — `startx` launches leftwm; alacritty opens; nerd fonts listed by `fc-list`.
 - **screen-apps** — Firefox installed from Mozilla APT (not snap); Bluetooth auto-enables on boot.
 - **wg** — `wg` responds; interface config/keys are the fleet controller's job (`/etc/wireguard` stays empty until enrollment).
-- **web** — `caddy` responds; `/etc/caddy/Caddyfile` and service state are the fleet controller's job (rendered from its inventory, deployed on update).
+- **web** — the caddy package is at its pinned version; `/etc/caddy/Caddyfile` and service state are the fleet controller's job (rendered from its inventory, deployed on update).
+- **web-dns** — `caddy` is the pinned version built by upstream's builder image with the pinned `dns.providers.desec` module; the package's own binary is diverted to `/usr/bin/caddy.default`, so a package upgrade never replaces the build.
 - **edge** — nftables active with a default-deny input policy (lo, established, icmp, 22/80/443, 51820/udp excepted); unattended-upgrades enabled. The forward chain is deliberately left to `/etc/nftables.d/*.conf` includes, pushed by the fleet controller on wg-hub machines.
 
 ## Bootstrap

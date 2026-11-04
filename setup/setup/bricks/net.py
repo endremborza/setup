@@ -1,8 +1,16 @@
 import getpass
+import os
 from pathlib import Path
 
 from setup.runner import brick
-from setup.util import apt_install, download, pinned_check, run_cmd, write_system_file
+from setup.util import (
+    ONSET_PATH,
+    apt_install,
+    download,
+    pinned_check,
+    run_cmd,
+    write_system_file,
+)
 from setup.versions import get as _v
 from setup.versions import number
 
@@ -51,9 +59,15 @@ def install_wireguard() -> None:
 # update anyway); the prompt it suppresses would otherwise hang the run.
 _CADDY_TAG = _v("caddy")
 _CADDY_VERSION = number(_CADDY_TAG)
+_CADDY_BIN = "/usr/bin/caddy"
 
 
-@brick(profile="web", name="caddy", check=pinned_check("caddy version", _CADDY_TAG))
+# The check reads the package: on a web-dns box `caddy` is the custom build.
+@brick(
+    profile="web",
+    name="caddy",
+    check=pinned_check("dpkg-query -W -f='${Version}' caddy", _CADDY_TAG),
+)
 def install_caddy() -> None:
     deb = download(
         "https://github.com/caddyserver/caddy/releases/download/"
@@ -103,3 +117,42 @@ def install_unattended_upgrades() -> None:
 def install_docker() -> None:
     apt_install(["docker.io", "docker-compose-v2", "docker-buildx"])
     run_cmd(f"sudo usermod -aG docker {getpass.getuser()}")
+
+
+# Caddy with the deSEC DNS provider, for certificates the ACME DNS challenge
+# obtains (a wildcard for vhosts no public resolver points at). The vendor
+# binary carries no DNS providers, so upstream's builder image compiles the
+# pinned caddy with the pinned module, which needs docker. A dpkg diversion
+# moves the package's binary to caddy.default: a .deb upgrade lands there and
+# never overwrites the build, and the vendor unit runs the build unchanged.
+_CADDY_DESEC_TAG = _v("caddy-desec")
+_DESEC_MODULE = "dns.providers.desec"
+
+
+@brick(
+    profile="web-dns",
+    name="caddy-desec",
+    check=pinned_check("caddy version", _CADDY_TAG)
+    + " && "
+    + pinned_check(
+        f"caddy list-modules --versions | grep {_DESEC_MODULE}", _CADDY_DESEC_TAG
+    ),
+)
+def install_caddy_desec() -> None:
+    out = ONSET_PATH / "caddy-desec"
+    out.mkdir(parents=True, exist_ok=True)
+    build = (
+        f"xcaddy build {_CADDY_TAG}"
+        f" --with github.com/caddy-dns/desec@{_CADDY_DESEC_TAG} --output /out/caddy"
+        f" && chown {os.getuid()}:{os.getgid()} /out/caddy"
+    )
+    run_cmd(
+        f"docker run --rm -e XCADDY_SETCAP=0 -v {out}:/out"
+        f' caddy:{_CADDY_VERSION}-builder sh -c "{build}"'
+    )
+    run_cmd(
+        f"sudo dpkg-divert --local --rename --divert {_CADDY_BIN}.default"
+        f" --add {_CADDY_BIN}"
+    )
+    run_cmd(f"sudo install -m 755 {out / 'caddy'} {_CADDY_BIN}")
+    run_cmd("sudo systemctl try-restart caddy")

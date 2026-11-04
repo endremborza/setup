@@ -67,3 +67,8 @@ checked = "2026-04-19"
 tag = "v2.11.4"
 source = "github:caddyserver/caddy"
 checked = "2026-09-08"
+
+[caddy-desec]
+tag = "v1.1.0"
+source = "github:caddy-dns/desec"
+checked = "2026-11-03"

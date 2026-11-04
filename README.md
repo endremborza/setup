@@ -42,6 +42,7 @@ A profile is an independent feature group. `base` is always implicit; layer othe
 | `screen-apps` | firefox-apt, bluetooth, autologin, network-nm |
 | `wg` | wireguard (interface config is the enroller's job) |
 | `web` | caddy (Caddyfile + service state are the fleet controller's job) |
+| `web-dns` | caddy rebuilt with the deSEC DNS module, for DNS-challenge certificates (needs `docker`) |
 | `edge` | nftables default-deny input, unattended-upgrades |
 | `media` | HWE kernel, cage, mpv, firefox, tty1 autologin — TV kiosk box |
 
