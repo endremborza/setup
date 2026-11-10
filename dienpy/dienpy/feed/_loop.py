@@ -21,14 +21,14 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from .. import ai
-from ..ai import _prompt_file, models
-from ..ai import run as _airun
-from ..claude import _gate
-from ..claude.usage import Window, windows
+import moac
+from moac import _prompt_file, models
+from moac import run as _airun
+from moac.usage import Window, windows
+
 from ..hunks import _cache as _regroup
 from ..hunks import _config as _regroup_config
-from . import _log, _queue
+from . import _gate, _log, _queue
 from ._queue import Candidate, RepoQueue, UsageFn
 
 _RESUME_PROMPT = (
@@ -49,7 +49,7 @@ class Settings:
     log_base: Path = Path(".")  # per-repo subdirectory underneath
     poll: int = 600
     timeout: int | None = (
-        None  # explicit; None = the profile's, else `ai run`'s unattended default
+        None  # explicit; None = the profile's, else `moac run`'s unattended default
     )
     repeat: bool = (
         False  # explicit mode: cycle the job list, `poll` seconds between cycles
@@ -97,7 +97,7 @@ def prompt_job(
 
 @dataclass(frozen=True)
 class Result:
-    outcome: ai.Outcome
+    outcome: moac.Outcome
     cost: (
         float | None
     )  # session-% the run consumed; None when the window reset in between
@@ -180,7 +180,7 @@ def _close(root: Path, dims: tuple[str, ...]) -> str:
     return "ok" if _hunks(root, "run", *dims) == 0 else "error"
 
 
-def _limited(outcome: ai.Outcome, ws: list[Window], model: str) -> Window | None:
+def _limited(outcome: moac.Outcome, ws: list[Window], model: str) -> Window | None:
     """The window behind a failed run when it was a usage limit: one that is full for the
     model, or the session window when the cli said so."""
     if outcome.ok:
@@ -193,7 +193,7 @@ def _limited(outcome: ai.Outcome, ws: list[Window], model: str) -> Window | None
     return None
 
 
-def _judge(outcome: ai.Outcome, usage: UsageFn, model: str) -> Window | None:
+def _judge(outcome: moac.Outcome, usage: UsageFn, model: str) -> Window | None:
     return None if outcome.ok else _limited(outcome, _peek(usage), model)
 
 
@@ -201,15 +201,15 @@ def _run_prompt(
     root: Path,
     job: Job,
     s: Settings,
-    backend: ai.Cli,
+    backend: moac.Cli,
     usage: UsageFn,
     log: _log.RunLog,
-) -> ai.Outcome:
+) -> moac.Outcome:
     assert job.prompt is not None
     system = _airun.unattended_suffix(commit=job.commit)
     body = _prompt_file.split(job.prompt.read_text(errors="replace"))[1]
     with log.stream() as stream:
-        outcome = ai.launch(backend, body, system=system, log=stream, cwd=str(root))
+        outcome = moac.launch(backend, body, system=system, log=stream, cwd=str(root))
     hit = _judge(outcome, usage, backend.model)
     if hit and outcome.session_id:
         _say(
@@ -219,7 +219,7 @@ def _run_prompt(
         while _gate.blockers(_usage(usage, s.poll), backend.model, s.thresholds):
             _sleep_until(None, s.poll)
         with log.stream("-resumed") as stream:
-            outcome = ai.launch(
+            outcome = moac.launch(
                 backend,
                 _RESUME_PROMPT,
                 system=system,
@@ -234,25 +234,25 @@ def _run_cmd(
     root: Path,
     cmd: str,
     profile: str,
-    backend: ai.Cli,
+    backend: moac.Cli,
     log: _log.RunLog,
     timeout: int,
     capture: bool,
-) -> ai.Outcome:
+) -> moac.Outcome:
     """A shell command as a job; `capture` makes its console output the outcome's result."""
     env = {**os.environ, "FEED_PROFILE": profile, "FEED_MODEL": backend.model}
     lines: list[str] = []
     with log.console() as out:
 
-        def tee(proc: subprocess.Popen) -> ai.Outcome:
+        def tee(proc: subprocess.Popen) -> moac.Outcome:
             for line in proc.stdout:
                 sys.stdout.write(line)
                 out.write(line)
                 if capture:
                     lines.append(line)
-            return ai.Outcome(result="".join(lines))
+            return moac.Outcome(result="".join(lines))
 
-        outcome = ai.supervise(
+        outcome = moac.supervise(
             cmd,
             timeout,
             tee,
@@ -270,7 +270,7 @@ def _run_cmd(
 def _wrapped_prompt(job: Job, profile: str, wrap: str, timeout: int) -> str:
     assert job.prompt is not None
     inner = (
-        f"dienpy ai run --unattended{' --commit' if job.commit else ''} --timeout {timeout} "
+        f"moac run --unattended{' --commit' if job.commit else ''} --timeout {timeout} "
         f"{shlex.quote(profile)} {shlex.quote(str(job.prompt))}"
     )
     return wrap.format(cmd=shlex.quote(inner))
@@ -281,7 +281,7 @@ def _wrapped_prompt(job: Job, profile: str, wrap: str, timeout: int) -> str:
 _WRAP_GRACE = 300
 
 
-def label(outcome: ai.Outcome) -> str:
+def label(outcome: moac.Outcome) -> str:
     return "ok" if outcome.ok else f"failed ({outcome.subtype or outcome.returncode})"
 
 

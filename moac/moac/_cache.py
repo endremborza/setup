@@ -1,10 +1,10 @@
-"""Disk-cached model ids per API provider: the completion source, refreshed at most daily."""
+"""Disk-cached model ids per API provider: the completion source, refreshed at most once per TTL."""
 
 import json
 import time
 from pathlib import Path
 
-PATH = Path.home() / ".config" / "dienpy" / "ai-models.json"
+PATH = Path.home() / ".config" / "moac" / "models.json"
 TTL = 86400
 
 
@@ -34,5 +34,5 @@ def load() -> dict[str, list[str]]:
 
 
 def ids(provider: str) -> list[str]:
-    """One provider's cached ids; [] until `ai models` has fetched them. No network."""
+    """One provider's cached ids; [] until `moac models` has fetched them. No network."""
     return load().get(provider, [])

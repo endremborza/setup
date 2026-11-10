@@ -8,14 +8,17 @@ judged against what the job will consume (`need`), the weekly ones against a cei
 import datetime
 from dataclasses import dataclass
 
-from .usage import Window
+from moac.usage import Window
+
+
+_CEILING = 97.0
 
 
 @dataclass(frozen=True)
 class Thresholds:
-    session: float = 97.0  # ceiling for session.percent + need
-    weekly: float = 97.0
-    scoped: float = 97.0
+    session: float = _CEILING  # ceiling for session.percent + need
+    weekly: float = _CEILING
+    scoped: float = _CEILING
 
     def limit(self, w: Window) -> float:
         if w.kind == "session":

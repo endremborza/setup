@@ -8,6 +8,7 @@ from typing import Annotated
 from protocli import FILES
 
 from . import _profiles, _prompt_file
+from ._account import AccountName
 from ._backend import Cli, Need, resolve
 from ._transport import launch
 from .models import Target
@@ -50,10 +51,13 @@ def backend(
     tool: str = "run",
     timeout: int | None = None,
     auto: bool = False,
+    account: str = "",
 ) -> Cli:
     """The cli backend for `profile` (empty: the tool's binding, then the default);
     an explicit `timeout` overrides the profile's, which overrides the unattended default."""
-    resolved = resolve(tool, Need(timeout=_UNATTENDED_TIMEOUT), profile=profile)
+    resolved = resolve(
+        tool, Need(timeout=_UNATTENDED_TIMEOUT, account=account), profile=profile
+    )
     if not isinstance(resolved, Cli):
         name = profile or _profiles.for_tool(tool)
         raise SystemExit(f"profile '{name}' is not a claude cli profile")
@@ -75,21 +79,23 @@ def main(
     unattended: bool = False,
     commit: bool = False,
     timeout: int | None = None,
+    account: AccountName = "",
 ) -> None:
     """Run a prompt through claude non-interactively (default) or open a session.
 
     The profile defaults to the `[tool] run` binding, then `default`; a name that is no
     profile is passed to claude as its model. Non-interactive runs force
     --permission-mode auto and time out after --timeout seconds (default: the profile's,
-    else 3 h); --auto opts an interactive session into auto mode too. --safe starts
-    claude with every customization (CLAUDE.md, skills) off. --unattended appends the
+    else the unattended default); --auto opts an interactive session into auto mode too.
+    --safe starts claude with every customization (CLAUDE.md, skills) off. --unattended appends the
     queue rules (no questions, take the recommended default, never commit, final
-    report); --commit lifts the never-commit rule from them.
+    report); --commit lifts the never-commit rule from them. --account picks the login
+    (default: MOAC_ACCOUNT, then the configured default).
     """
     if commit and not unattended:
         raise SystemExit("--commit adjusts the --unattended rules; pass both")
     outcome = launch(
-        backend(profile or "", timeout=timeout, auto=auto),
+        backend(profile or "", timeout=timeout, auto=auto, account=account),
         read_prompt(file, raw),
         interactive=interactive,
         safe=safe,

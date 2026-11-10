@@ -4,7 +4,7 @@ import datetime
 from pathlib import Path
 from typing import IO
 
-from ..ai import Outcome
+from moac import Outcome
 
 _HEADER = (
     "| when | prompt | profile | outcome | hunks | turns | minutes | cost | usage after | report |\n"

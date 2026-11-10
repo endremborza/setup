@@ -281,8 +281,8 @@ wheels = [
 name = "dienpy"
 source = { editable = "." }
 dependencies = [
-    { name = "anthropic" },
-    { name = "google-genai" },
+    { name = "dienraw" },
+    { name = "moac", extra = ["api"] },
     { name = "protocli" },
     { name = "requests" },
     { name = "rich" },
@@ -302,9 +302,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", specifier = ">=0.86.0" },
-    { name = "google-genai", specifier = ">=1.68.0" },
+    { name = "dienraw", editable = "../dienraw" },
     { name = "kokoro-onnx", marker = "extra == 'tts'", specifier = ">=0.5.0" },
+    { name = "moac", extras = ["api"], editable = "../moac" },
     { name = "protocli", specifier = ">=0.2.0" },
     { name = "requests" },
     { name = "rich" },
@@ -315,6 +315,16 @@ provides-extras = ["tts"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest" }]
+
+[[package]]
+name = "dienraw"
+source = { editable = "../dienraw" }
+dependencies = [
+    { name = "rich" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "rich" }]
 
 [[package]]
 name = "distro"
@@ -615,6 +625,36 @@ sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec9
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
 ]
+
+[[package]]
+name = "moac"
+source = { editable = "../moac" }
+dependencies = [
+    { name = "dienraw" },
+    { name = "protocli" },
+    { name = "requests" },
+    { name = "rich" },
+]
+
+[package.optional-dependencies]
+api = [
+    { name = "anthropic" },
+    { name = "google-genai" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "anthropic", marker = "extra == 'api'", specifier = ">=0.86.0" },
+    { name = "dienraw", editable = "../dienraw" },
+    { name = "google-genai", marker = "extra == 'api'", specifier = ">=1.68.0" },
+    { name = "protocli", specifier = ">=0.2.0" },
+    { name = "requests" },
+    { name = "rich" },
+]
+provides-extras = ["api"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest" }]
 
 [[package]]
 name = "numpy"

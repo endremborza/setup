@@ -1,0 +1,26 @@
+[project]
+name = "moac"
+dynamic = ["version", "description"]
+requires-python = ">=3.12"
+dependencies = [
+    "dienraw",
+    "protocli>=0.2.0",
+    "requests",
+    "rich",
+]
+
+[project.optional-dependencies]
+api = ["anthropic>=0.86.0", "google-genai>=1.68.0"]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[project.scripts]
+moac = "moac.__main__:main"
+
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.uv.sources]
+dienraw = { path = "../dienraw", editable = true }

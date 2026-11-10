@@ -24,8 +24,8 @@ import threading
 from collections.abc import Callable, Iterator
 from typing import IO, Any
 
-from . import _stream
-from ._backend import GEMINI_BUDGETS, Api, Backend, Cli, Openai
+from . import _account, _stream
+from ._backend import GEMINI_BUDGETS, LOGIN, Api, Backend, Cli, Openai
 
 # the outcome subtype of a run `supervise` had to kill
 TIMEOUT = "timeout"
@@ -217,12 +217,16 @@ def cli_argv(backend: Cli) -> list[str]:
     return cmd
 
 
-def cli_env(backend: Cli) -> dict[str, str]:
+def account_env(account: str = "", auth: str = LOGIN) -> dict[str, str]:
     env = os.environ.copy()
-    if backend.auth == "login":
+    if auth == LOGIN:
         env.pop("ANTHROPIC_API_KEY", None)
         env.pop("ANTHROPIC_AUTH_TOKEN", None)
-    return env
+    return _account.get(account).env(env)
+
+
+def cli_env(backend: Cli) -> dict[str, str]:
+    return account_env(backend.account, backend.auth)
 
 
 @contextlib.contextmanager
@@ -303,6 +307,19 @@ def supervise(
     return dataclasses.replace(outcome, returncode=rc)
 
 
+def _supervise_cli(
+    backend: Cli,
+    cmd: list[str],
+    timeout: float | None,
+    consume: Callable[[subprocess.Popen], _stream.Outcome],
+    **popen: Any,
+) -> _stream.Outcome:
+    try:
+        return supervise(cmd, timeout, consume, env=cli_env(backend), **popen)
+    except FileNotFoundError:
+        raise SystemExit("claude CLI not found on PATH")
+
+
 def launch(
     backend: Cli,
     prompt: str | None,
@@ -353,19 +370,16 @@ def launch(
             return _stream.Outcome()
         return _stream.follow(proc.stdout, log)
 
-    try:
-        outcome = supervise(
-            cmd,
-            None if interactive else backend.timeout,
-            consume,
-            group=not interactive,
-            stdin=subprocess.PIPE if prompt is not None else None,
-            stdout=subprocess.PIPE if log is not None else None,
-            cwd=cwd,
-            env=cli_env(backend),
-        )
-    except FileNotFoundError:
-        raise SystemExit("claude CLI not found on PATH")
+    outcome = _supervise_cli(
+        backend,
+        cmd,
+        None if interactive else backend.timeout,
+        consume,
+        group=not interactive,
+        stdin=subprocess.PIPE if prompt is not None else None,
+        stdout=subprocess.PIPE if log is not None else None,
+        cwd=cwd,
+    )
     if unread and outcome.ok:
         return dataclasses.replace(
             outcome, is_error=True, result="claude exited before reading the prompt"
@@ -393,19 +407,16 @@ def _send_cli(
         stderr.append(err)
         return _stream.Outcome(result=out)
 
-    try:
-        res = supervise(
-            cmd,
-            backend.timeout,
-            consume,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            cwd=cwd,
-            env=cli_env(backend),
-        )
-    except FileNotFoundError:
-        raise SystemExit("claude CLI not found on PATH")
+    res = _supervise_cli(
+        backend,
+        cmd,
+        backend.timeout,
+        consume,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        cwd=cwd,
+    )
     if res.subtype == TIMEOUT:
         raise SystemExit(f"claude {res.result}")
     if res.returncode != 0:

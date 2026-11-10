@@ -1,4 +1,4 @@
-"""Profile store: ~/.config/dienpy/ai.toml layered over built-in defaults.
+"""Profile store: ~/.config/moac/moac.toml layered over built-in defaults.
 
 BUILTIN is the one model table: the tier ids every shell shortcut, launcher and
 tool resolves through. A new model version is a one-line change here.
@@ -8,10 +8,10 @@ import functools
 from pathlib import Path
 from typing import Annotated, Any
 
-import tomllib
+from dienraw import toml
 from protocli import Complete
 
-PATH = Path.home() / ".config" / "dienpy" / "ai.toml"
+PATH = Path.home() / ".config" / "moac" / "moac.toml"
 
 LOCAL_URL = "http://localhost:8081/v1/chat/completions"
 
@@ -46,13 +46,10 @@ _DEFAULT = "sonnet"
 
 @functools.cache
 def _load(path: Path, stamp: int) -> dict[str, Any]:
-    try:
-        return tomllib.loads(path.read_text())
-    except tomllib.TOMLDecodeError as e:
-        raise SystemExit(f"{path}: {e}")
+    return toml.load(path)
 
 
-def _read() -> dict[str, Any]:
+def config() -> dict[str, Any]:
     """The toml, parsed once per (path, mtime): an edit is seen, a long loop pays no re-parse."""
     try:
         stamp = PATH.stat().st_mtime_ns
@@ -62,7 +59,7 @@ def _read() -> dict[str, Any]:
 
 
 def profiles() -> dict[str, dict[str, Any]]:
-    return {**BUILTIN, **_read().get("profile", {})}
+    return {**BUILTIN, **config().get("profile", {})}
 
 
 def names() -> list[str]:
@@ -73,11 +70,11 @@ ProfileName = Annotated[str, Complete(names)]
 
 
 def default_name() -> str:
-    return _read().get("default", _DEFAULT)
+    return config().get("default", _DEFAULT)
 
 
 def bindings() -> dict[str, str]:
-    return _read().get("tool", {})
+    return config().get("tool", {})
 
 
 def for_tool(tool: str) -> str:
@@ -87,5 +84,5 @@ def for_tool(tool: str) -> str:
 def get(name: str) -> dict[str, Any]:
     spec = profiles().get(name)
     if spec is None:
-        raise SystemExit(f"unknown ai profile '{name}' (known: {', '.join(names())})")
+        raise SystemExit(f"unknown profile '{name}' (known: {', '.join(names())})")
     return spec

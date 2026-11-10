@@ -4,11 +4,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
+import moac
 from protocli import FILES
 
 from dienpy._git import find_root
 
-from .. import ai
 from . import _prompt
 from ._hunks import repo
 
@@ -25,8 +25,8 @@ Rules:
 def main(
     *hashes: str,
     since: str = "",
-    profile: ai.ProfileName = "",
-    effort: ai.Effort = "",
+    profile: moac.ProfileName = "",
+    effort: moac.Effort = "",
     max_diff_chars: int = 0,
     out: Annotated[str, FILES] = "",
 ) -> None:
@@ -45,13 +45,13 @@ def main(
     if not hashes:
         raise SystemExit("pass commit hashes or --since")
 
-    backend = ai.resolve("commit", ai.Need(effort=effort), profile=profile)
+    backend = moac.resolve("commit", moac.Need(effort=effort), profile=profile)
     ctx = _prompt.message_context(root)
     entries = [_prompt.commit_entry(root, h, max_diff_chars) for h in hashes]
     descriptions: list[str] = []
     for batch in _prompt.make_batches(entries):
         user = ctx + "\n\n" + "\n\n".join(batch)
-        desc = ai.send(backend, _SYSTEM, user, temperature=0.3, cwd=root)
+        desc = moac.send(backend, _SYSTEM, user, temperature=0.3, cwd=root)
         print(desc)
         descriptions.append(str(desc))
 

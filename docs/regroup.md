@@ -60,7 +60,7 @@ Triage empties the worktree: every patch ends committed on the default branch, c
 
 ## AI backends
 
-Model access goes through `dienpy.ai` ([dienpy/AGENTS.md](../dienpy/AGENTS.md#the-ai-package)): the model dimension names a profile from `~/.config/dienpy/ai.toml`, and the engine declares what it needs (schema output, repo tools for `explore`), so a profile that cannot serve the need is refused before anything is spent or written. The `cli` profiles run `claude -p --json-schema` on login auth: the subprocess drops `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN`; `--auth env` keeps them. `branch land` uses the `commit` tool profile for its message. `history` renders the commits into one prompt (batched only past 100k characters), so a series comes back as one summary.
+Model access goes through `moac` ([moac/AGENTS.md](../moac/AGENTS.md)): the model dimension names a profile from `~/.config/moac/moac.toml`, and the engine declares what it needs (schema output, repo tools for `explore`), so a profile that cannot serve the need is refused before anything is spent or written. The `cli` profiles run `claude -p --json-schema` on login auth: the subprocess drops `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN`; `--auth env` keeps them. `branch land` uses the `commit` tool profile for its message. `history` renders the commits into one prompt (batched only past 100k characters), so a series comes back as one summary.
 
 ## nvim
 

@@ -33,7 +33,7 @@ Run `dienpy --help-all` for a full recursive listing: all dispatcher levels expa
    - `Annotated[str, Complete(f)]` → shell candidates from `f()`, on any parameter
 
    Reach for `argparse` directly only when the signature model can't express what you need (e.g. mutually exclusive groups, custom argument actions). For zero-arg leaves (`def main() -> None`), the dispatcher prints `Usage: ...` + the docstring on `--help`.
-3. **Completions belong on the parameter.** `Literal` fixes a closed set argparse enforces; `Complete` carries candidates computed only when the shell asks, and never enforced — an unknown value reaches `main` and is rejected there, with `main`'s own error. Export the alias next to the function it completes from (`ai.ProfileName`, `_config.Dim`, `_inventory.MachineName`) so every leaf spells it the same way; `Annotated[str, FILES]` requests native pathname completion.
+3. **Completions belong on the parameter.** `Literal` fixes a closed set argparse enforces; `Complete` carries candidates computed only when the shell asks, and never enforced — an unknown value reaches `main` and is rejected there, with `main`'s own error. Export the alias next to the function it completes from (`moac.ProfileName`, `_config.Dim`, `_inventory.MachineName`) so every leaf spells it the same way; `Annotated[str, FILES]` requests native pathname completion.
 4. Fall back to `get_completions(args: list[str]) -> list[str]` only when candidates depend on *more than one* argument, or the leaf parses `sys.argv` itself — `hyppy vid night`'s subcommand state machine, not a value list.
 5. **No registration needed** — `Dispatcher.from_package` auto-discovers it.
 6. **First-letter rule**: `<name>` must start with a letter distinct from every other sibling so `<pkg> <letter><TAB>` completes in one keystroke.
@@ -49,70 +49,31 @@ from protocli import Dispatcher
 _dispatcher = Dispatcher.from_package("<pkg>.<group>", prog="<pkg> <group>")
 ```
 
-That's it. The parent Dispatcher detects the nested `_dispatcher` attribute and routes through it. Submodules follow the same leaf-module rules and the same first-letter constraint within the group. Examples: `dienpy.ai`, `dienpy.versions`, `hyppy.vid`.
+That's it. The parent Dispatcher detects the nested `_dispatcher` attribute and routes through it. Submodules follow the same leaf-module rules and the same first-letter constraint within the group. Examples: `dienpy.feed`, `dienpy.versions`, `hyppy.vid`.
 
 ### Direct callables
 
 Dispatcher also accepts a plain dict of `{name: callable_or_module_path}` for cases where auto-discovery isn't the right shape (e.g. registering a couple of bound functions). See `dienpy.versions` and `dienpy.tts.server` for examples.
 
-## The `ai` package
+## Model access
 
-`dienpy/ai/` is the backend layer every AI-calling tool goes through — kept plugin-shaped (nothing under `ai/` imports the rest of dienpy) so extraction to its own repo stays mechanical.
-
-A backend is a tagged union of kinds, because backends differ in capability, not just in fields:
-
-| kind | transport | auth | schema output | repo tools | thinking effort |
-| --- | --- | --- | --- | --- | --- |
-| `openai` | HTTP chat-completions (llama-server, vLLM, an SSH-tunneled remote) | none | `response_format` json_schema | no | no |
-| `api` | anthropic / google SDK by model prefix | `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` | not yet | no | `output_config.effort` under adaptive thinking (anthropic), thinking budget (gemini) |
-| `cli` | `claude` subprocess: `send` captures a `-p --output-format json` call, `launch` runs a session with inherited stdio | `login` (the claude command's own claude.ai credentials; the subprocess drops `ANTHROPIC_*` vars) or `env` | `--json-schema` | `--tools` | `--effort` |
-
-Effort is one open vocabulary (`low|medium|high|xhigh|max`, empty = backend default), interpreted per kind: anthropic api sends it as `output_config.effort` under adaptive thinking, gemini api maps it to a thinking budget, cli passes it to `claude --effort`, openai refuses it. It comes from the caller's `Need` or the profile's `effort` field, and completion is advisory — an invalid value is refused at resolution with the valid set.
-
-Callers declare a `Need(schema, tools, effort, timeout)` and call `ai.resolve(tool, need, profile=...)`; resolution is capability-checked and refuses loudly before any tokens are spent or state is written. `ai.send(backend, system, user, *, schema=..., cwd=...)` is the captured call — with a schema it returns the parsed object, without one the reply text. `ai.launch(cli_backend, prompt, *, interactive, safe, system, resume, log, cwd)` is the session shape for cli backends: interactive inherits the terminal; non-interactive runs `-p` with the prompt on stdin, `--permission-mode auto` unless the profile sets one, and the backend's timeout; with `log` it streams `stream-json` there, prints one progress line per turn, and returns an `Outcome(session_id, result, subtype, is_error, returncode, turns)`. Both build argv from `cli_argv`, so model/effort/permission flags exist in one place. Every child process (`send`, `launch`, feed's shell jobs) runs under `ai.supervise`: the child leads its own process group, a timeout kills the whole group (outcome `subtype == ai.TIMEOUT`), SIGTERM/SIGHUP/Ctrl-C on the launcher take the child down first, and pipes decode with replacement. An interactive session is the exception — it stays in the terminal's foreground group so it owns the tty.
-
-Timeout precedence: an explicit `--timeout` beats the profile's `timeout`, which beats the caller's `Need.timeout` (`ai.run.backend` layers them; the unattended default is 3 h).
-
-Profiles live in `~/.config/dienpy/ai.toml` layered over `_profiles.BUILTIN`, which is the one model table in the ecosystem: the tier ids (`HAIKU`, `SONNET`, `OPUS`, `FABLE` — exact, pinned) and the shortcut profiles over them (`soh|som`, `opuh|opux|opum`, `fabx`: tier + effort). A new model version is a one-line bump there; the shell aliases (`clopux`, `pipecl`, …) name profiles and carry no ids. A missing toml is a working config; `default` names the fallback profile, `[tool]` binds tool keys (`hunks`, `commit`, `run`, `feed`) to profiles, a cli profile may set `permission_mode`, and an unknown profile name resolves as a bare claude CLI model so ad-hoc model ids keep working.
-
-```toml
-default = "sonnet"
-
-[profile.tunnel]
-kind = "openai"
-url = "http://localhost:8081/v1/chat/completions"
-
-[profile.deep]
-kind = "cli"
-model = "opus"
-effort = "xhigh"
-
-[tool]
-hunks = "fable"
-commit = "tunnel"
-```
-
-- `dienpy ai profiles` — list profiles: kind, config, default marker, tool bindings.
-- `dienpy ai check [profile]` — smoke test: endpoint reachable, key present, claude installed and logged in.
-- `dienpy ai models [--provider P] [--refresh]` — the model-id cache (`~/.config/dienpy/ai-models.json`, one list per API provider): lists it, re-fetching any provider's list older than a day (`--refresh`: now). `ai.models.Target` completes `ai run`'s first argument from the profile names plus the cached anthropic ids — a read of the file, never a fetch, so tab stays instant; the feed scheduler calls `models.update(quiet=True)` at every cycle start, which keeps the cache fresh on a machine that runs it.
-- `dienpy ai ask [profile] [file] [--tool KEY] [--raw TEXT] [--system TEXT] [--schema JSON|FILE] [--tools T,…] [--effort E] [--timeout S] [--cwd DIR] [--envelope]` — the captured call (`ai.send`) as a command, for callers outside Python: the prompt from `--raw`, the file or stdin; the profile from the `[tool]` binding of `--tool` (default `ask`), then `default`, so each caller names its own key and each machine binds it; `--schema` returns one JSON object; `--tools Read` with `--cwd` lets a cli profile look at an image there; `--envelope` prints the profile, backend kind, model, effort and seconds beside the reply, for callers that index their tools by speed. The module is `ask`, not `send`, because `ai.send` is the library function.
-- `dienpy ai run [profile] [file] [--interactive] [--safe] [--raw TEXT] [--auto] [--unattended] [--commit] [--timeout S]` — the launcher behind every shell shortcut: a prompt from `--raw`, the file (frontmatter stripped, see the feed package), or piped stdin runs non-interactively (auto permissions) and prints the reply; the profile defaults to the `[tool] run` binding, then `default`; `--interactive` opens a session instead (a piped prompt becomes its first message); `--unattended` appends the queue rules (`ai.run.unattended_suffix`: no questions, take the recommended default, never commit, final report) and `--commit` lifts their never-commit rule. A failed run prints its synthesized result (`timed out after …`, `claude exited before reading the prompt`) to stderr and exits non-zero. `pipecl`/`pipeclf` and `cl*` are aliases onto it.
+Every AI call goes through [`moac`](../moac/AGENTS.md), next to this package. Tables, TOML helpers and atomic writes come from [`dienraw`](../dienraw/README.md).
 
 ## The `feed` package
 
-`dienpy feed` runs prompts through unattended claude sessions whenever the usage windows have headroom, and closes each with the regroup cache. `dienpy.claude.usage.windows()` parses the oauth payload's `limits` into `session`, `weekly_all` and `weekly_scoped:<Model>` (Fable has its own weekly cap); `dienpy.claude._gate` judges a job against them — the weekly windows against a ceiling, the session window against what the job will consume (`session% + need ≤ 97`).
+`dienpy feed` runs prompts through unattended claude sessions whenever the usage windows have headroom, and closes each with the regroup cache. `moac.usage.windows()` parses the oauth payload's `limits` into `session`, `weekly_all` and `weekly_scoped:<Model>` (Fable has its own weekly cap); `dienpy.feed._gate` judges a job against them — the weekly windows against a ceiling, the session window against what the job will consume (`session% + need ≤ Thresholds.session`).
 
 ### The prompt protocol
 
-A repo's queue is `<repo>/.cril/prompts/*.md`. A prompt opts in through a flat `---` fenced frontmatter block (`dienpy.ai._prompt_file`; the model only sees the body). A leading `---` that is not followed by `key: value` lines closed by a second fence is plain text, not frontmatter; a block whose values fail validation lists the prompt as `invalid frontmatter: …` instead of stopping the scheduler:
+A repo's queue is `<repo>/.cril/prompts/*.md`. A prompt opts in through a flat `---` fenced frontmatter block (`moac._prompt_file`; the model only sees the body). A leading `---` that is not followed by `key: value` lines closed by a second fence is plain text, not frontmatter; a block whose values fail validation lists the prompt as `invalid frontmatter: …` instead of stopping the scheduler:
 
 ```markdown
 ---
 mode: once            # once | repeat
 unattended: true      # absent/false: never scheduled
-profiles: fabx, opux  # preference order; default from feed.toml, then ai.toml's `[tool] feed`, then fabx, opux
+profiles: fabx, opux  # preference order; default from feed.toml, then moac.toml's `[tool] feed`, then fabx, opux
 priority: 2           # 1 first … 5 last
-need: 35              # % of the 5h window one run consumes; replaced by the mean of the last three measured runs
+need: 20              # % of the 5h window one run consumes (default `DEFAULT_NEED`); replaced by the mean of the last three measured runs
 every: 24h            # repeat: minimum gap after an ok run (default 12h); once: re-eligible after it even if the file survives
 commit: true          # lets the unattended suffix allow commits (repos whose agents commit themselves)
 target: …             # unknown keys are ignored — free-form notes ride along with the prompt
@@ -127,18 +88,17 @@ Lifecycle (`_queue.lifecycle`): a `once` prompt is eligible until it runs ok —
 
 - `dienpy feed run` (no arguments) — scheduler over the repo around the cwd (`--repos R…` for several): collect candidates, drop the ineligible (lifecycle, repo lock, headroom for `need`), order by priority then the repo that waited longest then name, run the first, write `state.toml`, repeat; `--once` stops after one job. `--dry-run` prints the listing instead.
 - `dienpy feed run <prompt.md …> [--cmd <shell>] [--repeat]` — explicit mode in this repo, in order, gated the same way; each prompt's frontmatter supplies its `need`, `profiles` and `commit`, and `--need`, `--profiles`, `--commit` override them; `--cmd` runs a command with the gate's choice in `FEED_PROFILE`/`FEED_MODEL` (how uxarr's `make experiment` lets the gate pick its model); `--hunks` overrides the repo's `feed.toml` (`--hunks ""` skips the regroup close); `--timeout` overrides the profile's.
-- `dienpy feed list [repos…] [--offline]` — one line per prompt: mode, priority, need, profiles, last run, and the verdict (`runnable → fabx`, `needs 35 / have 12`, `cooldown until …`, `failed … (edit to retry)`, `landed?`, `not unattended`, `invalid frontmatter: …`, `repo busy`).
+- `dienpy feed list [repos…] [--offline]` — one line per prompt: mode, priority, need, profiles, last run, and the verdict (`runnable → fabx`, `needs 20 / have 12`, `cooldown until …`, `failed … (edit to retry)`, `landed?`, `not unattended`, `invalid frontmatter: …`, `repo busy`).
 - `dienpy feed playbook <file> [--dry-run]` — a playbook (conventionally `<repo>/.cril/playbooks/<name>.md`; a first line `#!/usr/bin/env -S dienpy feed playbook` runs it as `./<file>`) is a frontmatter file whose `jobs:` names prompts in the repo's `.cril/prompts/` (repeats allowed) and whose body states the run's intent. The jobs run in order through explicit mode, starting none once `until:` (a key of `playbook.UNTIL`, naming the usage window whose reset ends the run) has passed. When the jobs end, the deadline passes or Ctrl-C stops it, the run facts (outcome per job, the unrun rest as a `feed run` line, repo files whose status changed, logs) go to `$LOGS_DIR/feed/<repo>/<stamp>-playbook-<name>.md`, then a guide session reads them with the intent and rewrites that file with what to open first and what needs the owner; a second Ctrl-C skips the guide. The repo is the one whose `.cril/` holds the file on its path as the shell spelled it, else the repo around the cwd.
 
-A job is one `ai.launch` with `unattended_suffix(commit)`, streamed to `$LOGS_DIR/feed/<repo>/<stamp>-<prompt>.jsonl`, its final report to `.md`, one row in `runs.md`; a session that dies on a usage limit is resumed once after that window resets. A wrapped or `--cmd` job has no stream: its console output goes to `.out`, and for a wrapped prompt that output is the report (turns stay 0). A repo is locked with `flock` on `.git/feed.lock` while its job runs and its state is written — the kernel releases the lock when the holder dies, so a crash never leaves a repo busy. The close is `hunks run --extend <dims>`; only when the regroup cache holds no run for those dims does a full `hunks run` follow — a failed extend leaves a curated run as it was. Usage is read once after the close: it measures the job's `cost` (learned only from ok runs, and only when the session window did not reset in between) and seeds the next cycle's gate, so a job costs one usage fetch.
+A job is one `moac.launch` with `unattended_suffix(commit)`, streamed to `$LOGS_DIR/feed/<repo>/<stamp>-<prompt>.jsonl`, its final report to `.md`, one row in `runs.md`; a session that dies on a usage limit is resumed once after that window resets. A wrapped or `--cmd` job has no stream: its console output goes to `.out`, and for a wrapped prompt that output is the report (turns stay 0). A repo is locked with `flock` on `.git/feed.lock` while its job runs and its state is written — the kernel releases the lock when the holder dies, so a crash never leaves a repo busy. The close is `hunks run --extend <dims>`; only when the regroup cache holds no run for those dims does a full `hunks run` follow — a failed extend leaves a curated run as it was. Usage is read once after the close: it measures the job's `cost` (learned only from ok runs, and only when the session window did not reset in between) and seeds the next cycle's gate, so a job costs one usage fetch.
 
-The loop is a library: `feed.schedule(repos: list[RepoQueue], settings, usage=…)` and `feed.run_jobs(repo, jobs, settings, usage=…)`. A `RepoQueue` may carry its own `usage` source and a `wrap` template around `{cmd}` — that is how hypothalamus' `cril queue` runs a sandboxed repo's prompts inside `fleet env <env>` (`dienpy ai run --unattended [--commit] --timeout …`) gated on the sandbox identity's windows, so one loop serves both accounts.
+The loop is a library: `feed.schedule(repos: list[RepoQueue], settings, usage=…)` and `feed.run_jobs(repo, jobs, settings, usage=…)`. A `RepoQueue` may carry its own `usage` source and a `wrap` template around `{cmd}` — that is how hypothalamus' `cril queue` runs a sandboxed repo's prompts inside `fleet env <env>` (`moac run --unattended [--commit] --timeout …`) gated on the sandbox identity's windows, so one loop serves both accounts.
 
 ## Shared State
 
 - `constants.py` derives the canonical paths from `SYNC_ROOT` (default `$HOME/synced`), each through `env_path` so the matching `.vars` export wins — use these, don't hardcode paths
 - `_git.py` holds every git invocation in the ecosystem — `Repo(path)` bound to a repo, module-level `run`/`clone` for the repo-less calls; cril, hyppy and fleet import it rather than reaching for `subprocess`. `setup/` is the exception: it stays dependency-free because it runs before dienpy is installed
-- `_out.py` lays out every CLI's tables: `table(rows, head, align=, dim=, clip=, indent=, plain=)` and `section(title, note)` render through rich (already here for `claude usage`) with cells as plain text and only the last column wrapping or clipping on a narrow terminal; piped, a table is tab-separated rows with no header and every column kept, so `cut -f`/`awk -F'\t'` field numbers never depend on the data; `plain=True` keeps the aligned layout as unstyled text wherever it goes (fzf input, a commit message). `md_table`/`md_row` write markdown in the compact form. cril, hyppy and fleet import it rather than padding f-strings
 - Per-module state files go under the relevant synced directory or `~/.config/`
 
 ## Environment
@@ -149,7 +109,7 @@ The loop is a library: `feed.schedule(repos: list[RepoQueue], settings, usage=�
 
 ## Conventions
 
-- Modules are single-file unless genuinely complex (like `ai/`, `claude/`, `nvim/`)
+- Modules are single-file unless genuinely complex (like `hunks/`, `feed/`, `nvim/`)
 - Let `main`'s signature drive argument parsing; only reach for `argparse` directly when the signature model can't express what you need
 - Fail loudly via `raise SystemExit(msg)` for user errors
 - Type hints required throughout

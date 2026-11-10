@@ -4,13 +4,12 @@ import dataclasses
 from pathlib import Path
 from typing import Annotated
 
+from dienraw.out import table
 from protocli import FILES
 
 from .._git import find_root
-from .._out import table
-from ..claude import _gate
 from ..constants import LOGS_DIR
-from . import _queue
+from . import _gate, _queue
 from ._loop import Job, Settings, prompt_job, run, schedule
 from .list import show
 

@@ -1,9 +1,10 @@
-"""`ai ask`: schema loading, profile resolution through the tool binding, the printed reply."""
+"""`moac ask`: schema loading, profile resolution through the tool binding, the printed reply."""
 
 import json
 
 import pytest
-from dienpy.ai import ask as ask_cmd
+
+from moac import ask as ask_cmd
 
 
 def test_schema_is_inline_json_or_a_file(tmp_path) -> None:

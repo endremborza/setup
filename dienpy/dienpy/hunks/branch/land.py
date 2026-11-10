@@ -12,9 +12,10 @@ few clean commits.
 
 from typing import Literal
 
+import moac
+
 from dienpy._git import find_root
 
-from ... import ai
 from .. import _apply, _cache, _config, _engine, _hunks, _patches, _prompt
 from .._hunks import repo
 from . import _ops
@@ -32,17 +33,17 @@ def _message(root: str, onto: str, name: str, count: int) -> str:
     log = _ops.log(root, onto, name, "--reverse", "--format=%B")
     if count == 1:
         return log.strip() + "\n"
-    backend = ai.resolve("commit", ai.Need(), profile="")
+    backend = moac.resolve("commit", moac.Need(), profile="")
     user = (
         f"{_prompt.message_context(root)}\n\nBranch {name}, commits oldest first:\n{log}\n\n"
         f"Diff stat:\n{_ops.stat(root, onto, name)}"
     )
     return (
-        str(ai.send(backend, _SYSTEM, user, temperature=0.2, cwd=root)).strip() + "\n"
+        str(moac.send(backend, _SYSTEM, user, temperature=0.2, cwd=root)).strip() + "\n"
     )
 
 
-def _split(root: str, config: _config.Config, backend: ai.Backend) -> list[str]:
+def _split(root: str, config: _config.Config, backend: moac.Backend) -> list[str]:
     repo(root).out("reset", "-q")
     patches = _engine.partition(root, _hunks.parse(root), config, backend)
     out = []
@@ -77,7 +78,7 @@ def main(
         raise SystemExit(f"nothing to land: {name} has no commits beyond {onto}")
     tip = _ops.sha(root, name)
     base = _ops.sha(root, onto)
-    plan: tuple[_config.Config, ai.Backend] | None = None
+    plan: tuple[_config.Config, moac.Backend] | None = None
     if split:
         config = _config.resolve((split,), _cache.last_config(root))
         plan = (config, _engine.backend_for(config, auth))

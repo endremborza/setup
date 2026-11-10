@@ -3,7 +3,8 @@
 import copy
 import dataclasses
 
-from .. import ai
+import moac
+
 from ._config import GRANULARITIES, Config
 from ._hunks import Hunk
 from ._prompt import context_lines
@@ -152,7 +153,7 @@ def describe(
     index: int,
     hunks: list[Hunk],
     config: Config,
-    backend: ai.Backend,
+    backend: moac.Backend,
 ) -> dict:
     """Fresh title/message for one patch; the returned dict is a copy with `stale` cleared."""
     prompt = build_describe_prompt(root, groups, index, hunks, config)
@@ -161,7 +162,7 @@ def describe(
             f"patch {index + 1} too large to describe: {len(prompt)} chars "
             f"(limit {MAX_PROMPT_CHARS})"
         )
-    payload = ai.send(
+    payload = moac.send(
         backend, "", prompt, schema=_DESCRIBE_SCHEMA, max_tokens=2048, cwd=root
     )
     if not isinstance(payload, dict) or not payload.get("title"):
@@ -177,7 +178,7 @@ def describe_stale(
     patches: list[dict],
     hunks: list[Hunk],
     config: Config,
-    backend: ai.Backend,
+    backend: moac.Backend,
 ) -> list[dict]:
     """Fresh title/message for every patch flagged `stale` by a placement."""
     recs = {h.id: h for h in hunks}
@@ -189,19 +190,19 @@ def describe_stale(
     return patches
 
 
-def _need(config: Config) -> ai.Need:
-    return ai.Need(
+def _need(config: Config) -> moac.Need:
+    return moac.Need(
         schema=True,
         tools=_TOOLS if config.context == "explore" else (),
         timeout=1200 if config.context == "explore" else 900,
     )
 
 
-def backend_for(config: Config, auth: str | None) -> ai.Backend:
+def backend_for(config: Config, auth: str | None) -> moac.Backend:
     """Resolve before any cache mutation, so a capability mismatch changes nothing."""
-    backend = ai.resolve("hunks", _need(config), profile=config.model)
+    backend = moac.resolve("hunks", _need(config), profile=config.model)
     if auth:
-        if not isinstance(backend, ai.Cli):
+        if not isinstance(backend, moac.Cli):
             raise SystemExit(
                 f"--auth applies to cli profiles only, not '{config.model}'"
             )
@@ -209,13 +210,13 @@ def backend_for(config: Config, auth: str | None) -> ai.Backend:
     return backend
 
 
-def _call(root: str, prompt: str, backend: ai.Backend, incremental: bool) -> list[dict]:
+def _call(root: str, prompt: str, backend: moac.Backend, incremental: bool) -> list[dict]:
     if len(prompt) > MAX_PROMPT_CHARS:
         raise SystemExit(
             f"diff too large for one analysis: {len(prompt)} chars "
             f"(limit {MAX_PROMPT_CHARS})"
         )
-    payload = ai.send(
+    payload = moac.send(
         backend, "", prompt, schema=_schema(incremental), max_tokens=8192, cwd=root
     )
     patches = payload.get("patches") if isinstance(payload, dict) else None
@@ -267,7 +268,7 @@ _RETRY = (
 
 
 def partition(
-    root: str, hunks: list[Hunk], config: Config, backend: ai.Backend
+    root: str, hunks: list[Hunk], config: Config, backend: moac.Backend
 ) -> list[dict]:
     feedback = problems = None
     for _ in range(2):
@@ -285,7 +286,7 @@ def place(
     existing: list[dict],
     new_hunks: list[Hunk],
     config: Config,
-    backend: ai.Backend,
+    backend: moac.Backend,
 ) -> list[dict]:
     """Validated placements: groups whose `extends` names a position in `existing`."""
     new_ids = {h.id for h in new_hunks}

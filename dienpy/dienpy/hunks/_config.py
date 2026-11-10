@@ -3,9 +3,8 @@
 from dataclasses import dataclass
 from typing import Annotated
 
+import moac
 from protocli import Complete
-
-from .. import ai
 
 GRANULARITIES = {
     "loose": "broad thematic groups; a feature together with its tests, docs and "
@@ -38,7 +37,7 @@ class Config:
 
 
 def tokens() -> list[str]:
-    return [*GRANULARITIES, *CONTEXTS, *ai.profile_names()]
+    return [*GRANULARITIES, *CONTEXTS, *moac.profile_names()]
 
 
 Dim = Annotated[str, Complete(tokens)]
@@ -59,7 +58,7 @@ def classify(dims: tuple[str, ...]) -> dict[str, str]:
 def resolve(dims: tuple[str, ...], last: dict | None) -> Config:
     merged = {
         **DEFAULT,
-        "model": ai.profile_for_tool("hunks"),
+        "model": moac.profile_for_tool("hunks"),
         **(last or {}),
         **classify(dims),
     }

@@ -27,9 +27,9 @@ def test_suggests_command_for_commits_since_tag(
     notes = "- adds fresh.txt\n- it's quoted"
     prompts: list[str] = []
     monkeypatch.chdir(repo)
-    monkeypatch.setattr(tag.ai, "resolve", lambda *a, **k: None)
+    monkeypatch.setattr(tag.moac, "resolve", lambda *a, **k: None)
     monkeypatch.setattr(
-        tag.ai,
+        tag.moac,
         "send",
         lambda backend, system, user, **k: (
             prompts.append(user)

@@ -4,13 +4,13 @@ import datetime
 import time
 from pathlib import Path
 
-from dienpy.ai import _profiles
-from dienpy.claude import _gate
-from dienpy.claude.usage import Window
-from dienpy.feed import Job, RepoQueue, Settings, run_jobs
+from dienpy.feed import Job, RepoQueue, Settings, _gate, run_jobs
 from dienpy.feed._loop import _cost, _Lock, choose, work
 from dienpy.feed._queue import Candidate, Meta
-from test_ai_launch import fake_claude
+from moac._testing import fake_claude
+from moac.usage import Window
+
+from moac import _profiles
 
 WS = [Window("session", 1.0, None), Window("weekly_scoped", 50.0, None, "Fable")]
 UTC = datetime.timezone.utc

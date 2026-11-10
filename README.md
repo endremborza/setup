@@ -7,6 +7,8 @@ Public dotfiles, scripts, and bootstrap tooling. No secrets, no personal paths -
 | `dotfiles/` | Generic dotfiles stowed to `~` via GNU stow |
 | `setup/` | Profile-based system bootstrap (Python CLI: `setup`) |
 | `dienpy/` | Public Python CLI toolkit (`dienpy <module>`) |
+| `moac/` | AI config and calls: models, accounts, usage (`moac <command>`) |
+| `dienraw/` | Shared helpers at the bottom of the tree |
 | `util/` | systemd service/socket templates |
 
 ## Quick start
@@ -60,7 +62,7 @@ Bricks are idempotent: if a brick's `check` command passes, it's skipped. Use `-
 
 | Target | Description |
 | --- | --- |
-| `make install` | Install `dienpy` as a uv tool (drags in `setup` editable); `DIENPY_EXTRAS='[tts]'` adds speech |
+| `make install` | Install `moac` and `dienpy` as uv tools (`dienpy` drags in `setup` editable); `DIENPY_EXTRAS='[tts]'` adds speech |
 | `make setup-run` | `uv run setup run` for `$PROFILES` (default: `shell`) |
 | `make setup-verify` | Verify bricks in `$PROFILES` |
 | `make setup-list` | List all registered bricks |

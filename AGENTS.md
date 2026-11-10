@@ -11,6 +11,8 @@ User-facing docs: [README.md](README.md). Deep reference (profiles, env, testing
 | `dotfiles/` | Generic dotfiles stowed to `~` (nvim, alacritty, tmux, leftwm, shell, etc) |
 | `setup/` | Profile-based bootstrap package (`setup` CLI) |
 | `dienpy/` | Public Python CLI (`dienpy <module>`) — see `dienpy/AGENTS.md` |
+| `moac/` | AI config and calls: models, accounts, usage (`moac <command>`) — see `moac/AGENTS.md` |
+| `dienraw/` | Shared helpers at the bottom of the tree |
 | `util/` | Templates (systemd service/socket) used by `create-service` |
 
 ## Boundary rule
@@ -56,7 +58,7 @@ A pinned tool uses `check=pinned_check("my-tool --version", _v("my-tool"))`, whi
 Then import the module from `setup/bricks/__init__.py` so the decorator runs at import.
 
 Rules:
-- One home per tool. No duplication between `dotfiles/`, `setup/`, `dienpy/`.
+- One home per tool. No duplication between `dotfiles/`, `setup/`, `dienpy/`, `moac/`, `dienraw/`.
 - Bricks must be idempotent (the `check` exists so reruns are cheap).
 - A package never vendors a file that's already stowed from `dotfiles/`. Read the stowed path instead (`~/rclone_filter.txt`, etc.).
 - Brick names must be unique across all profiles — `dienpy versions` keys off the name.

@@ -10,12 +10,12 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .._toml import write_atomic
+from dienraw.toml import write_atomic
+
+from . import _account
 
 if TYPE_CHECKING:
     import requests
-
-_CREDENTIALS_PATH = Path.home() / ".claude" / ".credentials.json"
 
 # constants the claude binary carries; `warn_if_changed` notices when a release moves them
 # (extract anew with: strings $(which claude) | grep -E 'CLIENT_ID|TOKEN_URL')
@@ -51,7 +51,7 @@ def warn_if_changed(label: str, value: str) -> None:
     if _in_binary(value) is False:
         print(
             f"Warning: {label} '{value}' not found in the claude binary — it may have changed. "
-            f"See claude/_auth.py.",
+            f"See moac/_auth.py.",
             file=sys.stderr,
         )
 
@@ -121,12 +121,12 @@ def request(
 ) -> requests.Response:
     """Authenticated request with automatic token refresh on 401.
 
-    creds_path overrides the default ~/.claude/.credentials.json; refreshed
+    creds_path overrides the current account's credentials file; refreshed
     tokens are written back to whichever file was used.
     """
     import requests
 
-    path = creds_path or _CREDENTIALS_PATH
+    path = creds_path or _account.get().credentials
     kwargs.setdefault("timeout", TIMEOUT)
     r = getattr(requests, method)(
         url, headers=_make_headers(path, extra_headers), **kwargs

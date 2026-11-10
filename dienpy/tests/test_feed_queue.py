@@ -5,11 +5,10 @@ import os
 from pathlib import Path
 
 import pytest
-from dienpy.ai import _prompt_file
-from dienpy.claude import _gate
-from dienpy.claude.usage import Window
-from dienpy.feed import _queue
+from dienpy.feed import _gate, _queue
 from dienpy.feed._queue import Candidate, Meta, RepoQueue, State
+from moac import _prompt_file
+from moac.usage import Window
 
 UTC = datetime.timezone.utc
 NOW = datetime.datetime(2026, 9, 3, 12, 0, tzinfo=UTC)

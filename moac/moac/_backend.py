@@ -10,7 +10,7 @@ from typing import Annotated, Any
 
 from protocli import Complete
 
-from . import _profiles
+from . import _account, _profiles
 
 # one vocabulary, interpreted per backend: anthropic takes it as `output_config.effort`
 # under adaptive thinking, gemini as a thinking budget (x4 ladder), the claude CLI as
@@ -20,7 +20,9 @@ GEMINI_BUDGETS = dict(zip(EFFORTS, (1024, 4096, 16384, 24576, 32768)))
 
 # advisory, not enforced: the backend validates and names the valid set itself
 Effort = Annotated[str, Complete(EFFORTS)]
-_AUTHS = ("login", "env")
+LOGIN = "login"
+_AUTHS = (LOGIN, "env")
+_TIMEOUT = 300
 PERMISSION_MODES = (
     "acceptEdits",
     "auto",
@@ -36,7 +38,8 @@ class Need:
     schema: bool = False
     tools: tuple[str, ...] = ()
     effort: str = ""  # "" = the backend's default, no thinking config passed
-    timeout: int = 300
+    timeout: int = _TIMEOUT
+    account: str = ""  # "" = MOAC_ACCOUNT, then the configured default
 
 
 @dataclass(frozen=True)
@@ -45,7 +48,7 @@ class Openai:
 
     url: str
     model: str = ""
-    timeout: int = 300
+    timeout: int = _TIMEOUT
 
 
 @dataclass(frozen=True)
@@ -54,7 +57,7 @@ class Api:
 
     model: str
     effort: str = ""
-    timeout: int = 300
+    timeout: int = _TIMEOUT
 
 
 @dataclass(frozen=True)
@@ -63,12 +66,13 @@ class Cli:
 
     model: str
     # env keeps ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN in the environment
-    auth: str = "login"
+    auth: str = LOGIN
     tools: tuple[str, ...] = ()
     effort: str = ""
-    timeout: int = 300
+    timeout: int = _TIMEOUT
     # "" leaves the claude command's own default; launch() forces auto when unattended
     permission_mode: str = ""
+    account: str = ""
 
 
 Backend = Openai | Api | Cli
@@ -93,9 +97,11 @@ def resolve(tool: str, need: Need, profile: str = "") -> Backend:
     def refuse(what: str) -> SystemExit:
         return SystemExit(f"profile '{name}' ({kind}) cannot serve '{tool}': {what}")
 
+    if need.account and kind != "cli":
+        raise refuse(f"no accounts ({need.account} requested)")
+    if need.tools and kind != "cli":
+        raise refuse(f"no repo tool access ({', '.join(need.tools)} requested)")
     if kind == "openai":
-        if need.tools:
-            raise refuse(f"no repo tool access ({', '.join(need.tools)} requested)")
         if effort:
             raise refuse("no effort control on an openai endpoint")
         url = spec.get("url")
@@ -103,8 +109,6 @@ def resolve(tool: str, need: Need, profile: str = "") -> Backend:
             raise SystemExit(f"profile '{name}': openai backend needs a url")
         return Openai(url=url, model=spec.get("model", ""), timeout=timeout)
     if kind == "api":
-        if need.tools:
-            raise refuse(f"no repo tool access ({', '.join(need.tools)} requested)")
         if need.schema:
             raise refuse("schema output not implemented for api backends")
         model = spec.get("model")
@@ -112,7 +116,7 @@ def resolve(tool: str, need: Need, profile: str = "") -> Backend:
             raise SystemExit(f"profile '{name}': api backend needs a model")
         return Api(model=model, effort=effort, timeout=timeout)
     if kind == "cli":
-        auth = spec.get("auth", "login")
+        auth = spec.get("auth", LOGIN)
         if auth not in _AUTHS:
             raise SystemExit(
                 f"profile '{name}': invalid auth '{auth}' (one of: {', '.join(_AUTHS)})"
@@ -123,6 +127,7 @@ def resolve(tool: str, need: Need, profile: str = "") -> Backend:
                 f"profile '{name}': invalid permission_mode '{mode}' "
                 f"(one of: {', '.join(PERMISSION_MODES)})"
             )
+        _account.get(need.account)
         return Cli(
             model=spec.get("model", name),
             auth=auth,
@@ -130,5 +135,6 @@ def resolve(tool: str, need: Need, profile: str = "") -> Backend:
             effort=effort,
             timeout=timeout,
             permission_mode=mode,
+            account=need.account,
         )
     raise SystemExit(f"profile '{name}': unknown backend kind '{kind}'")

@@ -10,13 +10,14 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .. import ai
+import moac
+from dienraw.toml import fmt_value, write_atomic
+from dienraw.toml import load as load_toml
+from moac import _prompt_file
+from moac.usage import Window
+
 from .._git import find_root
-from .._toml import fmt_value, write_atomic
-from .._toml import load as load_toml
-from ..ai import _prompt_file
-from ..claude import _gate
-from ..claude.usage import Window
+from . import _gate
 
 MODES = ("once", "repeat")
 DEFAULT_PROFILES = ("fabx", "opux")
@@ -139,8 +140,8 @@ def meta_of(path: Path) -> Meta:
 
 
 def default_profiles() -> tuple[str, ...]:
-    """The `[tool] feed` binding when ai.toml has one, else fabx then opux."""
-    bound = ai.profile_bindings().get("feed")
+    """The `[tool] feed` binding when moac.toml has one, else fabx then opux."""
+    bound = moac.profile_bindings().get("feed")
     return (bound,) if bound else DEFAULT_PROFILES
 
 
@@ -264,8 +265,8 @@ def lifecycle(c: Candidate, now: datetime.datetime) -> str:
 def _models(profiles: tuple[str, ...]) -> list[str]:
     out = []
     for name in profiles:
-        b = ai.resolve("feed", ai.Need(), profile=name)
-        out.append(b.model if isinstance(b, ai.Cli) else "")
+        b = moac.resolve("feed", moac.Need(), profile=name)
+        out.append(b.model if isinstance(b, moac.Cli) else "")
     return out
 
 

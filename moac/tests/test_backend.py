@@ -1,11 +1,12 @@
-"""ai backend: profile layering, tool bindings, capability-checked resolve, the run target completion."""
+"""Backends: profile layering, tool bindings, capability-checked resolve, the run target completion."""
 
 from pathlib import Path
 
 import pytest
-from dienpy.ai import _cache, _profiles, models
-from dienpy.ai._backend import Api, Cli, Need, Openai, resolve
-from dienpy.ai.run import backend
+from moac._backend import Api, Cli, Need, Openai, resolve
+from moac.run import _UNATTENDED_TIMEOUT, backend
+
+from moac import _cache, _profiles, models
 
 _TOML = """\
 default = "tunnel"
@@ -39,7 +40,7 @@ def config(tmp_path: Path, monkeypatch):
     def _set(text: str | None) -> None:
         nonlocal n
         n += 1
-        path = tmp_path / str(n) / "ai.toml"
+        path = tmp_path / str(n) / "moac.toml"
         path.parent.mkdir()
         if text is not None:
             path.write_text(text)
@@ -97,7 +98,7 @@ def test_run_backend_binding_and_timeout_precedence(config) -> None:
     config(_TOML)
     assert backend().model == "opus" and backend().timeout == 1800
     assert backend("slow", timeout=60).timeout == 60
-    assert backend("fabx").timeout == 10800
+    assert backend("fabx").timeout == _UNATTENDED_TIMEOUT
     assert "tunnel" in _refused(lambda: backend("tunnel"))
 
 

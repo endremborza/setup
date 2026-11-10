@@ -6,11 +6,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .._out import table
-from . import _profiles
+from dienraw.out import table
+
+from . import _account, _profiles
+from ._backend import LOGIN
 from ._profiles import ProfileName
 
-_CREDENTIALS = Path.home() / ".claude" / ".credentials.json"
 _ADC = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
 
 
@@ -37,9 +38,10 @@ def _check_api(spec: dict[str, Any]) -> str | None:
 def _check_cli(spec: dict[str, Any]) -> str | None:
     if not shutil.which("claude"):
         return "claude not on PATH"
-    auth = spec.get("auth", "login")
-    if auth == "login" and not _CREDENTIALS.exists():
-        return f"no claude.ai login ({_CREDENTIALS} missing)"
+    auth = spec.get("auth", LOGIN)
+    credentials = _account.get().credentials
+    if auth == LOGIN and not credentials.exists():
+        return f"no claude.ai login ({credentials} missing)"
     if auth == "env" and not (
         os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
     ):

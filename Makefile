@@ -2,16 +2,19 @@ PROFILES ?= shell
 
 PROFILE_FLAGS := $(addprefix --profile ,$(PROFILES))
 
-.PHONY: install install-uv install-dienpy \
+.PHONY: install install-uv install-moac install-dienpy \
         setup-run setup-verify setup-dry-run setup-list \
         test docker-test docker-ci docker-bootstrap
 
-install: install-dienpy
+install: install-moac install-dienpy
 
 install-uv:
 	curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # DIENPY_EXTRAS='[tts]' adds the speech stack (onnxruntime, ~100MB) on a workstation
+install-moac:
+	uv tool install -e 'moac/[api]'
+
 install-dienpy:
 	uv tool install -e 'dienpy/$(DIENPY_EXTRAS)'
 

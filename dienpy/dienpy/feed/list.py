@@ -2,10 +2,10 @@
 
 import datetime
 
-from .._out import table
-from ..claude import _gate
-from ..claude.usage import windows
-from . import _queue
+from dienraw.out import table
+from moac.usage import windows
+
+from . import _gate, _queue
 from ._loop import Settings, choose, strict
 from ._queue import RepoQueue
 

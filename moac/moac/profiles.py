@@ -1,6 +1,7 @@
 """List AI profiles: backend kind, config, default marker and tool bindings."""
 
-from .._out import table
+from dienraw.out import table
+
 from . import _profiles
 
 

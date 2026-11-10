@@ -3,9 +3,10 @@
 import re
 import shlex
 
+import moac
+
 from dienpy._git import find_root
 
-from .. import ai
 from . import _prompt
 from ._engine import MAX_PROMPT_CHARS
 from ._hunks import repo
@@ -63,7 +64,7 @@ def build_prompt(root: str, tag: str | None, hashes: list[str]) -> str:
     return "\n".join(parts + _entries(root, hashes))
 
 
-def main(*, profile: ai.ProfileName = "", effort: ai.Effort = "") -> None:
+def main(*, profile: moac.ProfileName = "", effort: moac.Effort = "") -> None:
     root = find_root()
     r = repo(root)
     tag = r.maybe("describe", "--tags", "--abbrev=0", "--match", "v[0-9]*")
@@ -77,11 +78,11 @@ def main(*, profile: ai.ProfileName = "", effort: ai.Effort = "") -> None:
     if not hashes:
         raise SystemExit(f"no commits since {tag}")
 
-    backend = ai.resolve(
-        "commit", ai.Need(schema=True, effort=effort, timeout=900), profile=profile
+    backend = moac.resolve(
+        "commit", moac.Need(schema=True, effort=effort, timeout=900), profile=profile
     )
     print(f"tag: {len(hashes)} commits since {tag or 'the first commit'}")
-    payload = ai.send(
+    payload = moac.send(
         backend,
         "",
         build_prompt(root, tag, hashes),

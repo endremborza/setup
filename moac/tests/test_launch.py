@@ -2,16 +2,17 @@
 
 import io
 import json
-import os
 import subprocess
 import time
 from pathlib import Path
 
 import pytest
-from dienpy.ai import _profiles, _stream
-from dienpy.ai._backend import Cli, Need, resolve
-from dienpy.ai._transport import TIMEOUT, cli_argv, cli_env, launch, send, supervise
-from dienpy.ai.run import unattended_suffix
+from moac._backend import Cli, Need, resolve
+from moac._testing import fake_claude
+from moac._transport import TIMEOUT, cli_argv, cli_env, launch, send, supervise
+from moac.run import unattended_suffix
+
+from moac import _profiles, _stream
 
 
 def test_argv_carries_model_effort_and_mode() -> None:
@@ -107,15 +108,6 @@ def test_supervise_passes_exit_status_and_replaces_bad_bytes() -> None:
         ["sh", "-c", "printf '\\377ok'; exit 3"], 5, _drain, stdout=subprocess.PIPE
     )
     assert out.returncode == 3 and out.result == "�ok" and out.subtype == ""
-
-
-def fake_claude(tmp_path: Path, monkeypatch, script: str) -> Path:
-    """A `claude` on PATH that runs `script` (sh) instead; its argv arrives as "$@"."""
-    fake = tmp_path / "claude"
-    fake.write_text(f"#!/bin/sh\n{script}\n")
-    fake.chmod(0o755)
-    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
-    return fake
 
 
 def test_launch_notices_a_prompt_left_unread(tmp_path: Path, monkeypatch) -> None:

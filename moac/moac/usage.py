@@ -7,23 +7,22 @@ import sys
 import termios
 import time
 import tty
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from . import _account
 from . import _auth as auth
+from ._account import Account, AccountName
 
 if TYPE_CHECKING:
     from rich.console import Console, Group, RenderableType
 
 _USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
-_SPANS = {
-    "session": 5 * 3600,
-    "weekly_all": 7 * 24 * 3600,
-    "weekly_scoped": 7 * 24 * 3600,
-}
+_WEEK = 7 * 24 * 3600
+_SPANS = {"session": 5 * 3600, "weekly_all": _WEEK, "weekly_scoped": _WEEK}
 
 
 @dataclass(frozen=True)
@@ -94,8 +93,23 @@ def windows(creds_path: Path | None = None) -> list[Window]:
     return parse_windows(get_usage(creds_path))
 
 
+def _signed_in(account: str) -> list[Account]:
+    """The named account, or every account with a login on this machine; none is an error."""
+    chosen = [_account.get(account)] if account else [*_account.accounts().values()]
+    found = [a for a in chosen if a.credentials.exists()]
+    if not found:
+        raise SystemExit("no signed-in account: run `moac login <account>`")
+    return found
+
+
+def _fetch(accounts: Sequence[Account]) -> dict[str, list[Window]]:
+    return {a.name: windows(a.credentials) for a in accounts}
+
+
 def _render(
-    ws: Sequence[Window], updated: datetime.datetime | None, *footer: "RenderableType"
+    by_account: Mapping[str, Sequence[Window]],
+    updated: datetime.datetime | None,
+    *footer: "RenderableType",
 ) -> "Group":
     from rich.console import Group
     from rich.progress_bar import ProgressBar
@@ -103,20 +117,22 @@ def _render(
     from rich.table import Table
 
     grid = Table.grid(padding=(0, 1))
-    for w in ws:
-        for kind, pct in (("Usage", w.percent), ("Time", w.time_percent)):
-            if pct is not None:
-                grid.add_row(
-                    f"[bold]{w.label} {kind}",
-                    f"{pct:>5.1f}%",
-                    ProgressBar(total=100, completed=pct, width=40),
-                )
     stamp = updated.strftime("%Y-%m-%d %H:%M:%S") if updated else "never"
     status = [f"Last updated: {stamp}"]
-    for w in ws:
-        if w.resets_at:
-            fmt = "%H:%M" if w.kind == "session" else "%a %H:%M"
-            status.append(f"{w.label} resets {w.resets_at.astimezone().strftime(fmt)}")
+    for name, ws in by_account.items():
+        who = f"{name} " if len(by_account) > 1 else ""
+        for w in ws:
+            for kind, pct in (("Usage", w.percent), ("Time", w.time_percent)):
+                if pct is not None:
+                    grid.add_row(
+                        f"[bold]{who}{w.label} {kind}",
+                        f"{pct:>5.1f}%",
+                        ProgressBar(total=100, completed=pct, width=40),
+                    )
+            if w.resets_at:
+                fmt = "%H:%M" if w.kind == "session" else "%a %H:%M"
+                when = w.resets_at.astimezone().strftime(fmt)
+                status.append(f"{who}{w.label} resets {when}")
     return Group(
         Rule("[bold]Claude Code Usage[/bold]"),
         grid,
@@ -141,7 +157,7 @@ def _keys(fd: int, timeout: float) -> str:
     return os.read(fd, 64).decode(errors="ignore") if ready else ""
 
 
-def _watch(console: "Console", interval: int) -> None:
+def _watch(console: "Console", interval: int, accounts: Sequence[Account]) -> None:
     """Alternate-screen view redrawn from home every frame, so a resize cannot leave a stale copy behind.
 
     The fetch deadline is wall-clock and the key wait is capped at a second, so a resume from suspend refetches at once.
@@ -150,7 +166,7 @@ def _watch(console: "Console", interval: int) -> None:
     from rich.text import Text
 
     fd = sys.stdin.fileno()
-    ws: list[Window] = []
+    by_account: dict[str, list[Window]] = {}
     updated: datetime.datetime | None = None
     error = ""
     busy = False
@@ -161,7 +177,7 @@ def _watch(console: "Console", interval: int) -> None:
         state = "refreshing…" if busy else f"next in {left // 60}:{left % 60:02d}"
         keys = f"[dim][bold]r[/bold] refresh  [bold]q[/bold] quit  ·  {state}[/dim]"
         problem = Text(error, style="red", no_wrap=True, overflow="ellipsis")
-        return _render(ws, updated, keys, problem)
+        return _render(by_account, updated, keys, problem)
 
     with _cbreak(fd), Live(get_renderable=frame, console=console, screen=True) as live:
         while True:
@@ -169,7 +185,8 @@ def _watch(console: "Console", interval: int) -> None:
                 busy = True
                 live.refresh()
                 try:
-                    ws, updated, error = windows(), datetime.datetime.now(), ""
+                    by_account = _fetch(accounts)
+                    updated, error = datetime.datetime.now(), ""
                 except Exception as e:
                     error = f"{type(e).__name__}: {e}"
                 busy = False
@@ -181,15 +198,18 @@ def _watch(console: "Console", interval: int) -> None:
                 due = 0.0
 
 
-def main(*, watch: bool = False, interval: int = 300) -> None:
+def main(
+    *, watch: bool = False, interval: int = 300, account: AccountName = ""
+) -> None:
     """Show or watch Claude usage windows (5h session, weekly, weekly per scoped model); r refreshes and q quits the watch."""
     from rich.console import Console
 
     console = Console()
+    accounts = _signed_in(account)
     if not watch:
-        console.print(_render(windows(), datetime.datetime.now()))
+        console.print(_render(_fetch(accounts), datetime.datetime.now()))
         return
     try:
-        _watch(console, interval)
+        _watch(console, interval, accounts)
     except KeyboardInterrupt:
         pass

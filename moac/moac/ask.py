@@ -9,6 +9,7 @@ from typing import Annotated, Any
 from protocli import FILES
 
 from . import _profiles
+from ._account import AccountName
 from ._backend import Effort, Need, resolve
 from ._transport import send
 from .models import Target
@@ -48,12 +49,13 @@ def main(
     timeout: int | None = None,
     cwd: Annotated[str, FILES] = "",
     envelope: bool = False,
+    account: AccountName = "",
 ) -> None:
-    """Ask one prompt and print the reply: the captured call (`ai.send`) as a command.
+    """Ask one prompt and print the reply: the captured call (`moac.send`) as a command.
 
     The prompt comes from --raw, the file (frontmatter stripped) or piped stdin. The profile
     defaults to the `[tool]` binding of --tool, then `default`, so a caller names its own tool
-    key and each machine binds it in ai.toml. --schema (inline JSON or a file) makes the reply
+    key and each machine binds it in moac.toml. --schema (inline JSON or a file) makes the reply
     one JSON object; --tools lets a cli profile use claude tools (Read, to look at an image
     under --cwd); --effort and --timeout override the profile's. --envelope prints one JSON
     object instead: the profile, backend kind, model, effort, seconds taken and the reply.
@@ -65,7 +67,14 @@ def main(
     parsed = load_schema(schema)
     name = profile or _profiles.for_tool(tool)
     backend = resolve(
-        tool, Need(schema=parsed is not None, tools=tuple(tools), effort=effort), name
+        tool,
+        Need(
+            schema=parsed is not None,
+            tools=tuple(tools),
+            effort=effort,
+            account=account,
+        ),
+        name,
     )
     if timeout is not None:
         backend = dataclasses.replace(backend, timeout=timeout)
