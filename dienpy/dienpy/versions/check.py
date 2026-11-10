@@ -2,9 +2,8 @@
 
 import os
 
+from dienraw.out import table
 from setup.versions import check_all, number
-
-from dienpy._out import table
 
 
 def main(*, token: str | None = None) -> None:

@@ -2,8 +2,9 @@
 
 import json
 
+from dienraw.out import table
+
 from .._git import Repo
-from .._out import table
 from ..constants import DIENCEPHALON_ROOT
 from ._shared import LAZY_LOCK, nvim_version
 

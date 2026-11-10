@@ -3,8 +3,9 @@
 import datetime
 import json as _json
 
+from dienraw.out import table
+
 from dienpy._git import find_root
-from dienpy._out import table
 
 from . import _cache, _hunks
 

@@ -8,11 +8,12 @@ hunks command prunes entries that no longer describe any live hunk.
 
 import dataclasses
 import json
-import os
 import sys
 import time
 from pathlib import Path
 from typing import Any
+
+from dienraw.toml import write_atomic
 
 from . import _patches
 from ._config import Config
@@ -28,10 +29,7 @@ def _path(root: str) -> Path:
 def _write(root: str, data: dict[str, Any]) -> None:
     """Atomic: nvim's background `run --extend` and a shell command may write concurrently."""
     data["version"] = VERSION
-    p = _path(root)
-    tmp = p.with_name(p.name + ".tmp")
-    tmp.write_text(json.dumps(data))
-    os.replace(tmp, p)
+    write_atomic(_path(root), json.dumps(data))
 
 
 def load(root: str) -> dict[str, Any] | None:

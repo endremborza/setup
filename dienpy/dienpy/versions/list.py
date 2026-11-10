@@ -1,8 +1,7 @@
 """List all pinned tool versions from versions.toml."""
 
+from dienraw.out import table
 from setup.versions import load
-
-from dienpy._out import table
 
 
 def main() -> None:

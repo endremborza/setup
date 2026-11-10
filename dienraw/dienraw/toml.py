@@ -6,9 +6,8 @@ For anything richer than primitives + flat lists, reach for `tomli_w` or `tomlki
 from __future__ import annotations
 
 import os
-from pathlib import Path
-
 import tomllib
+from pathlib import Path
 
 
 def fmt_value(v: object) -> str:

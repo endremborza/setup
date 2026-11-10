@@ -3,8 +3,9 @@
 import json as _json
 from pathlib import Path
 
+from dienraw.out import table
+
 from dienpy._git import find_root
-from dienpy._out import table
 
 from .._hunks import repo
 from . import _ops

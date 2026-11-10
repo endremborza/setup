@@ -7,9 +7,8 @@ patch enters a run, never reused within that run, and is what nvim and the CLI a
 import re
 from typing import Annotated
 
+from dienraw.out import table
 from protocli import Complete
-
-from dienpy._out import table
 
 _HUNK_ID = re.compile(r"^[0-9a-f]{12}(~\d+)?$")
 
