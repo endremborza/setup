@@ -51,7 +51,7 @@ def main(
     descriptions: list[str] = []
     for batch in _prompt.make_batches(entries):
         user = ctx + "\n\n" + "\n\n".join(batch)
-        desc = moac.send(backend, _SYSTEM, user, temperature=0.3, cwd=root)
+        desc = moac.send(backend, _SYSTEM, user, temperature=0.3, cwd=root).value
         print(desc)
         descriptions.append(str(desc))
 

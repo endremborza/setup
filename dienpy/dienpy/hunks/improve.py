@@ -30,4 +30,4 @@ def main(
         f"{_prompt.message_context(root)}\n\n"
         f"{_prompt.commit_entry(root, hash, max_diff_chars)}"
     )
-    print(moac.send(backend, _SYSTEM, user, temperature=0.2, cwd=root))
+    print(moac.send(backend, _SYSTEM, user, temperature=0.2, cwd=root).value)

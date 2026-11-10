@@ -124,12 +124,57 @@ def test_send_captures_the_json_reply_and_times_out_loudly(
         monkeypatch,
         'cat >/dev/null; printf \'{"is_error": false, "result": " hi ", "structured_output": {"k": 1}}\'',
     )
-    assert send(Cli(model="m", timeout=5), "sys", "user") == "hi"
-    assert send(Cli(model="m", timeout=5), "", "user", schema={"type": "object"}) == {
-        "k": 1
-    }
+    assert send(Cli(model="m", timeout=5), "sys", "user").value == "hi"
+    assert send(
+        Cli(model="m", timeout=5), "", "user", schema={"type": "object"}
+    ).value == {"k": 1}
     fake_claude(tmp_path, monkeypatch, "cat >/dev/null; sleep 30; echo late")
     started = time.monotonic()
     with pytest.raises(SystemExit) as e:
         send(Cli(model="m", timeout=1), "", "user")
     assert "timed out" in str(e.value) and time.monotonic() - started < 5
+
+
+def test_send_sums_usage_over_models_and_names_the_answering_one(
+    tmp_path: Path, monkeypatch
+) -> None:
+    out = {
+        "is_error": False,
+        "result": "ok",
+        "total_cost_usd": 0.5,
+        "modelUsage": {
+            "small": {"inputTokens": 10, "outputTokens": 1},
+            "big": {
+                "inputTokens": 100,
+                "outputTokens": 40,
+                "cacheReadInputTokens": 7,
+                "cacheCreationInputTokens": 3,
+            },
+        },
+    }
+    fake_claude(
+        tmp_path, monkeypatch, f"cat >/dev/null; printf '%s' '{json.dumps(out)}'"
+    )
+    usage = send(Cli(model="alias"), "", "user").usage
+    assert (usage.model, usage.input_tokens, usage.output_tokens) == ("big", 110, 41)
+    assert (usage.cache_read_tokens, usage.cache_write_tokens, usage.usd) == (7, 3, 0.5)
+    assert usage.seconds > 0
+
+
+def test_isolated_send_replaces_the_system_prompt_in_an_empty_dir(
+    tmp_path: Path, monkeypatch
+) -> None:
+    seen = tmp_path / "seen"
+    fake_claude(
+        tmp_path,
+        monkeypatch,
+        f'cat >"{seen}.stdin"; printf "%s\\n" "$@" >"{seen}.argv"; ls -A >"{seen}.cwd"; '
+        'printf \'{"is_error": false, "result": "ok"}\'',
+    )
+    backend = resolve("x", Need(isolated=True), profile="haiku")
+    assert send(backend, "you are a twin", "the mail").usage.model == backend.model
+    argv = (tmp_path / "seen.argv").read_text().splitlines()
+    assert {"--safe-mode", "--no-session-persistence"} <= set(argv)
+    assert argv[argv.index("--system-prompt") + 1] == "you are a twin"
+    assert (tmp_path / "seen.stdin").read_text() == "the mail"
+    assert (tmp_path / "seen.cwd").read_text() == ""

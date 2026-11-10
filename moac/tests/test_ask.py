@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from moac import Reply, Usage
 from moac import ask as ask_cmd
 
 
@@ -26,7 +27,7 @@ def test_envelope_names_the_profile_and_carries_the_reply(monkeypatch, capsys) -
 
     def fake_send(backend, system, user, *, schema, cwd):
         calls.append((backend, user, schema, cwd))
-        return {"choice": "b"}
+        return Reply({"choice": "b"}, Usage(model="claude-x", output_tokens=3))
 
     monkeypatch.setattr(ask_cmd, "send", fake_send)
     ask_cmd.main(
@@ -46,4 +47,5 @@ def test_envelope_names_the_profile_and_carries_the_reply(monkeypatch, capsys) -
         ("Read",),
     )
     assert out["profile"] == "haiku" and out["kind"] == "cli"
+    assert (out["model"], out["output_tokens"]) == ("claude-x", 3)
     assert out["reply"] == {"choice": "b"}

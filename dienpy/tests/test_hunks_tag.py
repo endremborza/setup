@@ -33,7 +33,10 @@ def test_suggests_command_for_commits_since_tag(
         "send",
         lambda backend, system, user, **k: (
             prompts.append(user)
-            or {"bump": "minor", "reason": "new file", "notes": notes}
+            or tag.moac.Reply(
+                {"bump": "minor", "reason": "new file", "notes": notes},
+                tag.moac.Usage(model="m"),
+            )
         ),
     )
     tag.main()

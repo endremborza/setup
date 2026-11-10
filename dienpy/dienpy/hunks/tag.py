@@ -89,7 +89,7 @@ def main(*, profile: moac.ProfileName = "", effort: moac.Effort = "") -> None:
         schema=_SCHEMA,
         max_tokens=4096,
         cwd=root,
-    )
+    ).value
     if not isinstance(payload, dict) or payload.get("bump") not in BUMPS:
         raise SystemExit(f"no valid bump in model output: {payload!r}")
 

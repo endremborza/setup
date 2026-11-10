@@ -11,7 +11,7 @@ from ._profiles import bindings as profile_bindings
 from ._profiles import for_tool as profile_for_tool
 from ._profiles import names as profile_names
 from ._stream import Outcome
-from ._transport import TIMEOUT, launch, send, supervise
+from ._transport import TIMEOUT, Reply, Usage, launch, send, supervise
 
 __all__ = [
     "EFFORTS",
@@ -24,7 +24,9 @@ __all__ = [
     "Need",
     "Openai",
     "Outcome",
+    "Reply",
     "TIMEOUT",
+    "Usage",
     "launch",
     "profile_bindings",
     "profile_for_tool",

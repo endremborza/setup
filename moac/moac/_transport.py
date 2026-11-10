@@ -1,9 +1,10 @@
 """One `send` per backend kind, plus provider model listing and the cli launcher.
 
 `system` and `user` are separate roles on openai/api transports; the cli
-transport concatenates them into the single `-p` prompt. With a schema, the
-return value is the parsed object (each backend using its own mechanism:
-response_format, --json-schema); without one it is the reply text.
+transport concatenates them into the single `-p` prompt, unless the backend is
+isolated, where `system` replaces Claude Code's own system prompt. A `Reply`
+carries the parsed object under a schema (each backend using its own mechanism:
+response_format, --json-schema), the reply text without one, and the call's usage.
 
 `launch` is the other cli shape: a session with inherited stdio (interactive, or
 `-p` streaming to the terminal / a stream-json log) — what a shell shortcut or an
@@ -20,8 +21,11 @@ import json
 import os
 import signal
 import subprocess
+import tempfile
 import threading
+import time
 from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from typing import IO, Any
 
 from . import _account, _stream
@@ -35,6 +39,26 @@ _THINKING_FLOOR = 16000
 _LIST_TIMEOUT = 30
 
 
+@dataclass(frozen=True)
+class Usage:
+    """What one call consumed. `model` is the id that answered, as the backend reports it;
+    `usd` is the CLI's notional cost on a subscription login, None where nothing prices it."""
+
+    model: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    usd: float | None = None
+    seconds: float = 0.0
+
+
+@dataclass(frozen=True)
+class Reply:
+    value: str | dict
+    usage: Usage
+
+
 def send(
     backend: Backend,
     system: str,
@@ -44,14 +68,20 @@ def send(
     max_tokens: int = 1024,
     temperature: float = 1.0,
     cwd: str | None = None,
-) -> str | dict:
+) -> Reply:
+    start = time.monotonic()
     if isinstance(backend, Openai):
-        return _send_openai(backend, system, user, schema, max_tokens, temperature)
-    if isinstance(backend, Api):
+        value, usage = _send_openai(
+            backend, system, user, schema, max_tokens, temperature
+        )
+    elif isinstance(backend, Api):
         if schema is not None:
             raise SystemExit("schema output not implemented for api backends")
-        return _send_api(backend, system, user, max_tokens, temperature)
-    return _send_cli(backend, system, user, schema, cwd)
+        value, usage = _send_api(backend, system, user, max_tokens, temperature)
+    else:
+        value, usage = _send_cli(backend, system, user, schema, cwd)
+    seconds = round(time.monotonic() - start, 3)
+    return Reply(value, dataclasses.replace(usage, seconds=seconds))
 
 
 def fetch_models(provider: str) -> list[str]:
@@ -84,7 +114,7 @@ def _send_openai(
     schema: dict | None,
     max_tokens: int,
     temperature: float,
-) -> str | dict:
+) -> tuple[str | dict, Usage]:
     import requests
 
     messages = [{"role": "system", "content": system}] if system else []
@@ -107,13 +137,23 @@ def _send_openai(
         raise SystemExit(f"endpoint {backend.url} unreachable: {e}")
     if not r.ok:
         raise SystemExit(f"endpoint error {r.status_code}: {_openai_error(r)}")
-    content = (r.json()["choices"][0]["message"].get("content") or "").strip()
+    out = r.json()
+    content = (out["choices"][0]["message"].get("content") or "").strip()
     if not content:
         raise SystemExit("empty reply from endpoint")
+    tokens = out.get("usage") or {}
+    usage = Usage(
+        model=out.get("model") or backend.model,
+        input_tokens=tokens.get("prompt_tokens", 0),
+        output_tokens=tokens.get("completion_tokens", 0),
+        cache_read_tokens=(tokens.get("prompt_tokens_details") or {}).get(
+            "cached_tokens", 0
+        ),
+    )
     if schema is None:
-        return content
+        return content, usage
     try:
-        return json.loads(content)
+        return json.loads(content), usage
     except json.JSONDecodeError:
         raise SystemExit(f"endpoint returned non-JSON despite schema: {content[:400]}")
 
@@ -130,7 +170,7 @@ def _openai_error(r) -> str:
 
 def _send_api(
     backend: Api, system: str, user: str, max_tokens: int, temperature: float
-) -> str:
+) -> tuple[str, Usage]:
     if backend.model.startswith("claude"):
         return _send_anthropic(backend, system, user, max_tokens)
     if backend.model.startswith("gemini"):
@@ -141,7 +181,9 @@ def _send_api(
     )
 
 
-def _send_anthropic(backend: Api, system: str, user: str, max_tokens: int) -> str:
+def _send_anthropic(
+    backend: Api, system: str, user: str, max_tokens: int
+) -> tuple[str, Usage]:
     """Adaptive thinking throughout, effort steering its depth; current models refuse
     sampling knobs next to thinking, so temperature never reaches this transport."""
     import anthropic
@@ -161,9 +203,16 @@ def _send_anthropic(backend: Api, system: str, user: str, max_tokens: int) -> st
         raise SystemExit("model refused the request")
     if msg.stop_reason == "max_tokens":
         raise SystemExit(f"reply truncated at {kwargs['max_tokens']} tokens")
+    usage = Usage(
+        model=msg.model,
+        input_tokens=msg.usage.input_tokens,
+        output_tokens=msg.usage.output_tokens,
+        cache_read_tokens=msg.usage.cache_read_input_tokens or 0,
+        cache_write_tokens=msg.usage.cache_creation_input_tokens or 0,
+    )
     for block in msg.content:
         if block.type == "text":
-            return block.text.strip()
+            return block.text.strip(), usage
     raise SystemExit("No text content in model response.")
 
 
@@ -191,7 +240,7 @@ def _send_google(
     max_tokens: int,
     budget: int | None,
     temperature: float,
-) -> str:
+) -> tuple[str, Usage]:
     from google.genai import types
 
     config = types.GenerateContentConfig(
@@ -205,7 +254,18 @@ def _send_google(
     response = _google_client(backend.timeout).models.generate_content(
         model=backend.model, contents=user, config=config
     )
-    return (response.text or "").strip()
+
+    def count(field: str) -> int:
+        return getattr(response.usage_metadata, field, None) or 0
+
+    usage = Usage(
+        model=response.model_version or backend.model,
+        input_tokens=count("prompt_token_count"),
+        # thinking is billed as output
+        output_tokens=count("candidates_token_count") + count("thoughts_token_count"),
+        cache_read_tokens=count("cached_content_token_count"),
+    )
+    return (response.text or "").strip(), usage
 
 
 def cli_argv(backend: Cli) -> list[str]:
@@ -429,11 +489,12 @@ def _send_cli(
         )
     if outer.get("is_error"):
         raise SystemExit(f"claude error: {outer.get('result')}")
+    usage = _cli_usage(outer, backend.model)
     if schema is None:
         result = outer.get("result")
         if not isinstance(result, str):
             raise SystemExit("no text result in claude output")
-        return result.strip()
+        return result.strip(), usage
     payload = outer.get("structured_output")
     if payload is None and isinstance(outer.get("result"), str):
         try:
@@ -442,7 +503,27 @@ def _send_cli(
             payload = None
     if not isinstance(payload, dict):
         raise SystemExit("no structured output in claude output")
-    return payload
+    return payload, usage
+
+
+def _cli_usage(outer: dict, fallback: str) -> Usage:
+    """Tokens summed over every model the call touched; the answering model is the one
+    that wrote the most."""
+    per_model: dict[str, dict] = outer.get("modelUsage") or {}
+
+    def total(field: str) -> int:
+        return sum(m.get(field, 0) for m in per_model.values())
+
+    return Usage(
+        model=max(per_model, key=lambda k: per_model[k].get("outputTokens", 0))
+        if per_model
+        else fallback,
+        input_tokens=total("inputTokens"),
+        output_tokens=total("outputTokens"),
+        cache_read_tokens=total("cacheReadInputTokens"),
+        cache_write_tokens=total("cacheCreationInputTokens"),
+        usd=outer.get("total_cost_usd"),
+    )
 
 
 def _cli_failure(res: _stream.Outcome, stderr: str) -> str:

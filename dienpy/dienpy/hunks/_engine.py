@@ -164,7 +164,7 @@ def describe(
         )
     payload = moac.send(
         backend, "", prompt, schema=_DESCRIBE_SCHEMA, max_tokens=2048, cwd=root
-    )
+    ).value
     if not isinstance(payload, dict) or not payload.get("title"):
         raise SystemExit("no title in model output")
     out = {k: v for k, v in groups[index].items() if k != "stale"}
@@ -210,7 +210,9 @@ def backend_for(config: Config, auth: str | None) -> moac.Backend:
     return backend
 
 
-def _call(root: str, prompt: str, backend: moac.Backend, incremental: bool) -> list[dict]:
+def _call(
+    root: str, prompt: str, backend: moac.Backend, incremental: bool
+) -> list[dict]:
     if len(prompt) > MAX_PROMPT_CHARS:
         raise SystemExit(
             f"diff too large for one analysis: {len(prompt)} chars "
@@ -218,7 +220,7 @@ def _call(root: str, prompt: str, backend: moac.Backend, incremental: bool) -> l
         )
     payload = moac.send(
         backend, "", prompt, schema=_schema(incremental), max_tokens=8192, cwd=root
-    )
+    ).value
     patches = payload.get("patches") if isinstance(payload, dict) else None
     if not isinstance(patches, list):
         raise SystemExit("no patches in model output")

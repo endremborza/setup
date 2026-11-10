@@ -39,7 +39,8 @@ def _message(root: str, onto: str, name: str, count: int) -> str:
         f"Diff stat:\n{_ops.stat(root, onto, name)}"
     )
     return (
-        str(moac.send(backend, _SYSTEM, user, temperature=0.2, cwd=root)).strip() + "\n"
+        str(moac.send(backend, _SYSTEM, user, temperature=0.2, cwd=root).value).strip()
+        + "\n"
     )
 
 

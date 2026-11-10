@@ -2,7 +2,6 @@
 
 import dataclasses
 import json
-import time
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -58,7 +57,8 @@ def main(
     key and each machine binds it in moac.toml. --schema (inline JSON or a file) makes the reply
     one JSON object; --tools lets a cli profile use claude tools (Read, to look at an image
     under --cwd); --effort and --timeout override the profile's. --envelope prints one JSON
-    object instead: the profile, backend kind, model, effort, seconds taken and the reply.
+    object instead: the profile, backend kind and effort, the call's usage (the model that
+    answered, tokens, usd, seconds taken) and the reply.
     A profile that cannot serve the call is refused before anything is sent.
     """
     prompt = read_prompt(file, raw)
@@ -78,23 +78,20 @@ def main(
     )
     if timeout is not None:
         backend = dataclasses.replace(backend, timeout=timeout)
-    start = time.monotonic()
     reply = send(backend, system, prompt, schema=parsed, cwd=cwd or None)
-    seconds = round(time.monotonic() - start, 3)
     if envelope:
         print(
             json.dumps(
                 {
                     "profile": name,
                     "kind": type(backend).__name__.lower(),
-                    "model": getattr(backend, "model", ""),
                     "effort": getattr(backend, "effort", ""),
-                    "seconds": seconds,
-                    "reply": reply,
+                    **dataclasses.asdict(reply.usage),
+                    "reply": reply.value,
                 }
             )
         )
-    elif isinstance(reply, dict):
-        print(json.dumps(reply))
+    elif isinstance(reply.value, dict):
+        print(json.dumps(reply.value))
     else:
-        print(reply)
+        print(reply.value)
