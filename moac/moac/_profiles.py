@@ -15,10 +15,10 @@ PATH = Path.home() / ".config" / "moac" / "moac.toml"
 
 LOCAL_URL = "http://localhost:8081/v1/chat/completions"
 
-HAIKU = "claude-haiku-4-5"
-SONNET = "claude-sonnet-5"
+HAIKU = "claude-haiku-5-5"
+SONNET = "claude-sonnet-5-5"
 OPUS = "claude-opus-5-5"
-FABLE = "claude-fable-5-1"
+FABLE = "claude-fable-5-2"
 
 
 def _cli(model: str, effort: str = "") -> dict[str, Any]:
