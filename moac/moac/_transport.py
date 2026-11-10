@@ -449,8 +449,11 @@ def launch(
 
 def _send_cli(
     backend: Cli, system: str, user: str, schema: dict | None, cwd: str | None
-) -> str | dict:
-    prompt = f"{system}\n\n{user}" if system else user
+) -> tuple[str | dict, Usage]:
+    if backend.isolated and cwd is None:
+        # an empty cwd: no project of the caller's is discovered around the call
+        with tempfile.TemporaryDirectory(prefix="moac-") as empty:
+            return _send_cli(backend, system, user, schema, empty)
     cmd = cli_argv(backend) + [
         "-p",
         "--output-format",
@@ -458,6 +461,11 @@ def _send_cli(
         "--tools",
         ",".join(backend.tools),
     ]
+    if backend.isolated:
+        prompt = user
+        cmd += ["--safe-mode", "--no-session-persistence", "--system-prompt", system]
+    else:
+        prompt = f"{system}\n\n{user}" if system else user
     if schema is not None:
         cmd += ["--json-schema", json.dumps(schema)]
     stderr: list[str] = []

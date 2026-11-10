@@ -40,6 +40,8 @@ class Need:
     effort: str = ""  # "" = the backend's default, no thinking config passed
     timeout: int = _TIMEOUT
     account: str = ""  # "" = MOAC_ACCOUNT, then the configured default
+    # cli: customizations off, Claude Code's prompt replaced; openai and api carry nothing else
+    isolated: bool = False
 
 
 @dataclass(frozen=True)
@@ -73,6 +75,8 @@ class Cli:
     # "" leaves the claude command's own default; launch() forces auto when unattended
     permission_mode: str = ""
     account: str = ""
+    # safe mode, no session kept, `system` in place of Claude Code's own prompt
+    isolated: bool = False
 
 
 Backend = Openai | Api | Cli
@@ -136,5 +140,6 @@ def resolve(tool: str, need: Need, profile: str = "") -> Backend:
             timeout=timeout,
             permission_mode=mode,
             account=need.account,
+            isolated=need.isolated,
         )
     raise SystemExit(f"profile '{name}': unknown backend kind '{kind}'")
