@@ -11,6 +11,16 @@ tests/       synthetic fixtures only
 
 `uv run moac ...`, `uv run pytest`. Installed with `make install-moac` from the repo root.
 
+## Start here
+
+`moac profiles` is the one look that says what AI this machine can call: every profile with its backend and model, the tool keys bound to it, what serves it and whether that is up, and under the table the config file (the repo file its link points at) and the ledger. `moac ledger` then says what has been called: per tool key, profile and model the calls, the failed ones, median and tail seconds and tokens (`--last N` for the newest calls, `--tool` and `--profile` to narrow). A session told to use moac needs nothing else to find its way.
+
+## Serving and the ledger
+
+- A profile may name what serves it: `serve = "<unit>"`, a systemd user unit (a llama-server on this machine, a tunnel to one on another). `moac up <profile>` starts it and waits until the endpoint answers, printing what it reports (`_serve.reports`: context size, whether it takes images); `moac down <profile>` stops it and frees its memory; `moac check` says `down: moac up <profile>` instead of a bare connection error. Nothing starts a unit by itself: a model that fills a GPU must not come up under a game or another model.
+- Every captured call (`send`, so `moac ask` and every Python caller) appends one line to the ledger (`_ledger.PATH`: `MOAC_LEDGER`, else under `~/.local/state/moac/`): when, the tool key and profile `resolve` built the backend for (`Backend.tool`, `Backend.profile`, which do not take part in a backend's equality), the backend kind, the model that answered, tokens, usd, seconds, whether a schema was asked, how many images went with it, the caller's directory, and the error when it failed. Never the prompt or the reply. `moac._testing.no_host_config` gives tests a ledger of their own.
+- Images: `Need(images=True)` and `send(..., images=[paths])`, `moac ask --image FILE` (repeatable). An openai endpoint gets them inline as content parts; `resolve` refuses the need on a cli profile (which reads a file itself with `--tools Read` and `--cwd`) and on api, where it is not implemented.
+
 ## Accounts
 
 An account is one claude config directory, so several logins stay signed in side by side. They live in `~/.config/moac/moac.toml`; with no `[account]` table there is one implicit account: the claude command's own default location, or wherever an inherited `CLAUDE_CONFIG_DIR` points.

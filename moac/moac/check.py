@@ -8,7 +8,7 @@ from typing import Any
 
 from dienraw.out import table
 
-from . import _account, _profiles
+from . import _account, _profiles, _serve
 from ._backend import LOGIN
 from ._profiles import ProfileName
 
@@ -58,6 +58,9 @@ def main(profile: ProfileName | None = None) -> None:
         spec = _profiles.get(name)
         check = _CHECKS.get(str(spec.get("kind", "")))
         problem = check(spec) if check else f"unknown kind '{spec.get('kind')}'"
+        served = str(spec.get(_serve.FIELD, ""))
+        if problem and served and not _serve.active(served):
+            problem = f"down: moac up {name}"
         rows.append((name, "ok" if problem is None else "FAIL", problem or ""))
     print(table(rows))
     if any(status == "FAIL" for _, status, _ in rows):
