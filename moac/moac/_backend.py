@@ -5,7 +5,7 @@ explicitly named one), builds the backend, and refuses loudly when the backend
 cannot serve the need — the mismatch surfaces before any tokens are spent.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Annotated, Any
 
 from protocli import Complete
@@ -42,6 +42,8 @@ class Need:
     account: str = ""  # "" = MOAC_ACCOUNT, then the configured default
     # cli: customizations off, Claude Code's prompt replaced; openai and api carry nothing else
     isolated: bool = False
+    # pictures sent with the prompt
+    images: bool = False
 
 
 @dataclass(frozen=True)
@@ -51,6 +53,9 @@ class Openai:
     url: str
     model: str = ""
     timeout: int = _TIMEOUT
+    # the profile and tool key `resolve` built it for, which the ledger records
+    profile: str = field(default="", compare=False)
+    tool: str = field(default="", compare=False)
 
 
 @dataclass(frozen=True)
@@ -60,6 +65,9 @@ class Api:
     model: str
     effort: str = ""
     timeout: int = _TIMEOUT
+    # the profile and tool key `resolve` built it for, which the ledger records
+    profile: str = field(default="", compare=False)
+    tool: str = field(default="", compare=False)
 
 
 @dataclass(frozen=True)
@@ -77,6 +85,9 @@ class Cli:
     account: str = ""
     # safe mode, no session kept, `system` in place of Claude Code's own prompt
     isolated: bool = False
+    # the profile and tool key `resolve` built it for, which the ledger records
+    profile: str = field(default="", compare=False)
+    tool: str = field(default="", compare=False)
 
 
 Backend = Openai | Api | Cli
@@ -103,6 +114,10 @@ def resolve(tool: str, need: Need, profile: str = "") -> Backend:
 
     if need.account and kind != "cli":
         raise refuse(f"no accounts ({need.account} requested)")
+    if need.images and kind != "openai":
+        raise refuse(
+            "no image input (a cli profile reads a file with --tools Read and --cwd)"
+        )
     if need.tools and kind != "cli":
         raise refuse(f"no repo tool access ({', '.join(need.tools)} requested)")
     if kind == "openai":
@@ -111,14 +126,20 @@ def resolve(tool: str, need: Need, profile: str = "") -> Backend:
         url = spec.get("url")
         if not url:
             raise SystemExit(f"profile '{name}': openai backend needs a url")
-        return Openai(url=url, model=spec.get("model", ""), timeout=timeout)
+        return Openai(
+            url=url,
+            model=spec.get("model", ""),
+            timeout=timeout,
+            profile=name,
+            tool=tool,
+        )
     if kind == "api":
         if need.schema:
             raise refuse("schema output not implemented for api backends")
         model = spec.get("model")
         if not model:
             raise SystemExit(f"profile '{name}': api backend needs a model")
-        return Api(model=model, effort=effort, timeout=timeout)
+        return Api(model=model, effort=effort, timeout=timeout, profile=name, tool=tool)
     if kind == "cli":
         auth = spec.get("auth", LOGIN)
         if auth not in _AUTHS:
@@ -141,5 +162,7 @@ def resolve(tool: str, need: Need, profile: str = "") -> Backend:
             permission_mode=mode,
             account=need.account,
             isolated=need.isolated,
+            profile=name,
+            tool=tool,
         )
     raise SystemExit(f"profile '{name}': unknown backend kind '{kind}'")

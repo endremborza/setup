@@ -15,8 +15,11 @@ whole process group, and a launcher signal (SIGTERM, SIGHUP, Ctrl-C) that takes 
 child down before the launcher exits.
 """
 
+import base64
 import contextlib
 import dataclasses
+import datetime
+import mimetypes
 import json
 import os
 import signal
@@ -24,11 +27,11 @@ import subprocess
 import tempfile
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from typing import IO, Any
 
-from . import _account, _stream
+from . import _account, _ledger, _stream
 from ._backend import GEMINI_BUDGETS, LOGIN, Api, Backend, Cli, Openai
 
 # the outcome subtype of a run `supervise` had to kill
@@ -68,20 +71,54 @@ def send(
     max_tokens: int = 1024,
     temperature: float = 1.0,
     cwd: str | None = None,
+    images: Sequence[str | os.PathLike[str]] = (),
 ) -> Reply:
+    """One captured call, written to the ledger whether it answered or failed. `images` are
+    picture files sent with the prompt, which only an openai endpoint takes."""
     start = time.monotonic()
-    if isinstance(backend, Openai):
-        value, usage = _send_openai(
-            backend, system, user, schema, max_tokens, temperature
+
+    def ledger(usage: Usage, error: str = "") -> Usage:
+        usage = dataclasses.replace(usage, seconds=round(time.monotonic() - start, 3))
+        _ledger.record(
+            {
+                "at": datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds"),
+                "tool": backend.tool,
+                "profile": backend.profile,
+                "kind": type(backend).__name__.lower(),
+                **dataclasses.asdict(usage),
+                "schema": schema is not None,
+                "images": len(images),
+                "cwd": cwd or os.getcwd(),
+                **({"error": error[:200]} if error else {}),
+            }
         )
-    elif isinstance(backend, Api):
-        if schema is not None:
-            raise SystemExit("schema output not implemented for api backends")
-        value, usage = _send_api(backend, system, user, max_tokens, temperature)
-    else:
-        value, usage = _send_cli(backend, system, user, schema, cwd)
-    seconds = round(time.monotonic() - start, 3)
-    return Reply(value, dataclasses.replace(usage, seconds=seconds))
+        return usage
+
+    try:
+        if isinstance(backend, Openai):
+            value, usage = _send_openai(
+                backend, system, user, schema, max_tokens, temperature, images
+            )
+        elif images:
+            raise SystemExit("image input is for openai endpoints")
+        elif isinstance(backend, Api):
+            if schema is not None:
+                raise SystemExit("schema output not implemented for api backends")
+            value, usage = _send_api(backend, system, user, max_tokens, temperature)
+        else:
+            value, usage = _send_cli(backend, system, user, schema, cwd)
+    except SystemExit as e:
+        ledger(Usage(model=backend.model), str(e))
+        raise
+    return Reply(value, ledger(usage))
+
+
+def _picture(path: str | os.PathLike[str]) -> dict[str, Any]:
+    """A picture file as an OpenAI content part, its bytes inline."""
+    kind = mimetypes.guess_type(os.fspath(path))[0] or "image/png"
+    with open(path, "rb") as f:
+        data = base64.b64encode(f.read()).decode()
+    return {"type": "image_url", "image_url": {"url": f"data:{kind};base64,{data}"}}
 
 
 def fetch_models(provider: str) -> list[str]:
@@ -114,11 +151,17 @@ def _send_openai(
     schema: dict | None,
     max_tokens: int,
     temperature: float,
+    images: Sequence[str | os.PathLike[str]] = (),
 ) -> tuple[str | dict, Usage]:
     import requests
 
-    messages = [{"role": "system", "content": system}] if system else []
-    messages.append({"role": "user", "content": user})
+    messages: list[dict[str, Any]] = (
+        [{"role": "system", "content": system}] if system else []
+    )
+    content: Any = user
+    if images:
+        content = [*map(_picture, images), {"type": "text", "text": user}]
+    messages.append({"role": "user", "content": content})
     body: dict[str, Any] = {
         "messages": messages,
         "max_tokens": max_tokens,

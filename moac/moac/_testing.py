@@ -5,13 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from . import _account, _profiles
+from . import _account, _ledger, _profiles
 
 
 @pytest.fixture(autouse=True)
 def no_host_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """No moac.toml and no inherited account, whatever the machine or session running the tests."""
+    """No moac.toml, no inherited account and a ledger of its own, whatever the machine or session running the tests."""
     monkeypatch.setattr(_profiles, "PATH", tmp_path / "moac.toml")
+    monkeypatch.setattr(_ledger, "PATH", tmp_path / "ledger.jsonl")
     monkeypatch.delenv(_account.ENV_VAR, raising=False)
     monkeypatch.delenv(_account.CONFIG_DIR_VAR, raising=False)
 

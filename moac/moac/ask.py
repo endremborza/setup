@@ -47,6 +47,7 @@ def main(
     effort: Effort = "",
     timeout: int | None = None,
     cwd: Annotated[str, FILES] = "",
+    image: list[str] = [],
     envelope: bool = False,
     account: AccountName = "",
 ) -> None:
@@ -56,7 +57,8 @@ def main(
     defaults to the `[tool]` binding of --tool, then `default`, so a caller names its own tool
     key and each machine binds it in moac.toml. --schema (inline JSON or a file) makes the reply
     one JSON object; --tools lets a cli profile use claude tools (Read, to look at an image
-    under --cwd); --effort and --timeout override the profile's. --envelope prints one JSON
+    under --cwd), while --image sends a picture file with the prompt to an openai profile
+    (a local model that takes images); --effort and --timeout override the profile's. --envelope prints one JSON
     object instead: the profile, backend kind and effort, the call's usage (the model that
     answered, tokens, usd, seconds taken) and the reply.
     A profile that cannot serve the call is refused before anything is sent.
@@ -73,12 +75,13 @@ def main(
             tools=tuple(tools),
             effort=effort,
             account=account,
+            images=bool(image),
         ),
         name,
     )
     if timeout is not None:
         backend = dataclasses.replace(backend, timeout=timeout)
-    reply = send(backend, system, prompt, schema=parsed, cwd=cwd or None)
+    reply = send(backend, system, prompt, schema=parsed, cwd=cwd or None, images=image)
     if envelope:
         print(
             json.dumps(

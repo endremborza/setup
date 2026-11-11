@@ -25,7 +25,7 @@ def test_schema_is_inline_json_or_a_file(tmp_path) -> None:
 def test_envelope_names_the_profile_and_carries_the_reply(monkeypatch, capsys) -> None:
     calls = []
 
-    def fake_send(backend, system, user, *, schema, cwd):
+    def fake_send(backend, system, user, *, schema, cwd, images):
         calls.append((backend, user, schema, cwd))
         return Reply({"choice": "b"}, Usage(model="claude-x", output_tokens=3))
 
