@@ -10,7 +10,7 @@ uv tool install -e 'moac/[api]'
 moac profiles                         # what can be called, what serves it, whether it is up; where the config and the ledger are
 moac up local                         # start what serves a profile (its `serve` unit) and wait for it
 moac ledger                           # past calls per tool and profile: how many, how long, how many tokens
-moac ask local --image f.png --raw "..."  # a picture with the prompt, to a local model that takes images
+moac ask local --image f.png --raw "..."  # a picture with the prompt, to a model that takes images (local or claude)
 moac ask opus --raw "..."             # one captured call
 moac run --interactive opux           # a claude session on a profile
 moac login personal                   # sign a second account in

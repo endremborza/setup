@@ -56,9 +56,9 @@ def main(
     The prompt comes from --raw, the file (frontmatter stripped) or piped stdin. The profile
     defaults to the `[tool]` binding of --tool, then `default`, so a caller names its own tool
     key and each machine binds it in moac.toml. --schema (inline JSON or a file) makes the reply
-    one JSON object; --tools lets a cli profile use claude tools (Read, to look at an image
-    under --cwd), while --image sends a picture file with the prompt to an openai profile
-    (a local model that takes images); --effort and --timeout override the profile's. --envelope prints one JSON
+    one JSON object; --tools lets a cli profile use claude tools, while --image sends a picture
+    file with the prompt to an openai or cli profile; --effort and --timeout override the
+    profile's. --envelope prints one JSON
     object instead: the profile, backend kind and effort, the call's usage (the model that
     answered, tokens, usd, seconds taken) and the reply.
     A profile that cannot serve the call is refused before anything is sent.

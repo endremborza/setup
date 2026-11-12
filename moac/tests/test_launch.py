@@ -1,5 +1,6 @@
 """cli argv shared by send/launch, permission-mode rules, stream-json outcome parsing, supervision."""
 
+import base64
 import io
 import json
 import subprocess
@@ -178,3 +179,38 @@ def test_isolated_send_replaces_the_system_prompt_in_an_empty_dir(
     assert argv[argv.index("--system-prompt") + 1] == "you are a twin"
     assert (tmp_path / "seen.stdin").read_text() == "the mail"
     assert (tmp_path / "seen.cwd").read_text() == ""
+
+
+def test_a_picture_goes_to_an_isolated_cli_as_an_image_block_of_one_streamed_message(
+    tmp_path: Path, monkeypatch
+) -> None:
+    seen = tmp_path / "seen"
+    events = [
+        {"type": "system", "subtype": "init", "session_id": "s"},
+        {
+            "type": "result",
+            "is_error": False,
+            "result": "",
+            "structured_output": {"colour": "green"},
+            "modelUsage": {"m": {"inputTokens": 900, "outputTokens": 9}},
+        },
+    ]
+    stream = "\n".join(json.dumps(e) for e in events)
+    fake_claude(
+        tmp_path,
+        monkeypatch,
+        f'cat >"{seen}.stdin"; printf "%s\\n" "$@" >"{seen}.argv"; printf \'%s\\n\' \'{stream}\'',
+    )
+    picture = tmp_path / "frame.png"
+    picture.write_bytes(b"\x89PNG")
+    need = Need(schema=True, isolated=True, images=True)
+    backend = resolve("x", need, profile="haiku")
+    reply = send(backend, "a twin", "the mail", schema={}, images=[picture])
+    assert reply.value == {"colour": "green"} and reply.usage.input_tokens == 900
+    argv = (tmp_path / "seen.argv").read_text().splitlines()
+    assert argv[argv.index("--input-format") + 1] == "stream-json"
+    assert argv[argv.index("--system-prompt") + 1] == "a twin"
+    (message,) = map(json.loads, (tmp_path / "seen.stdin").read_text().splitlines())
+    image, text = message["message"]["content"]
+    assert image["source"]["data"] == base64.b64encode(b"\x89PNG").decode()
+    assert text == {"type": "text", "text": "the mail"}

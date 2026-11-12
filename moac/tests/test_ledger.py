@@ -6,7 +6,7 @@ import json
 import pytest
 import requests
 
-from moac import Cli, Need, Openai, resolve, send
+from moac import Api, Need, Openai, resolve, send
 from moac import _ledger, _profiles, _serve
 from moac import ledger as ledger_cmd
 from moac import profiles as profiles_cmd
@@ -79,13 +79,17 @@ def test_a_failed_call_is_a_row_too(eye, monkeypatch) -> None:
     assert "refused" in row["error"] and row["profile"] == "eye"
 
 
-def test_labels_do_not_tell_backends_apart_and_a_cli_takes_no_image(eye) -> None:
+def test_labels_do_not_tell_backends_apart_and_an_api_takes_no_image(
+    eye, tmp_path, monkeypatch
+) -> None:
     assert eye == Openai(url="http://localhost:9/v1/chat/completions", model="tiny")
     assert (eye.profile, eye.tool) == ("eye", "look")
+    monkeypatch.setattr(_profiles, "PATH", tmp_path / "api.toml")
+    _profiles.PATH.write_text('[profile.deep]\nkind = "api"\nmodel = "claude-x"\n')
     with pytest.raises(SystemExit, match="no image input"):
-        resolve("look", Need(images=True), profile="haiku")
-    with pytest.raises(SystemExit, match="openai endpoints"):
-        send(Cli(model="haiku"), "", "look", images=["frame.png"])
+        resolve("look", Need(images=True), profile="deep")
+    with pytest.raises(SystemExit, match="api backends"):
+        send(Api(model="claude-x"), "", "look", images=["frame.png"])
 
 
 def test_ledger_sums_calls_per_tool_and_profile(eye, endpoint, capsys) -> None:

@@ -74,7 +74,7 @@ def send(
     images: Sequence[str | os.PathLike[str]] = (),
 ) -> Reply:
     """One captured call, written to the ledger whether it answered or failed. `images` are
-    picture files sent with the prompt, which only an openai endpoint takes."""
+    picture files sent with the prompt, which an openai endpoint and the claude CLI take."""
     start = time.monotonic()
 
     def ledger(usage: Usage, error: str = "") -> Usage:
@@ -99,26 +99,41 @@ def send(
             value, usage = _send_openai(
                 backend, system, user, schema, max_tokens, temperature, images
             )
-        elif images:
-            raise SystemExit("image input is for openai endpoints")
         elif isinstance(backend, Api):
+            if images:
+                raise SystemExit("image input not implemented for api backends")
             if schema is not None:
                 raise SystemExit("schema output not implemented for api backends")
             value, usage = _send_api(backend, system, user, max_tokens, temperature)
         else:
-            value, usage = _send_cli(backend, system, user, schema, cwd)
+            value, usage = _send_cli(backend, system, user, schema, cwd, images)
     except SystemExit as e:
         ledger(Usage(model=backend.model), str(e))
         raise
     return Reply(value, ledger(usage))
 
 
-def _picture(path: str | os.PathLike[str]) -> dict[str, Any]:
-    """A picture file as an OpenAI content part, its bytes inline."""
+def _inline(path: str | os.PathLike[str]) -> tuple[str, str]:
+    """A picture file's media type and its bytes in base64; a file without a known extension is
+    taken for a PNG."""
     kind = mimetypes.guess_type(os.fspath(path))[0] or "image/png"
     with open(path, "rb") as f:
-        data = base64.b64encode(f.read()).decode()
+        return kind, base64.b64encode(f.read()).decode()
+
+
+def _picture(path: str | os.PathLike[str]) -> dict[str, Any]:
+    """A picture file as an OpenAI content part."""
+    kind, data = _inline(path)
     return {"type": "image_url", "image_url": {"url": f"data:{kind};base64,{data}"}}
+
+
+def _image_block(path: str | os.PathLike[str]) -> dict[str, Any]:
+    """A picture file as an Anthropic image content block."""
+    kind, data = _inline(path)
+    return {
+        "type": "image",
+        "source": {"type": "base64", "media_type": kind, "data": data},
+    }
 
 
 def fetch_models(provider: str) -> list[str]:
@@ -491,16 +506,24 @@ def launch(
 
 
 def _send_cli(
-    backend: Cli, system: str, user: str, schema: dict | None, cwd: str | None
+    backend: Cli,
+    system: str,
+    user: str,
+    schema: dict | None,
+    cwd: str | None,
+    images: Sequence[str | os.PathLike[str]] = (),
 ) -> tuple[str | dict, Usage]:
+    """With `images`, the prompt goes in as one stream-json user message whose image blocks
+    precede its text, and the reply is the stream's `result` event, which carries what the
+    json output format does."""
     if backend.isolated and cwd is None:
         # an empty cwd: no project of the caller's is discovered around the call
         with tempfile.TemporaryDirectory(prefix="moac-") as empty:
-            return _send_cli(backend, system, user, schema, empty)
+            return _send_cli(backend, system, user, schema, empty, images)
+    streamed = ["--input-format", "stream-json", "--output-format", "stream-json"]
     cmd = cli_argv(backend) + [
         "-p",
-        "--output-format",
-        "json",
+        *([*streamed, "--verbose"] if images else ["--output-format", "json"]),
         "--tools",
         ",".join(backend.tools),
     ]
@@ -509,6 +532,10 @@ def _send_cli(
         cmd += ["--safe-mode", "--no-session-persistence", "--system-prompt", system]
     else:
         prompt = f"{system}\n\n{user}" if system else user
+    if images:
+        content = [*map(_image_block, images), {"type": "text", "text": prompt}]
+        message = {"type": "user", "message": {"role": "user", "content": content}}
+        prompt = json.dumps(message) + "\n"
     if schema is not None:
         cmd += ["--json-schema", json.dumps(schema)]
     stderr: list[str] = []
@@ -533,7 +560,7 @@ def _send_cli(
     if res.returncode != 0:
         raise SystemExit("claude failed: " + _cli_failure(res, stderr[0]))
     try:
-        outer = json.loads(res.result)
+        outer = _result_event(res.result) if images else json.loads(res.result)
     except json.JSONDecodeError:
         raise SystemExit(
             f"claude returned non-JSON output: {res.result.strip()[-400:]}"
@@ -555,6 +582,15 @@ def _send_cli(
     if not isinstance(payload, dict):
         raise SystemExit("no structured output in claude output")
     return payload, usage
+
+
+def _result_event(stream: str) -> dict:
+    """The last `result` event of a stream-json output."""
+    events = (json.loads(line) for line in stream.splitlines() if line.strip())
+    results = [e for e in events if e.get("type") == "result"]
+    if not results:
+        raise SystemExit("claude stream ended without a result event")
+    return results[-1]
 
 
 def _cli_usage(outer: dict, fallback: str) -> Usage:

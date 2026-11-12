@@ -114,10 +114,8 @@ def resolve(tool: str, need: Need, profile: str = "") -> Backend:
 
     if need.account and kind != "cli":
         raise refuse(f"no accounts ({need.account} requested)")
-    if need.images and kind != "openai":
-        raise refuse(
-            "no image input (a cli profile reads a file with --tools Read and --cwd)"
-        )
+    if need.images and kind == "api":
+        raise refuse("no image input on an api backend")
     if need.tools and kind != "cli":
         raise refuse(f"no repo tool access ({', '.join(need.tools)} requested)")
     if kind == "openai":
