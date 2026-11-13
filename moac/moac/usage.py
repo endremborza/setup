@@ -19,10 +19,14 @@ from ._account import Account, AccountName
 
 if TYPE_CHECKING:
     from rich.console import Console, Group, RenderableType
+    from rich.panel import Panel
+    from rich.text import Text
 
 _USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 _WEEK = 7 * 24 * 3600
 _SPANS = {"session": 5 * 3600, "weekly_all": _WEEK, "weekly_scoped": _WEEK}
+_BAR_WIDTH = 40
+_TRACK = "─"
 
 
 @dataclass(frozen=True)
@@ -106,38 +110,83 @@ def _fetch(accounts: Sequence[Account]) -> dict[str, list[Window]]:
     return {a.name: windows(a.credentials) for a in accounts}
 
 
+def _bar(pct: float, full: str, partials: str, style: str) -> "Text":
+    """A `_BAR_WIDTH`-cell bar: `full` cells, then one of `partials` for the remainder, on a faint track."""
+    from rich.text import Text
+
+    steps = len(partials) + 1
+    whole, part = divmod(round(pct / 100 * _BAR_WIDTH * steps), steps)
+    cells = full * whole + (partials[part - 1] if part else "")
+    return Text.assemble((cells, style), (_TRACK * (_BAR_WIDTH - len(cells)), "grey27"))
+
+
+def _pair(w: Window) -> list[tuple["RenderableType", ...]]:
+    """The window's usage row, a solid block bar green on pace and red ahead of it, over its thin blue elapsed-time row."""
+    elapsed = w.time_percent
+    ahead = elapsed is not None and w.percent > elapsed
+    rows: list[tuple[RenderableType, ...]] = [
+        (
+            f"[bold]{w.label}",
+            f"{w.percent:>3.0f}%",
+            _bar(w.percent, "█", "▏▎▍▌▋▊▉", "red" if ahead else "green"),
+            "",
+        )
+    ]
+    if elapsed is not None and w.resets_at:
+        fmt = "%H:%M" if w.kind == "session" else "%a %H:%M"
+        when = w.resets_at.astimezone().strftime(fmt)
+        rows.append(
+            (
+                "",
+                f"[blue]{elapsed:>3.0f}%",
+                _bar(elapsed, "━", "╸", "blue"),
+                f"[dim]↻ {when}",
+            )
+        )
+    return rows
+
+
+def _panel(name: str, ws: Sequence[Window], label_width: int) -> "Panel":
+    """One bordered panel per account, its windows' pairs split by faint rules."""
+    from rich import box
+    from rich.panel import Panel
+    from rich.table import Table
+
+    table = Table(
+        box=box.HORIZONTALS,
+        show_header=False,
+        show_edge=False,
+        pad_edge=False,
+        padding=0,
+        border_style="grey35",
+    )
+    table.add_column(min_width=label_width)
+    for w in ws:
+        for row in _pair(w):
+            table.add_row(*row)
+        table.add_section()
+    return Panel(
+        table,
+        title=f"[bold magenta]{name}",
+        title_align="left",
+        border_style="grey50",
+        expand=False,
+    )
+
+
 def _render(
     by_account: Mapping[str, Sequence[Window]],
     updated: datetime.datetime | None,
     *footer: "RenderableType",
 ) -> "Group":
     from rich.console import Group
-    from rich.progress_bar import ProgressBar
     from rich.rule import Rule
-    from rich.table import Table
 
-    grid = Table.grid(padding=(0, 1))
-    stamp = updated.strftime("%Y-%m-%d %H:%M:%S") if updated else "never"
-    status = [f"Last updated: {stamp}"]
-    for name, ws in by_account.items():
-        who = f"{name} " if len(by_account) > 1 else ""
-        for w in ws:
-            for kind, pct in (("Usage", w.percent), ("Time", w.time_percent)):
-                if pct is not None:
-                    grid.add_row(
-                        f"[bold]{who}{w.label} {kind}",
-                        f"{pct:>5.1f}%",
-                        ProgressBar(total=100, completed=pct, width=40),
-                    )
-            if w.resets_at:
-                fmt = "%H:%M" if w.kind == "session" else "%a %H:%M"
-                when = w.resets_at.astimezone().strftime(fmt)
-                status.append(f"{who}{w.label} resets {when}")
+    width = max((len(w.label) for ws in by_account.values() for w in ws), default=0)
+    stamp = updated.strftime("%H:%M:%S") if updated else "never"
     return Group(
-        Rule("[bold]Claude Code Usage[/bold]"),
-        grid,
-        "",
-        f"[dim]{'  |  '.join(status)}[/dim]",
+        Rule(f"[bold]Claude Code Usage[/bold] [dim]· {stamp}"),
+        *(_panel(name, ws, width) for name, ws in by_account.items()),
         *footer,
     )
 
