@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -28,6 +29,7 @@ class Repo:
     ) -> None:
         self.path = Path(path)
         self.timeout = timeout
+        self._cfg = tuple(cfg)
         self._base = ["git", "-C", str(path), *cfg]
         self._env = {**os.environ, **env} if env else None
 
@@ -111,6 +113,33 @@ class Repo:
         if not self.has_staged(*paths):
             return False
         self.commit(message, *paths)
+        return True
+
+    def commit_text(self, path: str, text: str, message: str) -> bool:
+        """Commit `text` as the tracked `path` on top of HEAD, built in a scratch index:
+        the worktree and every other index entry stay as they are, so uncommitted edits
+        in the same file stay uncommitted. A path staged with content of its own is
+        refused, since keeping that entry would undo the commit. True if a commit was made."""
+        mode, _, old = self.out("ls-tree", "HEAD", "--", path).split("\t")[0].split()
+        staged = self.out("ls-files", "--stage", "--", path).split()[1]
+        if staged != old:
+            raise SystemExit(
+                f"{path} is staged in {self.path.name}: commit or unstage it first"
+            )
+        blob = self.out("hash-object", "-w", f"--path={path}", "--stdin", stdin=text)
+        if blob == old:
+            return False
+        entry = f"{mode},{blob},{path}"
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**(self._env or {}), "GIT_INDEX_FILE": f"{tmp}/index"}
+            scratch = Repo(self.path, cfg=self._cfg, env=env)
+            scratch.out("read-tree", "HEAD")
+            scratch.out("update-index", "--cacheinfo", entry)
+            tree = scratch.out("write-tree")
+        head = self.out("rev-parse", "HEAD")
+        new = self.out("commit-tree", tree, "-p", head, "-m", message)
+        self.out("update-ref", "-m", f"commit: {message}", "HEAD", new, head)
+        self.out("update-index", "--cacheinfo", entry)
         return True
 
     def _write(self, *args: str) -> None:
