@@ -120,9 +120,11 @@ class Repo:
         the worktree and every other index entry stay as they are, so uncommitted edits
         in the same file stay uncommitted. A path staged with content of its own is
         refused, since keeping that entry would undo the commit. True if a commit was made."""
-        mode, _, old = self.out("ls-tree", "HEAD", "--", path).split("\t")[0].split()
-        staged = self.out("ls-files", "--stage", "--", path).split()[1]
-        if staged != old:
+        tracked = self.out("ls-tree", "HEAD", "--", path)
+        if not tracked:
+            raise SystemExit(f"{path} is not in HEAD of {self.path.name}")
+        mode, _, old = tracked.split("\t")[0].split()
+        if self.out("ls-files", "--stage", "--", path).split()[1:2] != [old]:
             raise SystemExit(
                 f"{path} is staged in {self.path.name}: commit or unstage it first"
             )

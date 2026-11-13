@@ -34,3 +34,10 @@ def test_refuses_a_staged_path(tmp_path: Path) -> None:
 
     with pytest.raises(SystemExit):
         Repo(repo, cfg=_IDENT).commit_text("a.txt", "x\n", "replace a")
+
+
+def test_refuses_a_path_head_lacks(tmp_path: Path) -> None:
+    repo = make(tmp_path)
+
+    with pytest.raises(SystemExit, match="not in HEAD"):
+        Repo(repo, cfg=_IDENT).commit_text("new.txt", "x\n", "add new")
