@@ -614,14 +614,29 @@ def _cli_usage(outer: dict, fallback: str) -> Usage:
 
 
 def _cli_failure(res: _stream.Outcome, stderr: str) -> str:
+    """What a failed call says: its result's subtype, message and errors (the last result
+    event of a stream-json output), else the tail of its output; then its stderr."""
     parts = []
-    try:
-        outer = json.loads(res.result or "")
-        if isinstance(outer.get("result"), str):
-            parts.append(outer["result"])
-    except json.JSONDecodeError:
-        if res.result and res.result.strip():
-            parts.append(res.result.strip()[-400:])
+    outer = _last_result(res.result or "")
+    if outer is not None:
+        parts += [
+            str(outer[k]) for k in ("subtype", "result", "errors") if outer.get(k)
+        ]
+    elif res.result and res.result.strip():
+        parts.append(res.result.strip()[-400:])
     if stderr and stderr.strip():
         parts.append(stderr.strip()[-400:])
     return "\n".join(parts) or f"exit code {res.returncode}"
+
+
+def _last_result(output: str) -> dict | None:
+    """The result object of a json output, or the last result event of a stream-json one."""
+    found = None
+    for chunk in (output, *output.splitlines()):
+        try:
+            event = json.loads(chunk)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(event, dict) and event.get("type", "result") == "result":
+            found = event
+    return found
