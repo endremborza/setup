@@ -55,7 +55,7 @@ def install_my_tool() -> None:
 
 A pinned tool uses `check=pinned_check("my-tool --version", _v("my-tool"))`, which passes only at the pinned version, so a bump re-runs the brick. Pass `verify=` only when the install guard is not the right smoke test.
 
-Then import the module from `setup/bricks/__init__.py` so the decorator runs at import.
+Then import the module from `setup/setup/bricks/__init__.py` so the decorator runs at import.
 
 Rules:
 - One home per tool. No duplication between `dotfiles/`, `setup/`, `dienpy/`, `moac/`, `dienraw/`.

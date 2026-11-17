@@ -157,7 +157,7 @@ Mocks `subprocess` and tests the brick registration, skip logic, profile resolut
 
 ### Pins and upgrades
 
-`setup/versions.toml` pins one tag per tool. A pinned brick's `check` is `pinned_check(cmd, tag)` (`setup/util.py`): it passes only when the tool prints the pinned number, so `dienpy versions bump <tool> <tag>` fails that check on every machine and the next `setup run` (or `fleet update`) rebuilds the tool at the new pin. There is no separate upgrade path — a bump is applied by the same idempotent run as a fresh install. `dienpy versions check` reports which pins are behind upstream.
+`setup/versions.toml` pins one tag per tool. A pinned brick's `check` is `pinned_check(cmd, tag)` (`setup/setup/util.py`): it passes only when the tool prints the pinned number, so `dienpy versions bump <tool> <tag>` fails that check on every machine and the next `setup run` (or `fleet update`) rebuilds the tool at the new pin. There is no separate upgrade path — a bump is applied by the same idempotent run as a fresh install. `dienpy versions check` reports which pins are behind upstream.
 
 ### QEMU (screen / screen-apps)
 
