@@ -451,11 +451,12 @@ def launch(
 ) -> _stream.Outcome:
     """Start a claude session and wait for it.
 
-    Interactive sessions inherit the terminal (a prompt, if any, arrives on stdin the
-    way a pipe would). Non-interactive ones run `-p` with the prompt on stdin and the
-    permission mode forced to auto unless the profile set one; with `log`, the session
-    streams stream-json into it while progress lines go to stdout, and the outcome
-    carries the session id and final result — otherwise the reply prints as text.
+    Interactive sessions inherit the terminal and open with the prompt, if any, as their
+    first message (claude's positional prompt). Non-interactive ones run `-p` with the
+    prompt on stdin and the permission mode forced to auto unless the profile set one;
+    with `log`, the session streams stream-json into it while progress lines go to
+    stdout, and the outcome carries the session id and final result — otherwise the
+    reply prints as text.
     """
     if not interactive and not prompt:
         raise SystemExit("a non-interactive session needs a prompt")
@@ -468,7 +469,11 @@ def launch(
         cmd.append("--safe-mode")
     if system:
         cmd += ["--append-system-prompt", system]
-    if not interactive:
+    if interactive:
+        if prompt:
+            # after `--` a prompt that starts with a dash stays a prompt
+            cmd += ["--", prompt]
+    else:
         cmd.append("-p")
         if resume:
             cmd += ["--resume", resume]
@@ -494,7 +499,7 @@ def launch(
         None if interactive else backend.timeout,
         consume,
         group=not interactive,
-        stdin=subprocess.PIPE if prompt is not None else None,
+        stdin=None if interactive else subprocess.PIPE,
         stdout=subprocess.PIPE if log is not None else None,
         cwd=cwd,
     )

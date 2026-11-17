@@ -214,3 +214,14 @@ def test_a_picture_goes_to_an_isolated_cli_as_an_image_block_of_one_streamed_mes
     image, text = message["message"]["content"]
     assert image["source"]["data"] == base64.b64encode(b"\x89PNG").decode()
     assert text == {"type": "text", "text": "the mail"}
+
+
+def test_an_interactive_session_opens_with_the_prompt_as_its_first_message(
+    tmp_path: Path, monkeypatch
+) -> None:
+    seen = tmp_path / "seen"
+    fake_claude(tmp_path, monkeypatch, f'printf \'%s\\0\' "$@" >"{seen}"')
+    out = launch(Cli(model="m"), "- first\nmessage", interactive=True)
+    assert out.returncode == 0
+    argv = seen.read_text().split("\0")[:-1]
+    assert argv[-2:] == ["--", "- first\nmessage"] and "-p" not in argv
