@@ -7,6 +7,7 @@ from setup.util import (
     ONSET_PATH,
     apt_install,
     download,
+    dpkg_check,
     pinned_check,
     run_cmd,
     write_system_file,
@@ -117,6 +118,17 @@ def install_unattended_upgrades() -> None:
 def install_docker() -> None:
     apt_install(["docker.io", "docker-compose-v2", "docker-buildx"])
     run_cmd(f"sudo usermod -aG docker {getpass.getuser()}")
+
+
+# Network UPS Tools for a machine with a UPS on its USB. The package enables its
+# units, which stay idle until nut.conf leaves MODE=none; /etc/nut itself is
+# pushed by fleet (hypothalamus).
+_APT_NUT = ["nut-server", "nut-client"]
+
+
+@brick(profile="ups", name="nut", check=dpkg_check(*_APT_NUT), verify="upsc -V")
+def install_nut() -> None:
+    apt_install(_APT_NUT)
 
 
 # Caddy with the deSEC DNS provider, for certificates the ACME DNS challenge

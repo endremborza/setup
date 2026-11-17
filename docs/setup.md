@@ -18,6 +18,7 @@ A profile is an independent feature group. `base` is always implicit. Profiles c
 | `web-dns` | caddy-desec | web server proving certificates by DNS challenge (with `web` + `docker`) | manual (fleet update) |
 | `docker` | docker | machine hosting fleet apps | manual (fleet update) |
 | `edge` | nftables-deny, unattended-upgrades | public-facing server | manual (live VPS) |
+| `ups` | nut (the packages; fleet pushes `/etc/nut`) | machine with a UPS on its USB | manual (fleet update) |
 | `media` | hwe-kernel, media-stack (mpv/cage/alsa/edid-decode), jellyfin-shim, firefox-ublock (policy force-installing uBlock Origin), steam, firefox-apt + autologin (shared); tty1 execs `tv-session` | media playback box | manual (bench) |
 
 ### Invocation
