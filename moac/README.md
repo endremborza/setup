@@ -15,6 +15,8 @@ moac ask opus --raw "..."             # one captured call
 moac run --interactive opux           # a claude session on a profile
 moac login personal                   # sign a second account in
 moac run --interactive --account personal opux
+moac tmux briefs/*.md                 # one claude session per brief, each a tmux window in its own directory
+moac attach briefs                    # back to it later; TAB completes the live sessions
 moac who                              # accounts, plans, login expiry
 moac usage --watch                    # usage windows of every signed-in account
 ```
