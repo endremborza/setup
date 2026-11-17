@@ -17,9 +17,9 @@ def _h(hid: str, path: str = "a.txt") -> Hunk:
 
 
 def _seed(root: Path, entries: dict) -> None:
-    (root / ".git").mkdir()
+    git(root, "init", "-q")
     data = {"version": _cache.VERSION, "analyses": entries, "last": None}
-    (root / ".git" / "regroup-cache.json").write_text(json.dumps(data))
+    _cache._path(str(root)).write_text(json.dumps(data))
 
 
 def test_prune_keeps_partial_drops_dead(tmp_path: Path) -> None:
@@ -39,15 +39,13 @@ def test_prune_keeps_partial_drops_dead(tmp_path: Path) -> None:
 
 
 def test_old_schema_reads_as_empty(tmp_path: Path) -> None:
-    (tmp_path / ".git").mkdir()
-    (tmp_path / ".git" / "regroup-cache.json").write_text(
-        '{"version": 3, "analyses": {}}'
-    )
+    git(tmp_path, "init", "-q")
+    _cache._path(str(tmp_path)).write_text('{"version": 3, "analyses": {}}')
     assert _cache.load(str(tmp_path)) is None
 
 
 def test_scoped_entry_records_grouped_ids(tmp_path: Path) -> None:
-    (tmp_path / ".git").mkdir()
+    git(tmp_path, "init", "-q")
     root = str(tmp_path)
     hunks = [_h("a", "data/x.md"), _h("b", "notes/y.md")]
     assert [h.id for h in under(hunks, "data")] == ["a"]
@@ -68,7 +66,7 @@ def test_scoped_entry_records_grouped_ids(tmp_path: Path) -> None:
 
 
 def test_patch_ids_are_never_reused(tmp_path: Path) -> None:
-    (tmp_path / ".git").mkdir()
+    git(tmp_path, "init", "-q")
     root = str(tmp_path)
     first = [{"title": "a", "hunks": ["a"]}, {"title": "b", "hunks": ["b"]}]
     _cache.set_entry(root, CONFIG, [_h("a"), _h("b")], first)
@@ -100,12 +98,22 @@ def test_json_listing_survives_a_prune(tmp_path: Path, capsys, monkeypatch) -> N
 
 
 def test_missing_run_names_the_cached_ones(tmp_path: Path) -> None:
+    git(tmp_path, "init", "-q")
     root = str(tmp_path)
     other = Config("loose", "sonnet", "bare")
     assert "`hunks run` first" in str(_cache.missing(root, CONFIG))
-    (tmp_path / ".git").mkdir()
     _cache.set_entry(
         root, other, [_h("a")], [{"id": "p", "title": "t", "hunks": ["a"]}]
     )
     msg = str(_cache.missing(root, CONFIG))
     assert "[loose|sonnet|bare]" in msg and "hunks use" in msg
+
+
+def test_linked_worktree_keeps_its_own_runs(tmp_path: Path) -> None:
+    """A linked checkout's `.git` is a file: its runs go to its own git dir, apart from main's."""
+    main = make(tmp_path)
+    wt = tmp_path / "wt"
+    git(main, "worktree", "add", "-q", str(wt), "-b", "side")
+    _cache.set_entry(str(wt), CONFIG, [_h("a")], [{"title": "t", "hunks": ["a"]}])
+    assert _cache.entry(str(wt), CONFIG)
+    assert _cache.load(str(main)) is None

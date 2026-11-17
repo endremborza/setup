@@ -1,4 +1,4 @@
-"""regroup cache (.git/regroup-cache.json) — schema owner; nvim reads it through `hunks list --json`.
+"""regroup cache (`regroup-cache.json` in the checkout's git dir) — schema owner; nvim reads it through `hunks list --json`.
 
 `analyses` is keyed by config (`granularity|model|context`); an entry holds the patches,
 the hunk ids they cover, its config, time and the next patch id to mint; `last` is the
@@ -7,6 +7,7 @@ hunks command prunes entries that no longer describe any live hunk.
 """
 
 import dataclasses
+import functools
 import json
 import sys
 import time
@@ -17,13 +18,16 @@ from dienraw.toml import write_atomic
 
 from . import _patches
 from ._config import Config
-from ._hunks import Hunk
+from ._hunks import Hunk, repo
 
 VERSION = 5
 
 
+@functools.cache
 def _path(root: str) -> Path:
-    return Path(root) / ".git" / "regroup-cache.json"
+    """Per worktree: a linked checkout's `.git` is a file, and a shared file would let one
+    checkout's prune evict the other's runs."""
+    return Path(root) / repo(root).out("rev-parse", "--git-path", "regroup-cache.json")
 
 
 def _write(root: str, data: dict[str, Any]) -> None:

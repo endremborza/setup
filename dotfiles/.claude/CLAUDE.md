@@ -6,7 +6,7 @@
 ## Commit Splitting -- dienpy hunks
 - When discussing how to split/commit uncommitted changes, `dienpy hunks` is the shared vocabulary: reference its patches by title or id instead of re-deriving a partition.
 - `dienpy hunks run [loose|normal|granular] [bare|agents|explore] [haiku|sonnet|opus|fable]` partitions the repo's uncommitted diff into patches (cached, incremental); `dienpy hunks list` shows cached runs with coverage against the current diff; `dienpy hunks run --extend [dims]` brings one cached run up to date by placing only the hunks it does not cover, never re-partitioning; `dienpy hunks patch stage|unstage|discard|bury|commit|move` acts on patches of the current run (`hunks use` picks it); `dienpy hunks branch new|land|show|drop` is the patch-branch protocol (commit picked patches on a branch, land one squashed commit on main, history archived under `refs/landed/`).
-- The cache is `.git/regroup-cache.json`: `analyses` keyed by `granularity|model|context`, each entry holding `ids` (hunk ids) and `patches` (`[{id, title, message, hunks, ...}]`) -- readable directly when you need patch contents.
+- The cache is `.git/regroup-cache.json` (in a linked worktree: `git rev-parse --git-path regroup-cache.json`): `analyses` keyed by `granularity|model|context`, each entry holding `ids` (hunk ids) and `patches` (`[{id, title, message, hunks, ...}]`) -- readable directly when you need patch contents.
 - nvim's `:Regroup` picker reads the same cache through `hunks list --json`, so a partition agreed in conversation is what I see there; every hunks command auto-prunes cached runs that no longer cover any current hunk.
 
 ## Planning Flow
